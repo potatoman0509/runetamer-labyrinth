@@ -793,7 +793,7 @@ export function App() {
           ) : (
             <>
               {activeTab === 'explore' && (
-                <div className="panel-body" style={{ gap: 8 }}>
+                <div className="panel-body" style={{ gap: 6 }}>
                   {/* Compact Party HP/MP Strip */}
                   <div className="party-mini-strip">
                     {save.partyIds.map((pid) => {
@@ -806,11 +806,11 @@ export function App() {
                       return (
                         <div key={pid} className="party-mini-chip">
                           <div className="party-mini-top">
-                            <PixelIcon spriteKey={sp.spriteKey} size={20} />
+                            <PixelIcon spriteKey={sp.spriteKey} size={18} />
                             <div style={{ minWidth: 0, flex: 1 }}>
                               <div
                                 style={{
-                                  fontSize: 9,
+                                  fontSize: 8.5,
                                   fontWeight: 700,
                                   whiteSpace: 'nowrap',
                                   overflow: 'hidden',
@@ -819,7 +819,7 @@ export function App() {
                               >
                                 {sp.name}
                               </div>
-                              <div style={{ fontSize: 9, color: 'var(--accent-amber)' }}>
+                              <div style={{ fontSize: 8.5, color: 'var(--accent-amber)' }}>
                                 Lv.{u.level}
                               </div>
                             </div>
@@ -837,20 +837,20 @@ export function App() {
 
                   {inVillage ? (
                     /* ===== VILLAGE COMMAND MENU ===== */
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
                       <button
                         id="btn-enter-labyrinth"
                         type="button"
                         className="choice-card stairs-choice"
                         onClick={() => enterDungeonFloor(defaultEntryFloor)}
                       >
-                        <PixelIcon spriteKey="hero" size={34} />
+                        <PixelIcon spriteKey="hero" size={28} />
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 15, color: '#eafff0' }}>
+                          <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 13, color: '#eafff0' }}>
                             ⚔ 迷宮へ出撃する（{defaultEntryFloor}F〜）
                           </div>
                           <div className="muted-text">
-                            コマンド選択でサクサク進行！装備厳選＆モンスター収集へ出発
+                            コマンド選択でサクサク進行！装備厳選＆仲間集めへ
                           </div>
                         </div>
                         <span className="choice-tag" style={{ background: '#2e8a4e' }}>
@@ -860,7 +860,7 @@ export function App() {
 
                       {quickCheckpoints.length > 1 && (
                         <div className="filter-row">
-                          <span className="muted-text">開始階層:</span>
+                          <span className="muted-text">開始:</span>
                           {quickCheckpoints.map((fl) => (
                             <button
                               key={fl}
@@ -868,7 +868,7 @@ export function App() {
                               className="pill-chip active"
                               onClick={() => enterDungeonFloor(fl)}
                             >
-                              {fl}Fから
+                              {fl}F
                             </button>
                           ))}
                         </div>
@@ -879,15 +879,15 @@ export function App() {
                           id="btn-village-heal"
                           type="button"
                           className="rpg-btn emerald"
-                          style={{ padding: '11px 8px' }}
+                          style={{ padding: '9px 6px' }}
                           onClick={() => healAllParty(1, false)}
                         >
-                          💧 回復の泉（全回復）
+                          💧 回復の泉
                         </button>
                         <button
                           type="button"
                           className="rpg-btn"
-                          style={{ padding: '11px 8px' }}
+                          style={{ padding: '9px 6px' }}
                           onClick={() => setActiveTab('party')}
                         >
                           🐾 パーティ・牧場
@@ -895,15 +895,15 @@ export function App() {
                         <button
                           type="button"
                           className="rpg-btn"
-                          style={{ padding: '11px 8px' }}
+                          style={{ padding: '9px 6px' }}
                           onClick={() => setActiveTab('gear')}
                         >
-                          ⚔ 装備厳選 ({save.inventory.length})
+                          ⚔ 装備 ({save.inventory.length})
                         </button>
                         <button
                           type="button"
                           className="rpg-btn primary"
-                          style={{ padding: '11px 8px' }}
+                          style={{ padding: '9px 6px' }}
                           onClick={() => setActiveTab('world')}
                         >
                           ✦ 世界ランク・商店
@@ -912,12 +912,21 @@ export function App() {
                     </div>
                   ) : (
                     /* ===== DUNGEON COMMAND CHOICE MENU ===== */
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span className="section-heading" style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                        <span
+                          className="section-heading"
+                          style={{
+                            flex: 1,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            display: 'block',
+                          }}
+                        >
                           {expedition.step >= expedition.maxSteps && !expedition.bossDefeated
-                            ? `${expedition.floor}F 最奥：階層ボス出現！`
-                            : `進むコマンドを選択 (${expedition.step}/${expedition.maxSteps})`}
+                            ? `${expedition.floor}F 階層ボス出現！`
+                            : `進むルート (${expedition.step}/${expedition.maxSteps})`}
                         </span>
                         <button
                           id="btn-auto-advance"
@@ -925,7 +934,7 @@ export function App() {
                           className={`rpg-btn sm ${autoAdvance ? 'active-toggle' : ''}`}
                           onClick={() => setAutoAdvance((v) => !v)}
                         >
-                          {autoAdvance ? '⏹ オート中' : '▶ オート進行'}
+                          {autoAdvance ? '⏹オート中' : '▶オート進行'}
                         </button>
                         <button
                           id="btn-return-village"
@@ -933,7 +942,7 @@ export function App() {
                           className="rpg-btn sm"
                           onClick={() => returnToVillage()}
                         >
-                          🏠 帰還
+                          🏠帰還
                         </button>
                       </div>
 
@@ -958,12 +967,12 @@ export function App() {
                                 handleSelectChoice(ch);
                               }}
                             >
-                              <PixelIcon spriteKey={ch.spriteKey} size={32} />
+                              <PixelIcon spriteKey={ch.spriteKey} size={26} />
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div
                                   style={{
                                     fontFamily: 'var(--font-pixel)',
-                                    fontSize: 13,
+                                    fontSize: 11.5,
                                     color: '#fff7e0',
                                     whiteSpace: 'nowrap',
                                     overflow: 'hidden',
@@ -974,9 +983,13 @@ export function App() {
                                 </div>
                                 <div
                                   style={{
-                                    fontSize: 10,
+                                    fontSize: 9.5,
                                     color: 'var(--text-muted)',
-                                    marginTop: 2,
+                                    marginTop: 1,
+                                    lineHeight: 1.25,
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
                                   }}
                                 >
                                   {ch.subtitle}

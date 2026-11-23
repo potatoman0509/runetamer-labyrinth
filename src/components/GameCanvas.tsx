@@ -34,8 +34,8 @@ export function GameCanvas({
       const parent = canvas.parentElement;
       if (!parent) return;
       const rect = parent.getBoundingClientRect();
-      const targetW = Math.max(280, Math.floor(rect.width));
-      const targetH = Math.max(170, Math.floor(rect.height));
+      const targetW = Math.max(200, Math.floor(rect.width));
+      const targetH = Math.max(140, Math.floor(rect.height));
       if (canvas.width !== targetW || canvas.height !== targetH) {
         canvas.width = targetW;
         canvas.height = targetH;

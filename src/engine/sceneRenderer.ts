@@ -213,26 +213,29 @@ export function renderExpeditionScene(
     .filter((u): u is NonNullable<typeof u> => Boolean(u));
 
   const groundY = Math.round(height * 0.72);
+  const spriteScale = width < 350 ? 2 : 3;
+  const spacing = exp.inVillage
+    ? Math.min(50, Math.floor((width - 40) / Math.max(4, partyUnits.length)))
+    : Math.min(38, Math.floor((width * 0.56) / Math.max(3, partyUnits.length)));
   const startX = exp.inVillage
-    ? Math.round(width * 0.5 - ((partyUnits.length - 1) * 56) / 2)
-    : Math.round(width * 0.16);
-  const spacing = exp.inVillage ? 56 : 44;
+    ? Math.round(width * 0.5 - ((partyUnits.length - 1) * spacing) / 2)
+    : Math.round(width * 0.14);
 
   partyUnits.forEach((unit, idx) => {
     const sp = getSpecies(unit.speciesId);
     // In dungeon, Hero leads in front (rightmost of left group) facing right!
     const drawIdx = exp.inVillage ? idx : partyUnits.length - 1 - idx;
     const cx = startX + drawIdx * spacing;
-    const cy = groundY + (idx % 2 === 0 ? -4 : 6);
+    const cy = groundY + (idx % 2 === 0 ? -3 : 5);
     const bounceSpeed = isMarching ? 95 : 230;
-    const bounceAmp = isMarching ? 4 : 2;
+    const bounceAmp = isMarching ? 3.5 : 2;
     const bob = Math.round(Math.sin(timeMs / bounceSpeed + idx * 1.4) * bounceAmp);
 
     // Shadow
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(cx - 14, cy + 16, 28, 6);
+    ctx.fillRect(cx - 12, cy + (spriteScale === 2 ? 12 : 16), 24, 5);
 
-    const sprite = getSpriteCanvas(sp.spriteKey, 3, false);
+    const sprite = getSpriteCanvas(sp.spriteKey, spriteScale, false);
     ctx.drawImage(sprite, Math.round(cx - sprite.width / 2), Math.round(cy - sprite.height / 2 + bob));
   });
 
@@ -243,9 +246,9 @@ export function renderExpeditionScene(
       exp.choices.find((c) => c.kind === 'stairs') ??
       exp.choices.find((c) => c.kind === 'gold_chest') ??
       exp.choices[0]!;
-    const fx = Math.round(width * 0.8);
+    const fx = Math.round(width * 0.82);
     const fy = groundY - 2;
-    const scale = featured.kind === 'boss' ? 4 : 3;
+    const scale = featured.kind === 'boss' ? (width < 350 ? 3 : 4) : spriteScale;
     const fSprite = getSpriteCanvas(featured.spriteKey, scale, true);
     const fBob = Math.round(Math.sin(timeMs / 210) * 2.5);
 

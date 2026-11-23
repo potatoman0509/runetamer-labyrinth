@@ -37,20 +37,20 @@ export function CompendiumPanel({ save }: CompendiumPanelProps) {
       </div>
 
       {/* Sub-tabs */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 4 }}>
         <button
           type="button"
           className={`rpg-btn sm ${subTab === 'monsters' ? 'primary' : ''}`}
           onClick={() => setSubTab('monsters')}
         >
-          モンスター図鑑 ({save.discoveredMonsters.length}/{MONSTER_LIST.length})
+          魔物図鑑 ({save.discoveredMonsters.length}/{MONSTER_LIST.length})
         </button>
         <button
           type="button"
           className={`rpg-btn sm ${subTab === 'uniques' ? 'primary' : ''}`}
           onClick={() => setSubTab('uniques')}
         >
-          ユニーク装備 ({save.discoveredUniques.length}/{UNIQUE_TEMPLATES.length})
+          固有装備 ({save.discoveredUniques.length}/{UNIQUE_TEMPLATES.length})
         </button>
       </div>
 
@@ -69,16 +69,16 @@ export function CompendiumPanel({ save }: CompendiumPanelProps) {
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 7,
+                  gap: 5,
                   opacity: found ? 1 : 0.65,
                   borderColor: sp.isBoss && found ? 'var(--border-gold)' : undefined,
                 }}
               >
-                <PixelIcon spriteKey={sp.spriteKey} size={32} silhouette={!found} />
+                <PixelIcon spriteKey={sp.spriteKey} size={24} silhouette={!found} />
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div
                     style={{
-                      fontSize: 11,
+                      fontSize: 10,
                       fontWeight: 700,
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
@@ -88,18 +88,35 @@ export function CompendiumPanel({ save }: CompendiumPanelProps) {
                   >
                     {found ? sp.name : '？？？'}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                    <span className="role-badge" style={{ background: role.color, fontSize: 9 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: 1, minWidth: 0 }}>
+                    <span className="role-badge" style={{ background: role.color, fontSize: 8.5 }}>
                       {role.label}
                     </span>
-                    <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>
+                    <span
+                      style={{
+                        fontSize: 8.5,
+                        color: 'var(--text-muted)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
                       {biomeName}
-                      {sp.isBoss ? ' BOSS' : ''}
+                      {sp.isBoss ? '★' : ''}
                     </span>
                   </div>
                   {found && (
-                    <div style={{ fontSize: 9, color: '#9ee8ad', marginTop: 2 }}>
-                      {owned ? `仲間 Lv.${owned.level} ★+${owned.awakening}` : sp.passiveDesc}
+                    <div
+                      style={{
+                        fontSize: 8.5,
+                        color: '#9ee8ad',
+                        marginTop: 1,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {owned ? `Lv.${owned.level} ★+${owned.awakening}` : sp.passiveDesc}
                     </div>
                   )}
                 </div>
@@ -108,7 +125,7 @@ export function CompendiumPanel({ save }: CompendiumPanelProps) {
           })}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {UNIQUE_TEMPLATES.map((u) => {
             const found = save.discoveredUniques.includes(u.id);
             return (
@@ -118,17 +135,26 @@ export function CompendiumPanel({ save }: CompendiumPanelProps) {
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 8,
+                  gap: 6,
                   borderColor: found ? '#e89b2d' : undefined,
                   opacity: found ? 1 : 0.62,
                 }}
               >
-                <PixelIcon spriteKey={u.iconKey} size={28} silhouette={!found} />
+                <PixelIcon spriteKey={u.iconKey} size={22} silhouette={!found} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: found ? '#ffb84d' : 'var(--text-muted)' }}>
-                    {found ? `★${u.name}` : `？？？ (${SLOT_LABELS[u.slot]} / Tier ${u.minTier}+)`}
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: found ? '#ffb84d' : 'var(--text-muted)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {found ? `★${u.name}` : `？？？ (${SLOT_LABELS[u.slot]} / T${u.minTier}+)`}
                   </div>
-                  <div style={{ fontSize: 10, color: found ? '#fff2bd' : 'var(--text-dim)' }}>
+                  <div style={{ fontSize: 9.5, color: found ? '#fff2bd' : 'var(--text-dim)', lineHeight: 1.25 }}>
                     {found ? u.desc : 'レジェンド・ミシック装備ドロップで発見'}
                   </div>
                 </div>

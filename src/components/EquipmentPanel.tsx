@@ -108,7 +108,7 @@ export function EquipmentPanel({
   };
 
   return (
-    <div className="panel-body" style={{ gap: 7 }}>
+    <div className="panel-body" style={{ gap: 5 }}>
       {/* Party Member Selector (All 4 can equip all 4 slots!) */}
       <div className="unit-pill-row">
         {save.partyIds.map((pid) => {
@@ -123,10 +123,10 @@ export function EquipmentPanel({
               className={`unit-pill ${pid === activeUnitId ? 'selected' : ''}`}
               onClick={() => setSelectedUnitId(pid)}
             >
-              <PixelIcon spriteKey={sp.spriteKey} size={26} />
+              <PixelIcon spriteKey={sp.spriteKey} size={22} />
               <span
                 style={{
-                  fontSize: 10,
+                  fontSize: 9,
                   fontWeight: 700,
                   maxWidth: '100%',
                   overflow: 'hidden',
@@ -136,8 +136,8 @@ export function EquipmentPanel({
               >
                 {sp.name}
               </span>
-              <span style={{ fontSize: 9, color: 'var(--accent-amber)', fontFamily: 'var(--font-pixel)' }}>
-                戦力 {st.powerScore}
+              <span style={{ fontSize: 8.5, color: 'var(--accent-amber)', fontFamily: 'var(--font-pixel)' }}>
+                戦力{st.powerScore}
               </span>
             </button>
           );
@@ -145,8 +145,8 @@ export function EquipmentPanel({
       </div>
 
       {/* Selected Unit Compact Stats + 4 Equipped Slots */}
-      <div className="rpg-card" style={{ padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 5 }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 10px', fontSize: 11 }}>
+      <div className="rpg-card" style={{ padding: '5px 7px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 8px', fontSize: 10 }}>
           <span>ATK <strong>{unitStats.atk}</strong></span>
           <span>MAG <strong>{unitStats.mag}</strong></span>
           <span>DEF <strong>{unitStats.def}</strong></span>
@@ -172,17 +172,17 @@ export function EquipmentPanel({
                 }}
               >
                 {eqItem ? (
-                  <PixelIcon spriteKey={eqItem.iconKey} size={22} />
+                  <PixelIcon spriteKey={eqItem.iconKey} size={18} />
                 ) : (
-                  <span style={{ width: 22, textAlign: 'center', color: 'var(--text-dim)', fontSize: 11 }}>
+                  <span style={{ width: 18, textAlign: 'center', color: 'var(--text-dim)', fontSize: 10 }}>
                     空
                   </span>
                 )}
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: 9, color: 'var(--text-dim)' }}>{SLOT_LABELS[slot]}</div>
+                  <div style={{ fontSize: 8.5, color: 'var(--text-dim)' }}>{SLOT_LABELS[slot]}</div>
                   <div
                     style={{
-                      fontSize: 11,
+                      fontSize: 10,
                       fontWeight: 700,
                       color: rm ? rm.color : 'var(--text-dim)',
                       whiteSpace: 'nowrap',
@@ -208,64 +208,62 @@ export function EquipmentPanel({
             background: RARITY_META[selectedItem.rarity].bg,
             display: 'flex',
             flexDirection: 'column',
-            gap: 5,
+            gap: 4,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
-              <PixelIcon spriteKey={selectedItem.iconKey} size={28} />
-              <div style={{ minWidth: 0 }}>
-                <div
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 800,
-                    color: RARITY_META[selectedItem.rarity].color,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  {selectedItem.locked ? '🔒 ' : ''}
-                  {selectedItem.name}
-                </div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                  {SLOT_LABELS[selectedItem.slot]} / iLv.{selectedItem.itemLevel} (Tier {selectedItem.worldTier}) / 評価{' '}
-                  {calculateItemScore(selectedItem)}
-                  {!isEquippedBySelectedUnit && scoreDiff !== 0 && (
-                    <span className={scoreDiff > 0 ? 'stat-diff-pos' : 'stat-diff-neg'}>
-                      {' '}
-                      ({scoreDiff > 0 ? `▲+${scoreDiff}` : `▼${scoreDiff}`})
-                    </span>
-                  )}
-                </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            <PixelIcon spriteKey={selectedItem.iconKey} size={24} />
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div
+                style={{
+                  fontSize: 11.5,
+                  fontWeight: 800,
+                  color: RARITY_META[selectedItem.rarity].color,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {selectedItem.locked ? '🔒' : ''}
+                {selectedItem.name}
+              </div>
+              <div style={{ fontSize: 9.5, color: 'var(--text-muted)' }}>
+                {SLOT_LABELS[selectedItem.slot]} iLv.{selectedItem.itemLevel} (T{selectedItem.worldTier}) 評価
+                {calculateItemScore(selectedItem)}
+                {!isEquippedBySelectedUnit && scoreDiff !== 0 && (
+                  <span className={scoreDiff > 0 ? 'stat-diff-pos' : 'stat-diff-neg'}>
+                    {' '}
+                    ({scoreDiff > 0 ? `▲+${scoreDiff}` : `▼${scoreDiff}`})
+                  </span>
+                )}
               </div>
             </div>
           </div>
 
           {/* Base stats */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px 8px', fontSize: 11 }}>
-            {selectedItem.baseStats.atk && <span>攻撃 +{selectedItem.baseStats.atk}</span>}
-            {selectedItem.baseStats.mag && <span>魔力 +{selectedItem.baseStats.mag}</span>}
-            {selectedItem.baseStats.def && <span>防御 +{selectedItem.baseStats.def}</span>}
-            {selectedItem.baseStats.hp && <span>HP +{selectedItem.baseStats.hp}</span>}
-            {selectedItem.baseStats.spd && <span>素早さ +{selectedItem.baseStats.spd}</span>}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 7px', fontSize: 10 }}>
+            {selectedItem.baseStats.atk && <span>攻撃+{selectedItem.baseStats.atk}</span>}
+            {selectedItem.baseStats.mag && <span>魔力+{selectedItem.baseStats.mag}</span>}
+            {selectedItem.baseStats.def && <span>防御+{selectedItem.baseStats.def}</span>}
+            {selectedItem.baseStats.hp && <span>HP+{selectedItem.baseStats.hp}</span>}
+            {selectedItem.baseStats.spd && <span>素早さ+{selectedItem.baseStats.spd}</span>}
           </div>
 
           {/* Random Affixes */}
           {selectedItem.affixes.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
               {selectedItem.affixes.map((af, idx) => (
                 <span
                   key={`${af.stat}_${idx}`}
                   style={{
-                    fontSize: 10,
+                    fontSize: 9.5,
                     background: 'rgba(15, 13, 22, 0.65)',
-                    padding: '2px 6px',
-                    borderRadius: 4,
+                    padding: '1px 5px',
+                    borderRadius: 3,
                     color: '#d9f2ff',
                   }}
                 >
-                  {af.label} +{af.value}
+                  {af.label}+{af.value}
                   {af.isPercent ? '%' : ''}
                 </span>
               ))}
@@ -276,11 +274,11 @@ export function EquipmentPanel({
           {selectedItem.uniqueDesc && (
             <div
               style={{
-                fontSize: 11,
+                fontSize: 10,
                 color: '#ffe570',
                 background: 'rgba(20, 16, 26, 0.72)',
-                borderLeft: '3px solid #ffe570',
-                padding: '3px 7px',
+                borderLeft: '2px solid #ffe570',
+                padding: '2px 6px',
                 borderRadius: 3,
               }}
             >
@@ -289,7 +287,7 @@ export function EquipmentPanel({
           )}
 
           {/* 1-Tap Action Buttons */}
-          <div style={{ display: 'flex', gap: 5, marginTop: 2 }}>
+          <div style={{ display: 'flex', gap: 4, marginTop: 2, minWidth: 0 }}>
             {isEquippedBySelectedUnit ? (
               <button
                 type="button"
@@ -308,7 +306,7 @@ export function EquipmentPanel({
                 onClick={() => onEquip(unit.id, selectedItem.id)}
               >
                 {ownerOfSelected
-                  ? `${getSpecies(ownerOfSelected).name}から移して装備`
+                  ? `移して装備`
                   : `${getSpecies(unit.speciesId).name}に装備`}
               </button>
             )}
@@ -325,7 +323,7 @@ export function EquipmentPanel({
               disabled={selectedItem.locked || Boolean(ownerOfSelected)}
               onClick={() => onSellItem(selectedItem.id)}
             >
-              売 {selectedItem.sellValue}G
+              売{selectedItem.sellValue}G
             </button>
           </div>
         </div>

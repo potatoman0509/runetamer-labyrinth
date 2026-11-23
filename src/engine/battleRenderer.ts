@@ -111,22 +111,25 @@ function getUnitPositions(
   const topY = Math.round(h * 0.43);
   const usableH = Math.round(h * 0.5);
 
+  const baseScale = w < 350 ? 2 : 3;
+  const bossScale = w < 350 ? 3 : 4;
+
   // Enemies on left side (facing right)
   const eCount = state.enemies.length;
   state.enemies.forEach((e, idx) => {
     const t = eCount === 1 ? 0.5 : idx / (eCount - 1);
     const x = Math.round(w * (e.isBoss ? 0.25 : idx % 2 === 0 ? 0.2 : 0.31));
-    const y = Math.round(topY + 14 + t * (usableH - 36));
-    map.set(e.uid, { x, y, scale: e.isBoss ? 4 : e.isElite ? 3.5 : 3 });
+    const y = Math.round(topY + 12 + t * (usableH - 30));
+    map.set(e.uid, { x, y, scale: e.isBoss ? bossScale : baseScale });
   });
 
   // Allies on right side (facing left)
   const aCount = state.allies.length;
   state.allies.forEach((a, idx) => {
     const t = aCount === 1 ? 0.5 : idx / (aCount - 1);
-    const x = Math.round(w * (idx % 2 === 0 ? 0.77 : 0.85));
-    const y = Math.round(topY + 12 + t * (usableH - 32));
-    map.set(a.uid, { x, y, scale: 3 });
+    const x = Math.round(w * (idx % 2 === 0 ? 0.76 : 0.85));
+    const y = Math.round(topY + 10 + t * (usableH - 28));
+    map.set(a.uid, { x, y, scale: baseScale });
   });
 
   return map;

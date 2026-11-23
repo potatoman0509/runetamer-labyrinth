@@ -52,7 +52,7 @@ export function PartyPanel({
       </div>
 
       {/* Active Party Cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
         {save.partyIds.map((pid) => {
           const u = save.roster[pid];
           if (!u) return null;
@@ -63,22 +63,30 @@ export function PartyPanel({
           const expPct = Math.min(100, Math.round((u.exp / nextExp) * 100));
 
           return (
-            <div key={pid} className="rpg-card-gold" style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <PixelIcon spriteKey={sp.spriteKey} size={34} />
+            <div key={pid} className="rpg-card-gold" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                <PixelIcon spriteKey={sp.spriteKey} size={28} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <strong style={{ fontSize: 13 }}>{sp.name}</strong>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                    <strong style={{ fontSize: 11.5 }}>{sp.name}</strong>
                     <span className="role-badge" style={{ background: role.color }}>
                       {role.label}
                     </span>
-                    <span style={{ fontSize: 11, color: '#ffe570', fontFamily: 'var(--font-pixel)' }}>
+                    <span style={{ fontSize: 10, color: '#ffe570', fontFamily: 'var(--font-pixel)' }}>
                       Lv.{u.level}
                       {u.awakening > 0 ? ` ★+${u.awakening}` : ''}
                     </span>
                   </div>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                    固有: {sp.passiveName}（{sp.passiveDesc}）
+                  <div
+                    style={{
+                      fontSize: 9.5,
+                      color: 'var(--text-muted)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {sp.passiveName}（{sp.passiveDesc}）
                   </div>
                 </div>
                 {pid !== 'hero' && (
@@ -92,7 +100,7 @@ export function PartyPanel({
                 )}
               </div>
 
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px', fontSize: 11 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 8px', fontSize: 10 }}>
                 <span>HP {u.hp}/{st.maxHp}</span>
                 <span>MP {u.mp}/{st.maxMp}</span>
                 <span>ATK {st.atk}</span>
@@ -101,12 +109,12 @@ export function PartyPanel({
                 <span>SPD {st.spd}</span>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 9, color: 'var(--text-dim)' }}>EXP</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ fontSize: 8.5, color: 'var(--text-dim)' }}>EXP</span>
                 <div className="bar-track" style={{ flex: 1 }}>
                   <div className="bar-fill-exp" style={{ width: `${expPct}%` }} />
                 </div>
-                <span style={{ fontSize: 9, color: 'var(--text-dim)' }}>{expPct}%</span>
+                <span style={{ fontSize: 8.5, color: 'var(--text-dim)' }}>{expPct}%</span>
               </div>
             </div>
           );
@@ -114,12 +122,12 @@ export function PartyPanel({
       </div>
 
       {/* Monster Ranch Roster */}
-      <div className="section-heading" style={{ marginTop: 4 }}>
+      <div className="section-heading" style={{ marginTop: 2 }}>
         <span>モンスター牧場 ({ownedMonsters.length}体)</span>
         <span className="muted-text">撃破で仲間化＆★覚醒</span>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {ownedMonsters.map((u) => {
           const sp = getSpecies(u.speciesId);
           const role = ROLE_LABELS[sp.role];
@@ -127,21 +135,29 @@ export function PartyPanel({
           const st = computeUnitStats(u, save, shrineBuffs, invMap);
 
           return (
-            <div key={u.id} className="rpg-card" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <PixelIcon spriteKey={sp.spriteKey} size={30} />
+            <div key={u.id} className="rpg-card" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+              <PixelIcon spriteKey={sp.spriteKey} size={24} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <strong style={{ fontSize: 12 }}>{sp.name}</strong>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                  <strong style={{ fontSize: 11 }}>{sp.name}</strong>
                   <span className="role-badge" style={{ background: role.color }}>
                     {role.label}
                   </span>
-                  <span style={{ fontSize: 11, color: '#ffe570', fontFamily: 'var(--font-pixel)' }}>
+                  <span style={{ fontSize: 10, color: '#ffe570', fontFamily: 'var(--font-pixel)' }}>
                     Lv.{u.level}
                     {u.awakening > 0 ? ` ★+${u.awakening}` : ''}
                   </span>
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                  {sp.skills[0].name} / {sp.skills[1].name} ・ 戦力 {st.powerScore}
+                <div
+                  style={{
+                    fontSize: 9.5,
+                    color: 'var(--text-muted)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {sp.skills[0].name} / {sp.skills[1].name} ・ 戦力{st.powerScore}
                 </div>
               </div>
               <button

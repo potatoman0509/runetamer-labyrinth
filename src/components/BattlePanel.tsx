@@ -215,7 +215,7 @@ export function BattlePanel({
   }
 
   return (
-    <div className="panel-body" style={{ gap: 6 }}>
+    <div className="panel-body" style={{ gap: 5 }}>
       {/* 4 Ally Status Strip */}
       <div className="battle-ally-strip">
         {battle.allies.map((ally) => {
@@ -227,12 +227,12 @@ export function BattlePanel({
               key={ally.uid}
               className={`battle-ally-card ${isTurn ? 'active' : ''} ${ally.hp <= 0 ? 'dead' : ''}`}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <PixelIcon spriteKey={ally.spriteKey} size={22} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 3, minWidth: 0 }}>
+                <PixelIcon spriteKey={ally.spriteKey} size={18} />
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div
                     style={{
-                      fontSize: 10,
+                      fontSize: 9,
                       fontWeight: 700,
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
@@ -241,16 +241,24 @@ export function BattlePanel({
                   >
                     {ally.name}
                   </div>
-                  <div style={{ fontSize: 9, color: 'var(--text-muted)' }}>
-                    HP {ally.hp}/{ally.maxHp}
-                    {ally.shield > 0 ? ` (+${ally.shield})` : ''}
+                  <div
+                    style={{
+                      fontSize: 8.5,
+                      color: 'var(--text-muted)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {ally.hp}/{ally.maxHp}
+                    {ally.shield > 0 ? `+${ally.shield}` : ''}
                   </div>
                 </div>
               </div>
               <div className="bar-track">
                 <div className="bar-fill-hp" style={{ width: `${hpPct}%` }} />
               </div>
-              <div className="bar-track" style={{ height: 4 }}>
+              <div className="bar-track" style={{ height: 3 }}>
                 <div className="bar-fill-mp" style={{ width: `${mpPct}%` }} />
               </div>
             </div>
@@ -266,7 +274,7 @@ export function BattlePanel({
           className={`rpg-btn sm ${settings.autoBattle ? 'active-toggle' : ''}`}
           onClick={onToggleAuto}
         >
-          {settings.autoBattle ? 'AUTO: ON' : 'AUTO: OFF'}
+          {settings.autoBattle ? 'AUTO:ON' : 'AUTO:OFF'}
         </button>
         <button
           id="btn-cycle-speed"
@@ -274,7 +282,7 @@ export function BattlePanel({
           className="rpg-btn sm"
           onClick={onCycleSpeed}
         >
-          速度 {SPEED_LABELS[settings.battleSpeed]}
+          {SPEED_LABELS[settings.battleSpeed]}
         </button>
         <button
           id="btn-cycle-tactic"
@@ -284,8 +292,18 @@ export function BattlePanel({
         >
           {TACTIC_LABELS[settings.battleTactic]}
         </button>
-        <span className="muted-text" style={{ marginLeft: 'auto', fontSize: 10 }}>
-          T{battle.turn} {activeUnit ? `▶ ${activeUnit.name}` : ''}
+        <span
+          className="muted-text"
+          style={{
+            marginLeft: 'auto',
+            fontSize: 9.5,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            maxWidth: '40%',
+          }}
+        >
+          T{battle.turn} {activeUnit ? `▶${activeUnit.name}` : ''}
         </span>
       </div>
 
@@ -308,7 +326,7 @@ export function BattlePanel({
           >
             <span className="cmd-title">
               <span>⚔ たたかう</span>
-              <span style={{ fontSize: 10, color: '#9ee8ad' }}>MP 0</span>
+              <span style={{ fontSize: 9, color: '#9ee8ad', flexShrink: 0 }}>MP0</span>
             </span>
             <span className="cmd-desc">選択中の敵を通常攻撃</span>
           </button>
@@ -333,8 +351,8 @@ export function BattlePanel({
               >
                 <span className="cmd-title">
                   <span>✦ {sk.name}</span>
-                  <span style={{ fontSize: 10, color: affordable ? '#72d2ff' : '#ff7a7a' }}>
-                    MP {cost}
+                  <span style={{ fontSize: 9, color: affordable ? '#72d2ff' : '#ff7a7a', flexShrink: 0 }}>
+                    MP{cost}
                   </span>
                 </span>
                 <span className="cmd-desc">{sk.description}</span>
@@ -342,20 +360,20 @@ export function BattlePanel({
             );
           })}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 4 }}>
             <button
               id="btn-cmd-defend"
               type="button"
-              className="rpg-btn"
+              className="rpg-btn sm"
               disabled={!canPlayerAct}
               onClick={() => onCommand({ type: 'defend' })}
             >
-              🛡 防御
+              🛡防御
             </button>
             <button
               id="btn-cmd-flee"
               type="button"
-              className="rpg-btn danger"
+              className="rpg-btn sm danger"
               disabled={!canPlayerAct || battle.isBossBattle}
               onClick={() => onCommand({ type: 'flee' })}
             >
@@ -364,7 +382,7 @@ export function BattlePanel({
           </div>
         </div>
       ) : (
-        <div className="rpg-card" style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
+        <div className="rpg-card" style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-muted)' }}>
           {settings.autoBattle ? 'オート戦闘進行中…' : '敵の行動中…'}
         </div>
       )}
