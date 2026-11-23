@@ -19,14 +19,13 @@ import { BIOMES, getBiomeForFloor } from './game/data/biomes';
 import { generateEquipment, RARITY_META } from './game/data/equipment';
 import { getSpecies } from './game/data/monsters';
 import {
-  createHubMap,
-  findAutoExploreTarget,
-  findPathBFS,
-  generateDungeonFloor,
-  getEntityAt,
-  isWalkableTile,
-  revealAround,
-} from './game/dungeon';
+  createDungeonExpedition,
+  createVillageExpedition,
+  generateStepChoices,
+  pickAutoExpeditionChoice,
+  type ExpeditionChoice,
+  type ExpeditionState,
+} from './game/expedition';
 import {
   clearLocalSave,
   createInitialSave,
@@ -41,7 +40,6 @@ import type {
   BattleSpeed,
   BattleState,
   BattleTactic,
-  DungeonMap,
   EquipmentItem,
   EquipSlot,
   GameSave,
@@ -53,8 +51,10 @@ type ActiveTab = 'explore' | 'party' | 'gear' | 'compendium' | 'world';
 
 export function App() {
   const [save, setSave] = useState<GameSave>(() => loadGameFromLocal() ?? createInitialSave());
-  const [map, setMap] = useState<DungeonMap>(() => createHubMap());
+  const [expedition, setExpedition] = useState<ExpeditionState>(() => createVillageExpedition());
   const [battle, setBattle] = useState<BattleState | null>(null);
+  const [pendingAdvanceOnWin, setPendingAdvanceOnWin] = useState(false);
+
   const [activeTab, setActiveTab] = useState<ActiveTab>('explore');
   const [focusItemId, setFocusItemId] = useState<string | null>(null);
   const [selectedEnemyUid, setSelectedEnemyUid] = useState<string | null>(null);
@@ -63,11 +63,9 @@ export function App() {
     fortuneBonus: 0,
   });
 
-  const [heroFacingLeft, setHeroFacingLeft] = useState(false);
-  const [moveQueue, setMoveQueue] = useState<{ x: number; y: number }[]>([]);
-  const [autoExplore, setAutoExplore] = useState(false);
+  const [autoAdvance, setAutoAdvance] = useState(false);
   const [toast, setToast] = useState<string | null>(
-    'ようこそ！北の「迷宮の入口」または下のボタンからダンジョンへ出発しよう！',
+    'コマンドを選んで迷宮を進もう！まずは「迷宮へ出撃」をタップ！',
   );
 
   const toastTimerRef = useRef<number | null>(null);
@@ -90,31 +88,44 @@ export function App() {
     [save.inventory],
   );
 
-  // Heal all roster units to full max HP/MP
   const healAllParty = useCallback(
-    (silent = false) => {
+    (ratio = 1, silent = false) => {
       setSave((prev) => {
         const nextRoster = { ...prev.roster };
         const mapInv = new Map(prev.inventory.map((it) => [it.id, it]));
         for (const id of Object.keys(nextRoster)) {
           const u = nextRoster[id]!;
           const st = computeUnitStats(u, prev, shrineBuffs, mapInv);
-          nextRoster[id] = { ...u, hp: st.maxHp, mp: st.maxMp };
+          if (ratio >= 1) {
+            nextRoster[id] = { ...u, hp: st.maxHp, mp: st.maxMp };
+          } else {
+            nextRoster[id] = {
+              ...u,
+              hp: Math.min(st.maxHp, u.hp + Math.round(st.maxHp * ratio)),
+              mp: Math.min(st.maxMp, u.mp + Math.round(st.maxMp * ratio)),
+            };
+          }
         }
         return { ...prev, roster: nextRoster };
       });
-      if (!silent) showToast('回復の泉の清らかな水で、パーティ全員のHP/MPが全回復した！');
+      if (!silent) {
+        showToast(
+          ratio >= 1
+            ? '回復の泉の清らかな水で、パーティ全員のHP/MPが全回復した！'
+            : `焚き火で休息し、全員のHP/MPが${Math.round(ratio * 100)}%回復した！`,
+        );
+      }
     },
     [shrineBuffs, showToast],
   );
 
   const returnToVillage = useCallback(
     (msg?: string) => {
-      setMoveQueue([]);
-      setAutoExplore(false);
+      setAutoAdvance(false);
       setBattle(null);
+      setPendingAdvanceOnWin(false);
       setShrineBuffs({ powerBonus: 0, fortuneBonus: 0 });
-      setMap(createHubMap());
+      setExpedition(createVillageExpedition());
       setActiveTab('explore');
       setSave((prev) => {
         const nextRoster = { ...prev.roster };
@@ -126,7 +137,7 @@ export function App() {
         }
         return { ...prev, roster: nextRoster };
       });
-      showToast(msg ?? '始まりの村へ帰還し、全員の体力が回復した！');
+      showToast(msg ?? '始まりの村へ帰還し、全員の体力が全回復した！');
     },
     [showToast],
   );
@@ -134,11 +145,10 @@ export function App() {
   const enterDungeonFloor = useCallback(
     (floor: number) => {
       const targetFloor = Math.max(1, floor);
-      setMoveQueue([]);
       setBattle(null);
+      setPendingAdvanceOnWin(false);
       setActiveTab('explore');
-      const nextMap = generateDungeonFloor(targetFloor, save.worldTier);
-      setMap(nextMap);
+      setExpedition(createDungeonExpedition(targetFloor, save.worldTier));
       setSave((prev) => ({
         ...prev,
         highestFloorByTier: {
@@ -151,41 +161,82 @@ export function App() {
         },
       }));
       const b = BIOMES[getBiomeForFloor(targetFloor)];
-      showToast(`${b.name} ${targetFloor}F へ降りた！（Tier ${toRoman(save.worldTier)}）`);
+      showToast(`${b.name} ${targetFloor}F へ突入！（Tier ${toRoman(save.worldTier)}）`);
     },
     [save.worldTier, showToast],
   );
 
-  // Trigger interaction with an entity (enemy, chest, shrine, village NPC)
-  const triggerEntity = useCallback(
-    (ent: MapEntity, currentMap: DungeonMap) => {
-      if (ent.interacted) return;
+  const advanceExpeditionStep = useCallback(
+    (worldTier: number, markBossDefeated = false, markRestUsed = false, shouldAdvance = true) => {
+      setExpedition((prev) => {
+        if (prev.inVillage) return prev;
+        const nextBossDefeated = prev.bossDefeated || markBossDefeated;
+        const nextRestUsed = prev.restUsedOnFloor || markRestUsed;
+        const nextStep = shouldAdvance
+          ? Math.min(prev.maxSteps, prev.step + 1)
+          : prev.step;
+        return {
+          ...prev,
+          step: nextStep,
+          bossDefeated: nextBossDefeated,
+          restUsedOnFloor: nextRestUsed,
+          choices: generateStepChoices(
+            prev.floor,
+            nextStep,
+            prev.maxSteps,
+            worldTier,
+            nextBossDefeated,
+            nextRestUsed,
+          ),
+          marchUntilMs: shouldAdvance ? Date.now() + 550 : prev.marchUntilMs,
+        };
+      });
+    },
+    [],
+  );
 
-      if (ent.kind === 'npc') {
-        setMoveQueue([]);
-        if (ent.npcAction === 'fountain') {
-          healAllParty(false);
-        } else if (ent.npcAction === 'ranch') {
-          setActiveTab('party');
-          showToast('モンスター牧場を開いた！');
-        } else if (ent.npcAction === 'shop') {
-          setActiveTab('world');
-          showToast('村の鍛冶・商店を開いた！');
-        } else if (ent.npcAction === 'altar') {
-          setActiveTab('world');
-          showToast('世界ランクの祭壇を開いた！');
-        } else if (ent.npcAction === 'gate') {
-          const bestFloor = save.highestFloorByTier[save.worldTier] ?? 1;
-          // Start at latest 5-floor biome start or 1F
-          const entryFloor = bestFloor >= 6 ? Math.floor((bestFloor - 1) / 5) * 5 + 1 : 1;
-          enterDungeonFloor(entryFloor);
-        }
+  // Execute a selected Expedition Command Choice!
+  const handleSelectChoice = useCallback(
+    (choice: ExpeditionChoice) => {
+      if (battle || expedition.inVillage) return;
+
+      if (choice.kind === 'stairs') {
+        enterDungeonFloor(expedition.floor + 1);
         return;
       }
 
-      if (ent.kind === 'chest' || ent.kind === 'gold_chest') {
-        setMoveQueue([]);
-        const isGold = ent.kind === 'gold_chest';
+      if (choice.kind === 'return_village') {
+        returnToVillage();
+        return;
+      }
+
+      if (choice.kind === 'rest') {
+        healAllParty(0.5, false);
+        advanceExpeditionStep(save.worldTier, false, true, false);
+        return;
+      }
+
+      if (
+        choice.kind === 'shrine_heal' ||
+        choice.kind === 'shrine_power' ||
+        choice.kind === 'shrine_fortune'
+      ) {
+        if (choice.kind === 'shrine_heal') {
+          healAllParty(1, true);
+          showToast('癒しの祠の祝福！パーティ全員のHP/MPが全回復した！');
+        } else if (choice.kind === 'shrine_power') {
+          setShrineBuffs((b) => ({ ...b, powerBonus: Math.min(0.75, b.powerBonus + 0.25) }));
+          showToast('剛力の祠の祝福！この探索中、味方全体の攻撃・魔力+25%！');
+        } else {
+          setShrineBuffs((b) => ({ ...b, fortuneBonus: Math.min(180, b.fortuneBonus + 45) }));
+          showToast('幸運の祠の祝福！この探索中、トレハン（レア率）+45%！');
+        }
+        advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
+        return;
+      }
+
+      if (choice.kind === 'chest' || choice.kind === 'gold_chest') {
+        const isGold = choice.kind === 'gold_chest';
         const lootBonuses = getPartyAggregatedLootBonuses(save, shrineBuffs);
         const itemCount = isGold ? 2 : 1;
         const gainedItems: EquipmentItem[] = [];
@@ -195,9 +246,9 @@ export function App() {
 
         for (let i = 0; i < itemCount; i += 1) {
           const it = generateEquipment(
-            currentMap.floor,
+            expedition.floor,
             save.worldTier,
-            lootBonuses.magicFind + (isGold ? 35 : 10),
+            lootBonuses.magicFind + (isGold ? 35 : 12),
             isGold ? 'gold_chest' : 'chest',
           );
           if (it.rarity === 'mythic') mythics += 1;
@@ -209,17 +260,10 @@ export function App() {
           }
         }
         const bonusGold = Math.round(
-          (isGold ? 60 : 25) *
-            (1 + currentMap.floor * 0.35) *
+          (isGold ? 65 : 28) *
+            (1 + expedition.floor * 0.35) *
             Math.pow(2.1, save.worldTier - 1),
         );
-
-        setMap((prev) => ({
-          ...prev,
-          entities: prev.entities.map((e) =>
-            e.id === ent.id ? { ...e, interacted: true } : e,
-          ),
-        }));
 
         setSave((prev) => {
           const uniques = new Set(prev.discoveredUniques);
@@ -250,219 +294,60 @@ export function App() {
             `宝箱を開封！（自動売却 ${autoSoldCount}個 → 計+${bonusGold + autoSoldGold}G）`,
           );
         }
+        advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
         return;
       }
 
-      if (ent.kind === 'shrine') {
-        setMoveQueue([]);
-        setMap((prev) => ({
-          ...prev,
-          entities: prev.entities.map((e) =>
-            e.id === ent.id ? { ...e, interacted: true } : e,
-          ),
-        }));
-        if (ent.shrineType === 'heal') {
-          healAllParty(true);
-          showToast('癒しの祠の祝福！パーティ全員のHP/MPが全回復した！');
-        } else if (ent.shrineType === 'power') {
-          setShrineBuffs((b) => ({ ...b, powerBonus: Math.min(0.75, b.powerBonus + 0.25) }));
-          showToast('剛力の祠の祝福！この探索中、味方全体の攻撃・魔力+25%！');
-        } else {
-          setShrineBuffs((b) => ({ ...b, fortuneBonus: Math.min(180, b.fortuneBonus + 45) }));
-          showToast('幸運の祠の祝福！この探索中、トレハン（レア率）+45%！');
-        }
-        return;
-      }
-
-      // Enemy / Elite / Boss Encounter!
-      if (ent.kind === 'enemy' || ent.kind === 'elite' || ent.kind === 'boss') {
-        setMoveQueue([]);
-        const bState = createBattleState(save, ent, currentMap.floor, shrineBuffs);
+      // Battle / Elite / Boss choice!
+      if (choice.kind === 'battle' || choice.kind === 'elite' || choice.kind === 'boss') {
+        const entity: MapEntity = {
+          id: choice.id,
+          kind: choice.kind === 'battle' ? 'enemy' : choice.kind,
+          x: 0,
+          y: 0,
+          spriteKey: choice.spriteKey,
+          name: choice.title,
+          speciesIds: choice.speciesIds,
+          interacted: false,
+        };
+        const bState = createBattleState(save, entity, expedition.floor, shrineBuffs);
         setSelectedEnemyUid(bState.enemies[0]?.uid ?? null);
+        setPendingAdvanceOnWin(choice.advancesStep);
         setBattle(bState);
       }
     },
-    [enterDungeonFloor, healAllParty, save, shrineBuffs, showToast],
+    [
+      advanceExpeditionStep,
+      battle,
+      enterDungeonFloor,
+      expedition.floor,
+      expedition.inVillage,
+      healAllParty,
+      returnToVillage,
+      save,
+      shrineBuffs,
+      showToast,
+    ],
   );
 
-  // Move player by 1 tile step (dx, dy)
-  const stepMove = useCallback(
-    (dx: number, dy: number) => {
-      if (battle) return;
-      if (dx < 0) setHeroFacingLeft(true);
-      if (dx > 0) setHeroFacingLeft(false);
-
-      const nx = map.playerX + dx;
-      const ny = map.playerY + dy;
-      if (nx < 0 || nx >= map.width || ny < 0 || ny >= map.height) {
-        setMoveQueue([]);
-        return;
-      }
-
-      // Check entity at target tile first
-      const ent = getEntityAt(map, nx, ny);
-      if (ent) {
-        if (ent.kind === 'npc') {
-          triggerEntity(ent, map);
-          return;
-        }
-        // Step onto chest/shrine/enemy tile and trigger
-        const nextExplored = map.explored.map((row) => [...row]);
-        const nextMap: DungeonMap = {
-          ...map,
-          playerX: nx,
-          playerY: ny,
-          explored: nextExplored,
-        };
-        revealAround(nextMap, nx, ny, 4);
-        setMap(nextMap);
-        triggerEntity(ent, nextMap);
-        return;
-      }
-
-      const tile = map.tiles[ny]![nx]!;
-      if (!isWalkableTile(tile)) {
-        setMoveQueue([]);
-        return;
-      }
-
-      const nextExplored = map.explored.map((row) => [...row]);
-      const nextMap: DungeonMap = {
-        ...map,
-        playerX: nx,
-        playerY: ny,
-        explored: nextExplored,
-      };
-      revealAround(nextMap, nx, ny, 4);
-      setMap(nextMap);
-
-      // Stepping onto Dungeon Gate or Stairs Down!
-      if (tile === 'dungeon_gate') {
-        const bestFloor = save.highestFloorByTier[save.worldTier] ?? 1;
-        const entryFloor = bestFloor >= 6 ? Math.floor((bestFloor - 1) / 5) * 5 + 1 : 1;
-        enterDungeonFloor(entryFloor);
-      } else if (tile === 'stairs_down') {
-        if (!nextMap.bossDefeated) {
-          showToast('この階層のボスを撃破するまで階段は封印されている！');
-          setMoveQueue([]);
-        } else {
-          enterDungeonFloor(nextMap.floor + 1);
-        }
-      }
-    },
-    [battle, enterDungeonFloor, map, save.highestFloorByTier, save.worldTier, showToast, triggerEntity],
-  );
-
-  // Interact with adjacent entity or standing stairs
-  const interactNearby = useCallback(() => {
-    if (battle) return;
-    const dirs = [
-      [0, -1],
-      [0, 1],
-      [-1, 0],
-      [1, 0],
-      [0, 0],
-    ];
-    for (const [dx, dy] of dirs) {
-      const ent = getEntityAt(map, map.playerX + dx!, map.playerY + dy!);
-      if (ent) {
-        triggerEntity(ent, map);
-        return;
-      }
-    }
-    if (map.tiles[map.playerY]![map.playerX] === 'stairs_down') {
-      if (map.bossDefeated) {
-        enterDungeonFloor(map.floor + 1);
-      } else {
-        showToast('ボスを倒すと次の階層へ進めます！');
-      }
-    }
-  }, [battle, enterDungeonFloor, map, showToast, triggerEntity]);
-
-  // Tap-to-move on Map Canvas
-  const handleMapTap = useCallback(
-    (tileX: number, tileY: number) => {
-      if (battle) return;
-      setAutoExplore(false);
-      if (tileX === map.playerX && tileY === map.playerY) {
-        interactNearby();
-        return;
-      }
-      const path = findPathBFS(map, map.playerX, map.playerY, tileX, tileY);
-      if (path.length > 0) {
-        setMoveQueue(path);
-      }
-    },
-    [battle, interactNearby, map],
-  );
-
-  // Execute queued BFS path steps smoothly
+  // Auto-Advance timer while exploring dungeon commands
   useEffect(() => {
-    if (battle || moveQueue.length === 0) return;
+    if (!autoAdvance || battle || expedition.inVillage || activeTab !== 'explore') return;
     const timer = window.setTimeout(() => {
-      const [next, ...rest] = moveQueue;
-      setMoveQueue(rest);
-      if (next) {
-        stepMove(next.x - map.playerX, next.y - map.playerY);
-      }
-    }, 115);
+      const partyUnits = save.partyIds
+        .map((id) => save.roster[id])
+        .filter((u): u is NonNullable<typeof u> => Boolean(u));
+      const avgHp =
+        partyUnits.reduce((sum, u) => {
+          const st = computeUnitStats(u, save, shrineBuffs, invMap);
+          return sum + u.hp / st.maxHp;
+        }, 0) / Math.max(1, partyUnits.length);
+
+      const pick = pickAutoExpeditionChoice(expedition, avgHp);
+      if (pick) handleSelectChoice(pick);
+    }, 680);
     return () => window.clearTimeout(timer);
-  }, [battle, map.playerX, map.playerY, moveQueue, stepMove]);
-
-  // Auto-Explore loop inside Dungeon
-  useEffect(() => {
-    if (!autoExplore || battle || map.floor === 0 || moveQueue.length > 0) return;
-    const timer = window.setTimeout(() => {
-      const target = findAutoExploreTarget(map);
-      if (!target) {
-        setAutoExplore(false);
-        return;
-      }
-      const path = findPathBFS(map, map.playerX, map.playerY, target.x, target.y);
-      if (path.length > 0) {
-        setMoveQueue(path);
-      } else {
-        setAutoExplore(false);
-      }
-    }, 180);
-    return () => window.clearTimeout(timer);
-  }, [autoExplore, battle, map, moveQueue.length]);
-
-  // Keyboard support (WASD / Arrow keys / Space) for PC users
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
-      if (battle) return;
-      if (activeTab !== 'explore') return;
-
-      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
-        e.preventDefault();
-        setAutoExplore(false);
-        setMoveQueue([]);
-        stepMove(0, -1);
-      } else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
-        e.preventDefault();
-        setAutoExplore(false);
-        setMoveQueue([]);
-        stepMove(0, 1);
-      } else if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
-        e.preventDefault();
-        setAutoExplore(false);
-        setMoveQueue([]);
-        stepMove(-1, 0);
-      } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
-        e.preventDefault();
-        setAutoExplore(false);
-        setMoveQueue([]);
-        stepMove(1, 0);
-      } else if (e.key === ' ' || e.key === 'Enter') {
-        e.preventDefault();
-        interactNearby();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [activeTab, battle, interactNearby, stepMove]);
+  }, [activeTab, autoAdvance, battle, expedition, handleSelectChoice, invMap, save, shrineBuffs]);
 
   const effectiveSelectedEnemyUid = useMemo(() => {
     if (!battle) return null;
@@ -475,19 +360,18 @@ export function App() {
       if (next.phase === 'victory' && !next.reward) {
         const { nextSave, reward } = resolveBattleVictory(save, next, shrineBuffs);
         setSave(nextSave);
-        setMap((prev) => ({
-          ...prev,
-          bossDefeated: prev.bossDefeated || next.isBossBattle,
-          entities: prev.entities.map((e) =>
-            e.id === next.entityId ? { ...e, interacted: true } : e,
-          ),
-        }));
         setBattle({ ...next, reward });
+        advanceExpeditionStep(
+          nextSave.worldTier,
+          next.isBossBattle,
+          false,
+          pendingAdvanceOnWin,
+        );
         return;
       }
       setBattle(next);
     },
-    [save, shrineBuffs],
+    [advanceExpeditionStep, pendingAdvanceOnWin, save, shrineBuffs],
   );
 
   // Enemy turn & Auto-battle tick timer
@@ -498,7 +382,7 @@ export function App() {
     }
 
     const active = findBattleUnit(battle, battle.activeUid);
-    const shouldAutoStep = !active || !active.isAlly || save.settings.autoBattle;
+    const shouldAutoStep = !active || !active.isAlly || save.settings.autoBattle || autoAdvance;
     if (!shouldAutoStep) return;
 
     const delayMs =
@@ -511,7 +395,7 @@ export function App() {
     const timer = window.setTimeout(() => {
       const next = stepEnemyOrAutoTurn(
         battle,
-        save.settings.autoBattle,
+        save.settings.autoBattle || autoAdvance,
         save.settings.battleTactic,
       );
       applyBattleTransition(next);
@@ -520,6 +404,7 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, [
     applyBattleTransition,
+    autoAdvance,
     battle,
     save.settings.autoBattle,
     save.settings.battleSpeed,
@@ -542,7 +427,6 @@ export function App() {
       return;
     }
     if (battle.phase === 'fled') {
-      // Sync remaining HP/MP back to roster
       setSave((prev) => {
         const nextRoster = { ...prev.roster };
         for (const a of battle.allies) {
@@ -555,7 +439,18 @@ export function App() {
       });
     }
     setBattle(null);
+    setPendingAdvanceOnWin(false);
   }, [battle, returnToVillage]);
+
+  // If Auto-Advance is ON, seamlessly close victory screen after a brief moment to continue farming!
+  useEffect(() => {
+    if (!autoAdvance || !battle || battle.phase !== 'victory' || !battle.reward) return;
+    const delay = save.settings.battleSpeed === 4 ? 700 : 1200;
+    const timer = window.setTimeout(() => {
+      handleFinishBattle();
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [autoAdvance, battle, handleFinishBattle, save.settings.battleSpeed]);
 
   // Equipment handlers
   const handleEquip = useCallback(
@@ -565,7 +460,6 @@ export function App() {
         if (!item || !prev.roster[unitId]) return prev;
         const nextRoster = { ...prev.roster };
 
-        // Remove from any previous owner
         for (const uid of Object.keys(nextRoster)) {
           const u = nextRoster[uid]!;
           if (u.equipped[item.slot] === itemId) {
@@ -619,7 +513,6 @@ export function App() {
       setSave((prev) => {
         const item = prev.inventory.find((i) => i.id === itemId);
         if (!item || item.locked) return prev;
-        // Verify not equipped by anyone
         const isEquipped = Object.values(prev.roster).some((u) =>
           Object.values(u.equipped).includes(itemId),
         );
@@ -675,26 +568,23 @@ export function App() {
     [showToast],
   );
 
-  const handleTogglePartyMember = useCallback(
-    (unitId: string) => {
-      if (unitId === 'hero') return;
-      setSave((prev) => {
-        const inParty = prev.partyIds.includes(unitId);
-        if (inParty) {
-          return {
-            ...prev,
-            partyIds: prev.partyIds.filter((id) => id !== unitId),
-          };
-        }
-        if (prev.partyIds.length >= 4) return prev;
+  const handleTogglePartyMember = useCallback((unitId: string) => {
+    if (unitId === 'hero') return;
+    setSave((prev) => {
+      const inParty = prev.partyIds.includes(unitId);
+      if (inParty) {
         return {
           ...prev,
-          partyIds: [...prev.partyIds, unitId],
+          partyIds: prev.partyIds.filter((id) => id !== unitId),
         };
-      });
-    },
-    [],
-  );
+      }
+      if (prev.partyIds.length >= 4) return prev;
+      return {
+        ...prev,
+        partyIds: [...prev.partyIds, unitId],
+      };
+    });
+  }, []);
 
   // World Tier & Shop handlers
   const handleSelectWorldTier = useCallback(
@@ -786,7 +676,7 @@ export function App() {
       if (!res.ok) return { ok: false, error: res.error };
       setSave(res.save);
       setBattle(null);
-      setMap(createHubMap());
+      setExpedition(createVillageExpedition());
       setActiveTab('explore');
       showToast('セーブコードを復元しました！');
       return { ok: true };
@@ -799,18 +689,23 @@ export function App() {
     const fresh = createInitialSave();
     setSave(fresh);
     setBattle(null);
+    setAutoAdvance(false);
     setShrineBuffs({ powerBonus: 0, fortuneBonus: 0 });
-    setMap(createHubMap());
+    setExpedition(createVillageExpedition());
     setActiveTab('explore');
     showToast('セーブデータを初期化しました。新たな冒険の始まり！');
   }, [showToast]);
 
-  const biomeDef = BIOMES[map.biome];
-  const inVillage = map.floor === 0;
-  const targetTile = moveQueue.length > 0 ? moveQueue[moveQueue.length - 1]! : null;
+  const biomeDef = BIOMES[expedition.biome];
+  const inVillage = expedition.inVillage;
   const highestFloorThisTier = save.highestFloorByTier[save.worldTier] ?? 1;
-  const canQuickDescend =
-    !inVillage && map.bossDefeated && map.playerX === map.stairsX && map.playerY === map.stairsY;
+  const defaultEntryFloor =
+    highestFloorThisTier >= 6 ? Math.floor((highestFloorThisTier - 1) / 5) * 5 + 1 : 1;
+
+  const quickCheckpoints: number[] = [1];
+  for (let f = 6; f <= highestFloorThisTier; f += 5) {
+    quickCheckpoints.push(f);
+  }
 
   return (
     <div className="app-viewport">
@@ -819,7 +714,7 @@ export function App() {
         <header className="top-hud">
           <div className="hud-location">
             <h1 className="hud-title">
-              {inVillage ? biomeDef.shortName : `${biomeDef.shortName} ${map.floor}F`}
+              {inVillage ? biomeDef.shortName : `${biomeDef.shortName} ${expedition.floor}F`}
             </h1>
             <span className="tier-badge">Tier {toRoman(save.worldTier)}</span>
           </div>
@@ -828,19 +723,16 @@ export function App() {
           </div>
         </header>
 
-        {/* Top Half: Crisp 16-bit Pixel Art Canvas Stage */}
+        {/* Top Half: Crisp 16-bit Side-View Pixel Art Stage */}
         <section className="stage-wrap" aria-label="ゲーム画面">
           <GameCanvas
-            map={map}
+            expedition={expedition}
+            save={save}
             battle={battle}
-            targetTile={targetTile}
-            heroFacingLeft={heroFacingLeft}
             selectedEnemyUid={effectiveSelectedEnemyUid}
-            onMapTap={handleMapTap}
             onEnemyTap={(uid) => setSelectedEnemyUid(uid)}
           />
 
-          {/* Active Shrine Buffs indicator */}
           {(shrineBuffs.powerBonus > 0 || shrineBuffs.fortuneBonus > 0) && !inVillage && (
             <div className="stage-buff-strip">
               {shrineBuffs.powerBonus > 0 && (
@@ -857,20 +749,24 @@ export function App() {
           {toast && <div className="stage-toast">{toast}</div>}
         </section>
 
-        {/* Bottom Half: One-Handed Thumb Control Zone */}
+        {/* Bottom Half: One-Handed Command Selection Zone */}
         <section className="bottom-shell">
           {battle ? (
             <BattlePanel
               battle={battle}
-              settings={save.settings}
+              settings={{
+                ...save.settings,
+                autoBattle: save.settings.autoBattle || autoAdvance,
+              }}
               selectedEnemyUid={effectiveSelectedEnemyUid}
               onCommand={handleBattleCommand}
-              onToggleAuto={() =>
+              onToggleAuto={() => {
+                if (autoAdvance) setAutoAdvance(false);
                 setSave((p) => ({
                   ...p,
                   settings: { ...p.settings, autoBattle: !p.settings.autoBattle },
-                }))
-              }
+                }));
+              }}
               onCycleSpeed={() =>
                 setSave((p) => {
                   const next: BattleSpeed =
@@ -888,6 +784,7 @@ export function App() {
               }
               onFinishBattle={handleFinishBattle}
               onOpenGearFromLoot={(itemId) => {
+                setAutoAdvance(false);
                 setFocusItemId(itemId);
                 handleFinishBattle();
                 setActiveTab('gear');
@@ -896,8 +793,8 @@ export function App() {
           ) : (
             <>
               {activeTab === 'explore' && (
-                <div className="panel-body" style={{ justifyContent: 'space-between' }}>
-                  {/* Compact Party HP Strip */}
+                <div className="panel-body" style={{ gap: 8 }}>
+                  {/* Compact Party HP/MP Strip */}
                   <div className="party-mini-strip">
                     {save.partyIds.map((pid) => {
                       const u = save.roster[pid];
@@ -905,6 +802,7 @@ export function App() {
                       const sp = getSpecies(u.speciesId);
                       const st = computeUnitStats(u, save, shrineBuffs, invMap);
                       const hpPct = Math.max(0, Math.min(100, (u.hp / st.maxHp) * 100));
+                      const mpPct = Math.max(0, Math.min(100, (u.mp / st.maxMp) * 100));
                       return (
                         <div key={pid} className="party-mini-chip">
                           <div className="party-mini-top">
@@ -929,143 +827,170 @@ export function App() {
                           <div className="bar-track">
                             <div className="bar-fill-hp" style={{ width: `${hpPct}%` }} />
                           </div>
+                          <div className="bar-track" style={{ height: 3 }}>
+                            <div className="bar-fill-mp" style={{ width: `${mpPct}%` }} />
+                          </div>
                         </div>
                       );
                     })}
                   </div>
 
-                  {/* Thumb D-Pad + Quick Actions */}
-                  <div className="explore-grid">
-                    <div className="dpad-box" aria-label="方向パッド">
-                      <div />
+                  {inVillage ? (
+                    /* ===== VILLAGE COMMAND MENU ===== */
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <button
-                        id="btn-dpad-up"
+                        id="btn-enter-labyrinth"
                         type="button"
-                        className="dpad-btn"
-                        onClick={() => {
-                          setAutoExplore(false);
-                          setMoveQueue([]);
-                          stepMove(0, -1);
-                        }}
+                        className="choice-card stairs-choice"
+                        onClick={() => enterDungeonFloor(defaultEntryFloor)}
                       >
-                        ▲
-                      </button>
-                      <div />
-                      <button
-                        id="btn-dpad-left"
-                        type="button"
-                        className="dpad-btn"
-                        onClick={() => {
-                          setAutoExplore(false);
-                          setMoveQueue([]);
-                          stepMove(-1, 0);
-                        }}
-                      >
-                        ◀
-                      </button>
-                      <button
-                        id="btn-dpad-action"
-                        type="button"
-                        className="dpad-btn dpad-center"
-                        onClick={interactNearby}
-                      >
-                        決定
-                      </button>
-                      <button
-                        id="btn-dpad-right"
-                        type="button"
-                        className="dpad-btn"
-                        onClick={() => {
-                          setAutoExplore(false);
-                          setMoveQueue([]);
-                          stepMove(1, 0);
-                        }}
-                      >
-                        ▶
-                      </button>
-                      <div />
-                      <button
-                        id="btn-dpad-down"
-                        type="button"
-                        className="dpad-btn"
-                        onClick={() => {
-                          setAutoExplore(false);
-                          setMoveQueue([]);
-                          stepMove(0, 1);
-                        }}
-                      >
-                        ▼
-                      </button>
-                      <div />
-                    </div>
-
-                    <div className="explore-actions">
-                      {inVillage ? (
-                        <>
-                          <button
-                            id="btn-enter-labyrinth"
-                            type="button"
-                            className="rpg-btn primary"
-                            onClick={() => {
-                              const startFloor =
-                                highestFloorThisTier >= 6
-                                  ? Math.floor((highestFloorThisTier - 1) / 5) * 5 + 1
-                                  : 1;
-                              enterDungeonFloor(startFloor);
-                            }}
-                          >
-                            ⚔ 迷宮へ出撃 ({highestFloorThisTier >= 6 ? `${Math.floor((highestFloorThisTier - 1) / 5) * 5 + 1}F` : '1F'})
-                          </button>
-                          <button
-                            id="btn-village-heal"
-                            type="button"
-                            className="rpg-btn emerald"
-                            onClick={() => healAllParty(false)}
-                          >
-                            💧 回復の泉（全回復）
-                          </button>
-                          <button
-                            type="button"
-                            className="rpg-btn"
-                            onClick={() => setActiveTab('world')}
-                          >
-                            ✦ 世界ランク・階層選択
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            id="btn-auto-explore"
-                            type="button"
-                            className={`rpg-btn ${autoExplore ? 'active-toggle' : 'primary'}`}
-                            onClick={() => setAutoExplore((v) => !v)}
-                          >
-                            {autoExplore ? '⏹ オート探索 停止' : '▶ オート探索（宝箱/敵/階段）'}
-                          </button>
-                          {canQuickDescend && (
-                            <button
-                              type="button"
-                              className="rpg-btn emerald"
-                              onClick={() => enterDungeonFloor(map.floor + 1)}
-                            >
-                              ⬇ 次の階層 ({map.floor + 1}F) へ
-                            </button>
-                          )}
-                          <button
-                            id="btn-return-village"
-                            type="button"
-                            className="rpg-btn"
-                            onClick={() => returnToVillage()}
-                          >
-                            🏠 始まりの村へ帰還
-                          </button>
-                          <div className="muted-text" style={{ textAlign: 'center', fontSize: 10 }}>
-                            マップ直接タップでも移動できます
+                        <PixelIcon spriteKey="hero" size={34} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 15, color: '#eafff0' }}>
+                            ⚔ 迷宮へ出撃する（{defaultEntryFloor}F〜）
                           </div>
-                        </>
+                          <div className="muted-text">
+                            コマンド選択でサクサク進行！装備厳選＆モンスター収集へ出発
+                          </div>
+                        </div>
+                        <span className="choice-tag" style={{ background: '#2e8a4e' }}>
+                          出撃
+                        </span>
+                      </button>
+
+                      {quickCheckpoints.length > 1 && (
+                        <div className="filter-row">
+                          <span className="muted-text">開始階層:</span>
+                          {quickCheckpoints.map((fl) => (
+                            <button
+                              key={fl}
+                              type="button"
+                              className="pill-chip active"
+                              onClick={() => enterDungeonFloor(fl)}
+                            >
+                              {fl}Fから
+                            </button>
+                          ))}
+                        </div>
                       )}
+
+                      <div className="village-cmd-grid">
+                        <button
+                          id="btn-village-heal"
+                          type="button"
+                          className="rpg-btn emerald"
+                          style={{ padding: '11px 8px' }}
+                          onClick={() => healAllParty(1, false)}
+                        >
+                          💧 回復の泉（全回復）
+                        </button>
+                        <button
+                          type="button"
+                          className="rpg-btn"
+                          style={{ padding: '11px 8px' }}
+                          onClick={() => setActiveTab('party')}
+                        >
+                          🐾 パーティ・牧場
+                        </button>
+                        <button
+                          type="button"
+                          className="rpg-btn"
+                          style={{ padding: '11px 8px' }}
+                          onClick={() => setActiveTab('gear')}
+                        >
+                          ⚔ 装備厳選 ({save.inventory.length})
+                        </button>
+                        <button
+                          type="button"
+                          className="rpg-btn primary"
+                          style={{ padding: '11px 8px' }}
+                          onClick={() => setActiveTab('world')}
+                        >
+                          ✦ 世界ランク・商店
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    /* ===== DUNGEON COMMAND CHOICE MENU ===== */
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span className="section-heading" style={{ flex: 1 }}>
+                          {expedition.step >= expedition.maxSteps && !expedition.bossDefeated
+                            ? `${expedition.floor}F 最奥：階層ボス出現！`
+                            : `進むコマンドを選択 (${expedition.step}/${expedition.maxSteps})`}
+                        </span>
+                        <button
+                          id="btn-auto-advance"
+                          type="button"
+                          className={`rpg-btn sm ${autoAdvance ? 'active-toggle' : ''}`}
+                          onClick={() => setAutoAdvance((v) => !v)}
+                        >
+                          {autoAdvance ? '⏹ オート中' : '▶ オート進行'}
+                        </button>
+                        <button
+                          id="btn-return-village"
+                          type="button"
+                          className="rpg-btn sm"
+                          onClick={() => returnToVillage()}
+                        >
+                          🏠 帰還
+                        </button>
+                      </div>
+
+                      <div className="choice-list">
+                        {expedition.choices.map((ch, idx) => {
+                          const extraClass =
+                            ch.kind === 'boss'
+                              ? 'boss-choice'
+                              : ch.kind === 'stairs'
+                                ? 'stairs-choice'
+                                : ch.kind === 'gold_chest' || ch.kind === 'elite'
+                                  ? 'gold-choice'
+                                  : '';
+                          return (
+                            <button
+                              key={ch.id}
+                              id={`btn-choice-${idx}`}
+                              type="button"
+                              className={`choice-card ${extraClass}`}
+                              onClick={() => {
+                                setAutoAdvance(false);
+                                handleSelectChoice(ch);
+                              }}
+                            >
+                              <PixelIcon spriteKey={ch.spriteKey} size={32} />
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div
+                                  style={{
+                                    fontFamily: 'var(--font-pixel)',
+                                    fontSize: 13,
+                                    color: '#fff7e0',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                  }}
+                                >
+                                  {ch.title}
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: 10,
+                                    color: 'var(--text-muted)',
+                                    marginTop: 2,
+                                  }}
+                                >
+                                  {ch.subtitle}
+                                </div>
+                              </div>
+                              <span className="choice-tag" style={{ background: ch.tagColor }}>
+                                {ch.tag}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1075,7 +1000,7 @@ export function App() {
                   shrineBuffs={shrineBuffs}
                   inVillage={inVillage}
                   onTogglePartyMember={handleTogglePartyMember}
-                  onHealPartyInVillage={() => healAllParty(false)}
+                  onHealPartyInVillage={() => healAllParty(1, false)}
                 />
               )}
 
@@ -1123,7 +1048,7 @@ export function App() {
                   onClick={() => setActiveTab('explore')}
                 >
                   <span>🧭</span>
-                  <span>探索</span>
+                  <span>冒険</span>
                 </button>
                 <button
                   id="tab-party"

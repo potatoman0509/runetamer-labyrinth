@@ -14,11 +14,12 @@ import {
 } from '../data/equipment';
 import { MONSTER_LIST } from '../data/monsters';
 import {
-  createHubMap,
-  findAutoExploreTarget,
-  findPathBFS,
-  generateDungeonFloor,
-} from '../dungeon';
+  createDungeonExpedition,
+  createVillageExpedition,
+  generateStepChoices,
+  pickAutoExpeditionChoice,
+  STEPS_PER_FLOOR,
+} from '../expedition';
 import { createInitialSave, exportSaveCode, importSaveCode } from '../save';
 import { computeUnitStats } from '../stats';
 import { getWorldTierBlessing, toRoman } from '../worldTier';
@@ -31,7 +32,7 @@ describe('RuneTamer Labyrinth Core Systems', () => {
     expect(getBiomeForFloor(11)).toBe('volcano');
     expect(getBiomeForFloor(16)).toBe('abyss');
     expect(getBiomeForFloor(20)).toBe('abyss');
-    expect(getBiomeForFloor(21)).toBe('forest'); // endless cycle
+    expect(getBiomeForFloor(21)).toBe('forest');
     expect(isBossFloor(5)).toBe(true);
     expect(isBossFloor(20)).toBe(true);
     expect(isBossFloor(7)).toBe(false);
@@ -42,25 +43,25 @@ describe('RuneTamer Labyrinth Core Systems', () => {
     expect(UNIQUE_TEMPLATES.length).toBe(14);
   });
 
-  it('generates connected dungeons with reachable stairs, chests, and bosses on boss floors', () => {
-    const hub = createHubMap();
-    expect(hub.floor).toBe(0);
-    expect(hub.entities.length).toBe(5);
+  it('generates command-choice expedition steps, boss choices, stairs, and auto-advance picks', () => {
+    const village = createVillageExpedition();
+    expect(village.inVillage).toBe(true);
+    expect(village.floor).toBe(0);
 
-    const floor1 = generateDungeonFloor(1, 1);
-    const pathToStairs = findPathBFS(
-      floor1,
-      floor1.playerX,
-      floor1.playerY,
-      floor1.stairsX,
-      floor1.stairsY,
-    );
-    expect(pathToStairs.length).toBeGreaterThan(0);
-    expect(findAutoExploreTarget(floor1)).not.toBeNull();
+    const floor1 = createDungeonExpedition(1, 1);
+    expect(floor1.inVillage).toBe(false);
+    expect(floor1.choices.length).toBe(3);
+    expect(pickAutoExpeditionChoice(floor1, 0.9)).not.toBeNull();
 
-    const floor5 = generateDungeonFloor(5, 1);
-    expect(floor5.bossDefeated).toBe(false);
-    expect(floor5.entities.some((e) => e.kind === 'boss')).toBe(true);
+    // Boss floor final step offers boss fight + campfire rest
+    const bossStepChoices = generateStepChoices(5, STEPS_PER_FLOOR, STEPS_PER_FLOOR, 1, false, false);
+    expect(bossStepChoices.some((c) => c.kind === 'boss')).toBe(true);
+    expect(bossStepChoices.some((c) => c.kind === 'rest')).toBe(true);
+
+    // Cleared final step offers stairs down + farm + return to village
+    const clearedChoices = generateStepChoices(5, STEPS_PER_FLOOR, STEPS_PER_FLOOR, 1, true, false);
+    expect(clearedChoices.some((c) => c.kind === 'stairs')).toBe(true);
+    expect(clearedChoices.some((c) => c.kind === 'return_village')).toBe(true);
   });
 
   it('generates scaled hack-and-slash equipment across rarities and World Tiers', () => {
@@ -86,13 +87,12 @@ describe('RuneTamer Labyrinth Core Systems', () => {
 
   it('runs a full auto-battle to victory and unlocks World Tier II on Floor 20 Boss kill', () => {
     const save = createInitialSave();
-    // Boost hero to level 30 so test battle finishes cleanly in victory
     save.roster.hero!.level = 30;
     const bossEntity = {
       id: 'boss_20',
       kind: 'boss' as const,
-      x: 5,
-      y: 5,
+      x: 0,
+      y: 0,
       spriteKey: 'star_devourer',
       name: '【BOSS】星喰いの虚無獣',
       speciesIds: ['star_devourer'],
@@ -100,38 +100,28 @@ describe('RuneTamer Labyrinth Core Systems', () => {
     };
 
     let battle = createBattleState(save, bossEntity, 20);
-    // Simulate turns until victory or defeat
     let safety = 0;
-    while (
-      battle.phase !== 'victory' &&
-      battle.phase !== 'defeat' &&
-      safety < 80
-    ) {
+    while (battle.phase !== 'victory' && battle.phase !== 'defeat' && safety < 80) {
       battle = stepEnemyOrAutoTurn(battle, true, 'allout');
       safety += 1;
     }
 
-    // Also verify manual defend action works cleanly on a fresh battle
     const fresh = createBattleState(save, bossEntity, 1);
     const afterDefend = executeTurnAction(fresh, { type: 'defend' });
     expect(afterDefend.logs.length).toBeGreaterThan(fresh.logs.length);
 
-    if (battle.phase === 'victory') {
-      const { nextSave, reward } = resolveBattleVictory(save, battle);
-      expect(reward.worldTierUnlocked).toBe(2);
-      expect(nextSave.maxUnlockedTier).toBe(2);
-      expect(nextSave.gold).toBeGreaterThan(save.gold);
-    } else {
-      // Force victory resolution check
-      const forcedWin = {
-        ...battle,
-        phase: 'victory' as const,
-        enemies: battle.enemies.map((e) => ({ ...e, hp: 0 })),
-      };
-      const { nextSave, reward } = resolveBattleVictory(save, forcedWin);
-      expect(reward.worldTierUnlocked).toBe(2);
-      expect(nextSave.maxUnlockedTier).toBe(2);
-    }
+    const winState =
+      battle.phase === 'victory'
+        ? battle
+        : {
+            ...battle,
+            phase: 'victory' as const,
+            enemies: battle.enemies.map((e) => ({ ...e, hp: 0 })),
+          };
+    const { nextSave, reward } = resolveBattleVictory(save, winState);
+    expect(reward.worldTierUnlocked).toBe(2);
+    expect(nextSave.maxUnlockedTier).toBe(2);
+    expect(nextSave.gold).toBeGreaterThan(save.gold);
   });
 
   it('exports and imports save codes with checksum integrity', () => {
@@ -149,7 +139,6 @@ describe('RuneTamer Labyrinth Core Systems', () => {
       expect(ok.save.maxUnlockedTier).toBe(3);
     }
 
-    // Tampered code must fail checksum
     const bad = importSaveCode(`${code.slice(0, -2)}AA`);
     expect(bad.ok).toBe(false);
   });
