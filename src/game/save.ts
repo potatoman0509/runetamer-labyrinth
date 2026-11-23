@@ -1,11 +1,11 @@
 import { createStarterWeapon } from './data/equipment';
 import { HERO_SPECIES, SPECIES_MAP } from './data/monsters';
 import { computeUnitStats } from './stats';
-import type { GameSave, UnitInstance } from './types';
+import type { EquipmentItem, GameSave, UnitInstance } from './types';
 import { generateShopInventory } from './worldTier';
 
 export const SAVE_STORAGE_KEY = 'runetamer_labyrinth_save_v1';
-export const CURRENT_SAVE_VERSION = 1;
+export const CURRENT_SAVE_VERSION = 2;
 
 export function createUnitInstance(speciesId: string, level = 1): UnitInstance {
   const sp = SPECIES_MAP[speciesId] ?? HERO_SPECIES;
@@ -33,13 +33,13 @@ export function createInitialSave(): GameSave {
   const hero = createUnitInstance('hero', 1);
   hero.equipped.weapon = starterWeapon.id;
 
-  // Give player a friendly Leaf Slime companion right away so the 2-unit monster-taming feel starts immediately!
   const starterSlime = createUnitInstance('leaf_slime', 1);
 
   const baseSave: GameSave = {
     version: CURRENT_SAVE_VERSION,
     savedAt: Date.now(),
     gold: 120,
+    forgeStones: 12, // Start with enough stones to try Blacksmithing right away!
     worldTier: 1,
     maxUnlockedTier: 1,
     highestFloorByTier: { 1: 1 },
@@ -58,6 +58,7 @@ export function createInitialSave(): GameSave {
       battleSpeed: 1,
       battleTactic: 'balanced',
       autoSell: 'none',
+      autoLootMode: 'sell',
     },
     stats: {
       totalKills: 0,
@@ -66,10 +67,11 @@ export function createInitialSave(): GameSave {
       totalItemsLooted: 1,
       totalMythicsFound: 0,
       highestFloorReached: 1,
+      totalForgeUpgrades: 0,
+      totalRerolls: 0,
     },
   };
 
-  // Sync starter HP/MP to computed max
   for (const id of baseSave.partyIds) {
     const u = baseSave.roster[id];
     if (u) {
@@ -87,7 +89,7 @@ export function saveGameToLocal(save: GameSave): void {
     const payload: GameSave = { ...save, savedAt: Date.now() };
     localStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(payload));
   } catch {
-    // Ignore storage quota errors gracefully
+    // Ignore storage quota / sandboxed iframe errors gracefully
   }
 }
 
@@ -170,6 +172,14 @@ export function importSaveCode(code: string): { ok: true; save: GameSave } | { o
   }
 }
 
+function normalizeItem(it: Partial<EquipmentItem>): EquipmentItem {
+  return {
+    ...(it as EquipmentItem),
+    enhanceLevel: typeof it.enhanceLevel === 'number' ? it.enhanceLevel : 0,
+    rerollCount: typeof it.rerollCount === 'number' ? it.rerollCount : 0,
+  };
+}
+
 export function validateSave(data: unknown): GameSave | null {
   if (!data || typeof data !== 'object') return null;
   const s = data as Partial<GameSave>;
@@ -186,11 +196,17 @@ export function validateSave(data: unknown): GameSave | null {
   return {
     ...fallback,
     ...s,
+    version: CURRENT_SAVE_VERSION,
+    forgeStones: typeof s.forgeStones === 'number' ? s.forgeStones : fallback.forgeStones,
+    inventory: s.inventory.map(normalizeItem),
     settings: { ...fallback.settings, ...(s.settings ?? {}) },
     stats: { ...fallback.stats, ...(s.stats ?? {}) },
     highestFloorByTier: { ...fallback.highestFloorByTier, ...(s.highestFloorByTier ?? {}) },
     discoveredMonsters: Array.isArray(s.discoveredMonsters) ? s.discoveredMonsters : fallback.discoveredMonsters,
     discoveredUniques: Array.isArray(s.discoveredUniques) ? s.discoveredUniques : [],
-    shopItems: Array.isArray(s.shopItems) && s.shopItems.length > 0 ? s.shopItems : fallback.shopItems,
+    shopItems:
+      Array.isArray(s.shopItems) && s.shopItems.length > 0
+        ? s.shopItems.map(normalizeItem)
+        : fallback.shopItems,
   };
 }

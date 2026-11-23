@@ -16,7 +16,16 @@ import {
   type PlayerActionCommand,
 } from './game/battle';
 import { BIOMES, getBiomeForFloor } from './game/data/biomes';
-import { generateEquipment, RARITY_META } from './game/data/equipment';
+import {
+  enhanceEquipment,
+  generateEquipment,
+  getEnhanceCost,
+  getRerollCost,
+  getSalvageValue,
+  MAX_ENHANCE_LEVEL,
+  RARITY_META,
+  rerollAffixSlot,
+} from './game/data/equipment';
 import { getSpecies } from './game/data/monsters';
 import {
   createDungeonExpedition,
@@ -36,6 +45,7 @@ import {
 import { computeUnitStats, getPartyAggregatedLootBonuses } from './game/stats';
 import type {
   ActiveShrineBuffs,
+  AutoLootMode,
   AutoSellThreshold,
   BattleSpeed,
   BattleState,
@@ -49,6 +59,12 @@ import { generateShopInventory, getShopPrice, toRoman } from './game/worldTier';
 
 type ActiveTab = 'explore' | 'party' | 'gear' | 'compendium' | 'world';
 
+const EMPTY_SHRINE_BUFFS: ActiveShrineBuffs = {
+  powerBonus: 0,
+  fortuneBonus: 0,
+  curseEnemyBonus: 0,
+};
+
 export function App() {
   const [save, setSave] = useState<GameSave>(() => loadGameFromLocal() ?? createInitialSave());
   const [expedition, setExpedition] = useState<ExpeditionState>(() => createVillageExpedition());
@@ -58,14 +74,11 @@ export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('explore');
   const [focusItemId, setFocusItemId] = useState<string | null>(null);
   const [selectedEnemyUid, setSelectedEnemyUid] = useState<string | null>(null);
-  const [shrineBuffs, setShrineBuffs] = useState<ActiveShrineBuffs>({
-    powerBonus: 0,
-    fortuneBonus: 0,
-  });
+  const [shrineBuffs, setShrineBuffs] = useState<ActiveShrineBuffs>(EMPTY_SHRINE_BUFFS);
 
   const [autoAdvance, setAutoAdvance] = useState(false);
   const [toast, setToast] = useState<string | null>(
-    'コマンドを選んで迷宮を進もう！まずは「迷宮へ出撃」をタップ！',
+    'コマンドを選んで迷宮を進もう！装備強化・OP再鍛造・セット効果も完備！',
   );
 
   const toastTimerRef = useRef<number | null>(null);
@@ -75,10 +88,9 @@ export function App() {
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
     toastTimerRef.current = window.setTimeout(() => {
       setToast(null);
-    }, 3400);
+    }, 3600);
   }, []);
 
-  // Auto-save to localStorage
   useEffect(() => {
     saveGameToLocal(save);
   }, [save]);
@@ -124,7 +136,7 @@ export function App() {
       setAutoAdvance(false);
       setBattle(null);
       setPendingAdvanceOnWin(false);
-      setShrineBuffs({ powerBonus: 0, fortuneBonus: 0 });
+      setShrineBuffs(EMPTY_SHRINE_BUFFS);
       setExpedition(createVillageExpedition());
       setActiveTab('explore');
       setSave((prev) => {
@@ -195,10 +207,57 @@ export function App() {
     [],
   );
 
-  // Execute a selected Expedition Command Choice!
+  // Helper to grant chest/event loot with auto-sell / auto-salvage respected
+  const grantLootItems = useCallback(
+    (items: EquipmentItem[], bonusGold: number, bonusStones: number, isChest: boolean) => {
+      const kept: EquipmentItem[] = [];
+      let autoCount = 0;
+      let autoGold = 0;
+      let autoStones = 0;
+      let mythics = 0;
+      const mode = save.settings.autoLootMode;
+
+      for (const it of items) {
+        if (it.rarity === 'mythic') mythics += 1;
+        if (!it.uniqueId && shouldAutoSell(it.rarity, save.settings.autoSell)) {
+          autoCount += 1;
+          if (mode === 'salvage') autoStones += getSalvageValue(it);
+          else autoGold += it.sellValue;
+        } else {
+          kept.push(it);
+        }
+      }
+
+      setSave((prev) => {
+        const uniques = new Set(prev.discoveredUniques);
+        for (const it of items) {
+          if (it.uniqueId) uniques.add(it.uniqueId);
+        }
+        return {
+          ...prev,
+          gold: prev.gold + bonusGold + autoGold,
+          forgeStones: prev.forgeStones + bonusStones + autoStones,
+          inventory: [...kept, ...prev.inventory].slice(0, 140),
+          discoveredUniques: Array.from(uniques),
+          stats: {
+            ...prev.stats,
+            totalChestsOpened: prev.stats.totalChestsOpened + (isChest ? 1 : 0),
+            totalItemsLooted: prev.stats.totalItemsLooted + items.length,
+            totalMythicsFound: prev.stats.totalMythicsFound + mythics,
+          },
+        };
+      });
+
+      return { kept, autoCount, autoGold, autoStones, mode };
+    },
+    [save.settings.autoLootMode, save.settings.autoSell],
+  );
+
+  // Execute a selected Expedition Command Choice (including all 5 v2 dungeon events!)
   const handleSelectChoice = useCallback(
     (choice: ExpeditionChoice) => {
       if (battle || expedition.inVillage) return;
+      const lootBonuses = getPartyAggregatedLootBonuses(save, shrineBuffs);
 
       if (choice.kind === 'stairs') {
         enterDungeonFloor(expedition.floor + 1);
@@ -228,81 +287,199 @@ export function App() {
           setShrineBuffs((b) => ({ ...b, powerBonus: Math.min(0.75, b.powerBonus + 0.25) }));
           showToast('剛力の祠の祝福！この探索中、味方全体の攻撃・魔力+25%！');
         } else {
-          setShrineBuffs((b) => ({ ...b, fortuneBonus: Math.min(180, b.fortuneBonus + 45) }));
+          setShrineBuffs((b) => ({ ...b, fortuneBonus: Math.min(240, b.fortuneBonus + 45) }));
           showToast('幸運の祠の祝福！この探索中、トレハン（レア率）+45%！');
         }
         advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
         return;
       }
 
+      // ===== NEW EVENT 1: 呪いの祭壇 (Curse Altar) =====
+      if (choice.kind === 'curse_altar') {
+        setShrineBuffs((b) => ({
+          ...b,
+          fortuneBonus: Math.min(350, b.fortuneBonus + 85),
+          curseEnemyBonus: Math.min(0.9, b.curseEnemyBonus + 0.18),
+        }));
+        // Sacrifice 25% of current HP (non-lethal, min 1 HP)
+        setSave((prev) => {
+          const nextRoster = { ...prev.roster };
+          for (const pid of prev.partyIds) {
+            const u = nextRoster[pid];
+            if (u) {
+              nextRoster[pid] = { ...u, hp: Math.max(1, Math.round(u.hp * 0.75)) };
+            }
+          }
+          return { ...prev, roster: nextRoster };
+        });
+        const rewardItem = generateEquipment(
+          expedition.floor + 1,
+          save.worldTier,
+          lootBonuses.magicFind + 85,
+          'boss',
+        );
+        const stones = Math.round((8 + expedition.floor * 0.6) * (1 + (save.worldTier - 1) * 0.45));
+        const res = grantLootItems([rewardItem], 0, stones, false);
+        showToast(
+          `呪いの契約成立！MF+85%・💎石+${stones}・${res.kept[0] ? `[${RARITY_META[res.kept[0].rarity].label}]${res.kept[0].name}` : '装備'}獲得！`,
+        );
+        advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
+        return;
+      }
+
+      // ===== NEW EVENT 2: 怪しい宝箱＆ミミック強襲 (Suspicious Chest / Mimic) =====
+      if (choice.kind === 'suspicious_chest') {
+        if (Math.random() < 0.5) {
+          // Mimic Ambush Battle!
+          const entity: MapEntity = {
+            id: choice.id,
+            kind: 'rare_enemy',
+            x: 0,
+            y: 0,
+            spriteKey: 'mimic',
+            name: '宝箱ミミック強襲！',
+            speciesIds: ['mimic'],
+            interacted: false,
+          };
+          const bState = createBattleState(save, entity, expedition.floor, shrineBuffs);
+          setSelectedEnemyUid(bState.enemies[0]?.uid ?? null);
+          setPendingAdvanceOnWin(choice.advancesStep);
+          setBattle(bState);
+          showToast('罠だ！宝箱が「宝箱ミミック」に姿を変えた！倒せば高レア確定級！');
+          return;
+        }
+        // Jackpot Treasure!
+        const items = [
+          generateEquipment(expedition.floor + 1, save.worldTier, lootBonuses.magicFind + 65, 'boss'),
+          generateEquipment(expedition.floor, save.worldTier, lootBonuses.magicFind + 45, 'gold_chest'),
+        ];
+        const bonusGold = Math.round(90 * (1 + expedition.floor * 0.35) * Math.pow(2.1, save.worldTier - 1));
+        const bonusStones = Math.round((7 + expedition.floor * 0.4) * (1 + (save.worldTier - 1) * 0.4));
+        const res = grantLootItems(items, bonusGold, bonusStones, true);
+        showToast(
+          `大当たり秘宝！${res.kept[0] ? `[${RARITY_META[res.kept[0].rarity].label}]${res.kept[0].name}` : ''} 💎石+${bonusStones} ${bonusGold}G！`,
+        );
+        advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
+        return;
+      }
+
+      // ===== NEW EVENT 3: 迷宮の行商人 (Wandering Merchant) =====
+      if (choice.kind === 'merchant') {
+        const cost = choice.merchantCostGold ?? 60;
+        if (save.gold >= cost) {
+          const item = generateEquipment(
+            expedition.floor + 1,
+            save.worldTier,
+            lootBonuses.magicFind + 40,
+            'gold_chest',
+          );
+          const stones = Math.round((9 + expedition.floor * 0.5) * (1 + (save.worldTier - 1) * 0.45));
+          setSave((prev) => ({ ...prev, gold: Math.max(0, prev.gold - cost) }));
+          const res = grantLootItems([item], 0, stones, false);
+          showToast(
+            `行商人と取引！💎鍛冶石+${stones}＆${res.kept[0] ? `[${RARITY_META[res.kept[0].rarity].label}]${res.kept[0].name}` : '装備'}を購入！`,
+          );
+        } else {
+          healAllParty(0.4, true);
+          showToast('金貨が足りなかったが、行商人が薬草を分けてくれた（HP/MP 40%回復）！');
+        }
+        advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
+        return;
+      }
+
+      // ===== NEW EVENT 4: 旅の鍛冶師 (Wandering Blacksmith Free +1) =====
+      if (choice.kind === 'wandering_smith') {
+        // Find an equipped item under +15 on party (Hero first)
+        let targetItemId: string | null = null;
+        for (const pid of save.partyIds) {
+          const u = save.roster[pid];
+          if (!u) continue;
+          for (const sl of ['weapon', 'armor', 'relic', 'rune'] as const) {
+            const eid = u.equipped[sl];
+            const eq = eid ? invMap.get(eid) : undefined;
+            if (eq && eq.enhanceLevel < MAX_ENHANCE_LEVEL) {
+              targetItemId = eq.id;
+              break;
+            }
+          }
+          if (targetItemId) break;
+        }
+
+        if (targetItemId) {
+          const orig = invMap.get(targetItemId)!;
+          const { upgraded, isBreakthrough } = enhanceEquipment(orig);
+          setSave((prev) => ({
+            ...prev,
+            inventory: prev.inventory.map((i) => (i.id === targetItemId ? upgraded : i)),
+            stats: { ...prev.stats, totalForgeUpgrades: prev.stats.totalForgeUpgrades + 1 },
+          }));
+          showToast(
+            isBreakthrough
+              ? `旅の鍛冶師の妙技！${upgraded.name}が★+${upgraded.enhanceLevel}突破（全OP底上げ）！`
+              : `旅の鍛冶師が ${upgraded.name} を無料で +${upgraded.enhanceLevel} に鍛えてくれた！`,
+          );
+        } else {
+          const giftStones = 8 + save.worldTier * 3;
+          setSave((prev) => ({ ...prev, forgeStones: prev.forgeStones + giftStones }));
+          showToast(`旅の鍛冶師から💎鍛冶石+${giftStones}をもらった！`);
+        }
+        advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
+        return;
+      }
+
+      // Regular / Gold Chest
       if (choice.kind === 'chest' || choice.kind === 'gold_chest') {
         const isGold = choice.kind === 'gold_chest';
-        const lootBonuses = getPartyAggregatedLootBonuses(save, shrineBuffs);
         const itemCount = isGold ? 2 : 1;
-        const gainedItems: EquipmentItem[] = [];
-        let autoSoldCount = 0;
-        let autoSoldGold = 0;
-        let mythics = 0;
-
+        const generated: EquipmentItem[] = [];
         for (let i = 0; i < itemCount; i += 1) {
-          const it = generateEquipment(
-            expedition.floor,
-            save.worldTier,
-            lootBonuses.magicFind + (isGold ? 35 : 12),
-            isGold ? 'gold_chest' : 'chest',
+          generated.push(
+            generateEquipment(
+              expedition.floor,
+              save.worldTier,
+              lootBonuses.magicFind + (isGold ? 35 : 12),
+              isGold ? 'gold_chest' : 'chest',
+            ),
           );
-          if (it.rarity === 'mythic') mythics += 1;
-          if (!it.uniqueId && shouldAutoSell(it.rarity, save.settings.autoSell)) {
-            autoSoldCount += 1;
-            autoSoldGold += it.sellValue;
-          } else {
-            gainedItems.push(it);
-          }
         }
         const bonusGold = Math.round(
           (isGold ? 65 : 28) *
             (1 + expedition.floor * 0.35) *
             Math.pow(2.1, save.worldTier - 1),
         );
-
-        setSave((prev) => {
-          const uniques = new Set(prev.discoveredUniques);
-          for (const it of gainedItems) {
-            if (it.uniqueId) uniques.add(it.uniqueId);
-          }
-          return {
-            ...prev,
-            gold: prev.gold + bonusGold + autoSoldGold,
-            inventory: [...gainedItems, ...prev.inventory].slice(0, 140),
-            discoveredUniques: Array.from(uniques),
-            stats: {
-              ...prev.stats,
-              totalChestsOpened: prev.stats.totalChestsOpened + 1,
-              totalItemsLooted: prev.stats.totalItemsLooted + itemCount,
-              totalMythicsFound: prev.stats.totalMythicsFound + mythics,
-            },
-          };
-        });
-
-        const topItem = gainedItems[0];
+        const bonusStones = Math.round(
+          (isGold ? 5 : 2) * (1 + (save.worldTier - 1) * 0.4) * (1 + lootBonuses.stoneFind / 100),
+        );
+        const res = grantLootItems(generated, bonusGold, bonusStones, true);
+        const topItem = res.kept[0];
         if (topItem) {
           showToast(
-            `${isGold ? '黄金の宝箱' : '宝箱'}！[${RARITY_META[topItem.rarity].label}] ${topItem.name} と ${bonusGold}G を獲得！`,
+            `${isGold ? '黄金の宝箱' : '宝箱'}！[${RARITY_META[topItem.rarity].label}] ${topItem.name}・💎石+${bonusStones}・${bonusGold}G！`,
           );
         } else {
           showToast(
-            `宝箱を開封！（自動売却 ${autoSoldCount}個 → 計+${bonusGold + autoSoldGold}G）`,
+            `宝箱開封！（${res.mode === 'salvage' ? `自動分解→💎石+${bonusStones + res.autoStones}` : `自動売却→+${bonusGold + res.autoGold}G`}）`,
           );
         }
         advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
         return;
       }
 
-      // Battle / Elite / Boss choice!
-      if (choice.kind === 'battle' || choice.kind === 'elite' || choice.kind === 'boss') {
+      // Battle / Elite / Boss / Rare Encounter (EVENT 5: Gold Slime & Void Herald!)
+      if (
+        choice.kind === 'battle' ||
+        choice.kind === 'elite' ||
+        choice.kind === 'boss' ||
+        choice.kind === 'rare_encounter'
+      ) {
         const entity: MapEntity = {
           id: choice.id,
-          kind: choice.kind === 'battle' ? 'enemy' : choice.kind,
+          kind:
+            choice.kind === 'battle'
+              ? 'enemy'
+              : choice.kind === 'rare_encounter'
+                ? 'rare_enemy'
+                : choice.kind,
           x: 0,
           y: 0,
           spriteKey: choice.spriteKey,
@@ -322,7 +499,9 @@ export function App() {
       enterDungeonFloor,
       expedition.floor,
       expedition.inVillage,
+      grantLootItems,
       healAllParty,
+      invMap,
       returnToVillage,
       save,
       shrineBuffs,
@@ -330,7 +509,6 @@ export function App() {
     ],
   );
 
-  // Auto-Advance timer while exploring dungeon commands
   useEffect(() => {
     if (!autoAdvance || battle || expedition.inVillage || activeTab !== 'explore') return;
     const timer = window.setTimeout(() => {
@@ -374,7 +552,6 @@ export function App() {
     [advanceExpeditionStep, pendingAdvanceOnWin, save, shrineBuffs],
   );
 
-  // Enemy turn & Auto-battle tick timer
   useEffect(() => {
     if (!battle) return;
     if (battle.phase === 'victory' || battle.phase === 'defeat' || battle.phase === 'fled') {
@@ -442,7 +619,6 @@ export function App() {
     setPendingAdvanceOnWin(false);
   }, [battle, returnToVillage]);
 
-  // If Auto-Advance is ON, seamlessly close victory screen after a brief moment to continue farming!
   useEffect(() => {
     if (!autoAdvance || !battle || battle.phase !== 'victory' || !battle.reward) return;
     const delay = save.settings.battleSpeed === 4 ? 700 : 1200;
@@ -452,7 +628,7 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, [autoAdvance, battle, handleFinishBattle, save.settings.battleSpeed]);
 
-  // Equipment handlers
+  // Equipment & Blacksmith handlers
   const handleEquip = useCallback(
     (unitId: string, itemId: string) => {
       setSave((prev) => {
@@ -528,44 +704,122 @@ export function App() {
     [showToast],
   );
 
-  const handleBulkSell = useCallback(
-    (maxRarity: 'uncommon' | 'rare') => {
-      const maxRank = RARITY_META[maxRarity].rank;
-      let soldCount = 0;
-      let soldGold = 0;
+  const handleSalvageItem = useCallback(
+    (itemId: string) => {
+      const target = save.inventory.find((i) => i.id === itemId);
+      if (!target || target.locked) return;
+      const isEquipped = Object.values(save.roster).some((u) =>
+        Object.values(u.equipped).includes(itemId),
+      );
+      if (isEquipped) return;
+      const stones = getSalvageValue(target);
+      setSave((prev) => ({
+        ...prev,
+        forgeStones: prev.forgeStones + stones,
+        inventory: prev.inventory.filter((i) => i.id !== itemId),
+      }));
+      showToast(`装備を分解！💎鍛冶石 +${stones} を獲得！`);
+    },
+    [save.inventory, save.roster, showToast],
+  );
 
-      setSave((prev) => {
-        const equippedSet = new Set<string>();
-        for (const u of Object.values(prev.roster)) {
-          for (const eid of Object.values(u.equipped)) {
-            if (eid) equippedSet.add(eid);
-          }
-        }
+  const handleEnhanceItem = useCallback(
+    (itemId: string) => {
+      const target = save.inventory.find((i) => i.id === itemId);
+      if (!target || target.enhanceLevel >= MAX_ENHANCE_LEVEL) return;
+      const cost = getEnhanceCost(target);
+      if (save.forgeStones < cost.stones || save.gold < cost.gold) return;
 
-        const remaining = prev.inventory.filter((it) => {
-          if (it.locked || equippedSet.has(it.id) || it.uniqueId) return true;
-          if (RARITY_META[it.rarity].rank <= maxRank) {
-            soldCount += 1;
-            soldGold += it.sellValue;
-            return false;
-          }
-          return true;
-        });
+      const { upgraded, isBreakthrough } = enhanceEquipment(target);
+      setSave((prev) => ({
+        ...prev,
+        gold: prev.gold - cost.gold,
+        forgeStones: prev.forgeStones - cost.stones,
+        inventory: prev.inventory.map((i) => (i.id === itemId ? upgraded : i)),
+        stats: {
+          ...prev.stats,
+          totalForgeUpgrades: prev.stats.totalForgeUpgrades + 1,
+        },
+      }));
+      showToast(
+        isBreakthrough
+          ? `★ブレイクスルー！${upgraded.name} +${upgraded.enhanceLevel}（全OPが+25%底上げ！）`
+          : `🔨 鍛冶強化成功！${upgraded.name} +${upgraded.enhanceLevel}！`,
+      );
+    },
+    [save.forgeStones, save.gold, save.inventory, showToast],
+  );
 
-        return {
-          ...prev,
-          gold: prev.gold + soldGold,
-          inventory: remaining,
-        };
-      });
+  const handleRerollAffix = useCallback(
+    (itemId: string, affixIndex: number) => {
+      const target = save.inventory.find((i) => i.id === itemId);
+      if (!target || affixIndex < 0 || affixIndex >= target.affixes.length) return;
+      const cost = getRerollCost(target);
+      if (save.forgeStones < cost.stones || save.gold < cost.gold) return;
 
-      if (soldCount > 0) {
-        showToast(`${soldCount}個の装備を一括売却 → +${soldGold.toLocaleString()}G！`);
-      } else {
-        showToast('売却対象の未ロック・未装備アイテムがありません。');
+      const rerolled = rerollAffixSlot(target, affixIndex);
+      const newAffix = rerolled.affixes[affixIndex];
+      setSave((prev) => ({
+        ...prev,
+        gold: prev.gold - cost.gold,
+        forgeStones: prev.forgeStones - cost.stones,
+        inventory: prev.inventory.map((i) => (i.id === itemId ? rerolled : i)),
+        stats: {
+          ...prev.stats,
+          totalRerolls: prev.stats.totalRerolls + 1,
+        },
+      }));
+      if (newAffix) {
+        showToast(
+          `🔄 OP再鍛造！「${newAffix.label}+${newAffix.value}${newAffix.isPercent ? '%' : ''}」に変化！`,
+        );
       }
     },
-    [showToast],
+    [save.forgeStones, save.gold, save.inventory, showToast],
+  );
+
+  const handleBulkProcess = useCallback(
+    (maxRarity: 'uncommon' | 'rare', mode: AutoLootMode) => {
+      const maxRank = RARITY_META[maxRarity].rank;
+      const equippedSet = new Set<string>();
+      for (const u of Object.values(save.roster)) {
+        for (const eid of Object.values(u.equipped)) {
+          if (eid) equippedSet.add(eid);
+        }
+      }
+
+      let count = 0;
+      let goldGain = 0;
+      let stoneGain = 0;
+      const remaining = save.inventory.filter((it) => {
+        if (it.locked || equippedSet.has(it.id) || it.uniqueId) return true;
+        if (RARITY_META[it.rarity].rank <= maxRank) {
+          count += 1;
+          if (mode === 'salvage') stoneGain += getSalvageValue(it);
+          else goldGain += it.sellValue;
+          return false;
+        }
+        return true;
+      });
+
+      if (count === 0) {
+        showToast('対象の未ロック・未装備アイテムがありません。');
+        return;
+      }
+
+      setSave((prev) => ({
+        ...prev,
+        gold: prev.gold + goldGain,
+        forgeStones: prev.forgeStones + stoneGain,
+        inventory: remaining,
+      }));
+      showToast(
+        mode === 'salvage'
+          ? `${count}個の装備を一括分解 → 💎鍛冶石+${stoneGain}！`
+          : `${count}個の装備を一括売却 → +${goldGain.toLocaleString()}G！`,
+      );
+    },
+    [save.inventory, save.roster, showToast],
   );
 
   const handleTogglePartyMember = useCallback((unitId: string) => {
@@ -586,7 +840,6 @@ export function App() {
     });
   }, []);
 
-  // World Tier & Shop handlers
   const handleSelectWorldTier = useCallback(
     (tier: number) => {
       setSave((prev) => {
@@ -690,7 +943,7 @@ export function App() {
     setSave(fresh);
     setBattle(null);
     setAutoAdvance(false);
-    setShrineBuffs({ powerBonus: 0, fortuneBonus: 0 });
+    setShrineBuffs(EMPTY_SHRINE_BUFFS);
     setExpedition(createVillageExpedition());
     setActiveTab('explore');
     showToast('セーブデータを初期化しました。新たな冒険の始まり！');
@@ -716,10 +969,13 @@ export function App() {
             <h1 className="hud-title">
               {inVillage ? biomeDef.shortName : `${biomeDef.shortName} ${expedition.floor}F`}
             </h1>
-            <span className="tier-badge">Tier {toRoman(save.worldTier)}</span>
+            <span className="tier-badge">T{toRoman(save.worldTier)}</span>
           </div>
           <div className="hud-right">
-            <span className="gold-pill">{save.gold.toLocaleString()} G</span>
+            <span className="gold-pill" style={{ color: '#8ae8ff', borderColor: 'rgba(138, 232, 255, 0.45)' }}>
+              💎{save.forgeStones.toLocaleString()}
+            </span>
+            <span className="gold-pill">{save.gold.toLocaleString()}G</span>
           </div>
         </header>
 
@@ -733,18 +989,26 @@ export function App() {
             onEnemyTap={(uid) => setSelectedEnemyUid(uid)}
           />
 
-          {(shrineBuffs.powerBonus > 0 || shrineBuffs.fortuneBonus > 0) && !inVillage && (
-            <div className="stage-buff-strip">
-              {shrineBuffs.powerBonus > 0 && (
-                <span className="buff-tag">
-                  剛力 +{Math.round(shrineBuffs.powerBonus * 100)}%
-                </span>
-              )}
-              {shrineBuffs.fortuneBonus > 0 && (
-                <span className="buff-tag">幸運 MF+{shrineBuffs.fortuneBonus}%</span>
-              )}
-            </div>
-          )}
+          {(shrineBuffs.powerBonus > 0 ||
+            shrineBuffs.fortuneBonus > 0 ||
+            shrineBuffs.curseEnemyBonus > 0) &&
+            !inVillage && (
+              <div className="stage-buff-strip">
+                {shrineBuffs.powerBonus > 0 && (
+                  <span className="buff-tag">
+                    剛力 +{Math.round(shrineBuffs.powerBonus * 100)}%
+                  </span>
+                )}
+                {shrineBuffs.fortuneBonus > 0 && (
+                  <span className="buff-tag">幸運 MF+{shrineBuffs.fortuneBonus}%</span>
+                )}
+                {shrineBuffs.curseEnemyBonus > 0 && (
+                  <span className="buff-tag" style={{ borderColor: '#ff7084', color: '#ff9cab' }}>
+                    呪い 敵+{Math.round(shrineBuffs.curseEnemyBonus * 100)}%
+                  </span>
+                )}
+              </div>
+            )}
 
           {toast && <div className="stage-toast">{toast}</div>}
         </section>
@@ -836,7 +1100,6 @@ export function App() {
                   </div>
 
                   {inVillage ? (
-                    /* ===== VILLAGE COMMAND MENU ===== */
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
                       <button
                         id="btn-enter-labyrinth"
@@ -898,7 +1161,7 @@ export function App() {
                           style={{ padding: '9px 6px' }}
                           onClick={() => setActiveTab('gear')}
                         >
-                          ⚔ 装備 ({save.inventory.length})
+                          🔨 装備・鍛冶 ({save.inventory.length})
                         </button>
                         <button
                           type="button"
@@ -911,7 +1174,6 @@ export function App() {
                       </div>
                     </div>
                   ) : (
-                    /* ===== DUNGEON COMMAND CHOICE MENU ===== */
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
                         <span
@@ -949,11 +1211,14 @@ export function App() {
                       <div className="choice-list">
                         {expedition.choices.map((ch, idx) => {
                           const extraClass =
-                            ch.kind === 'boss'
+                            ch.kind === 'boss' || ch.kind === 'curse_altar'
                               ? 'boss-choice'
                               : ch.kind === 'stairs'
                                 ? 'stairs-choice'
-                                : ch.kind === 'gold_chest' || ch.kind === 'elite'
+                                : ch.kind === 'gold_chest' ||
+                                    ch.kind === 'elite' ||
+                                    ch.kind === 'rare_encounter' ||
+                                    ch.kind === 'suspicious_chest'
                                   ? 'gold-choice'
                                   : '';
                           return (
@@ -1026,11 +1291,23 @@ export function App() {
                   onUnequip={handleUnequip}
                   onToggleLock={handleToggleLock}
                   onSellItem={handleSellItem}
-                  onBulkSell={handleBulkSell}
+                  onSalvageItem={handleSalvageItem}
+                  onEnhanceItem={handleEnhanceItem}
+                  onRerollAffix={handleRerollAffix}
+                  onBulkProcess={handleBulkProcess}
                   onChangeAutoSell={(threshold: AutoSellThreshold) =>
                     setSave((p) => ({
                       ...p,
                       settings: { ...p.settings, autoSell: threshold },
+                    }))
+                  }
+                  onToggleAutoLootMode={() =>
+                    setSave((p) => ({
+                      ...p,
+                      settings: {
+                        ...p.settings,
+                        autoLootMode: p.settings.autoLootMode === 'sell' ? 'salvage' : 'sell',
+                      },
                     }))
                   }
                 />
@@ -1078,8 +1355,8 @@ export function App() {
                   className={`tab-btn ${activeTab === 'gear' ? 'active' : ''}`}
                   onClick={() => setActiveTab('gear')}
                 >
-                  <span>⚔</span>
-                  <span>装備</span>
+                  <span>🔨</span>
+                  <span>装備・鍛冶</span>
                   {save.inventory.length >= 2 && <span className="tab-dot" />}
                 </button>
                 <button

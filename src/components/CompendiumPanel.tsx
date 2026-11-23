@@ -60,7 +60,12 @@ export function CompendiumPanel({ save }: CompendiumPanelProps) {
             const found = save.discoveredMonsters.includes(sp.id);
             const owned = save.roster[sp.id];
             const role = ROLE_LABELS[sp.role];
-            const biomeName = sp.biome !== 'hero' ? BIOMES[sp.biome].shortName : '';
+            const biomeName =
+              sp.biome === 'special'
+                ? '希少'
+                : sp.biome !== 'hero'
+                  ? BIOMES[sp.biome].shortName
+                  : '';
 
             return (
               <div

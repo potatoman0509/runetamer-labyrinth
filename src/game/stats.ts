@@ -1,10 +1,13 @@
 import { getSpecies } from './data/monsters';
+import { computePartySynergies } from './synergy';
 import type {
+  ActiveSetCount,
   ActiveShrineBuffs,
   ComputedUnitStats,
   EquipmentItem,
   EquipSlot,
   GameSave,
+  SetId,
   UniqueEffectId,
   UnitInstance,
 } from './types';
@@ -44,7 +47,12 @@ export function computeUnitStats(
   unit: UnitInstance,
   save: Pick<
     GameSave,
-    'inventory' | 'maxUnlockedTier' | 'discoveredMonsters' | 'discoveredUniques'
+    | 'inventory'
+    | 'maxUnlockedTier'
+    | 'discoveredMonsters'
+    | 'discoveredUniques'
+    | 'partyIds'
+    | 'roster'
   >,
   shrineBuffs?: ActiveShrineBuffs,
   inventoryMapOverride?: Map<string, EquipmentItem>,
@@ -55,13 +63,13 @@ export function computeUnitStats(
     inventoryMapOverride ?? new Map(save.inventory.map((it) => [it.id, it]));
   const equipped = getEquippedItemsForUnit(unit, invMap);
 
-  // Awakening bonus: +8% all base stats per star (from duplicate monster recruits)
   const awakenMult = 1 + unit.awakening * 0.08;
   const blessing = getWorldTierBlessing(save.maxUnlockedTier);
   const comp = getCompendiumBonusPct(
     save.discoveredMonsters.length,
     save.discoveredUniques.length,
   );
+  const syn = computePartySynergies(save);
 
   let flatHp = (sp.baseStats.hp + sp.growth.hp * (lvl - 1)) * awakenMult;
   let flatMp = (sp.baseStats.mp + sp.growth.mp * (lvl - 1)) * awakenMult;
@@ -70,20 +78,26 @@ export function computeUnitStats(
   let flatDef = (sp.baseStats.def + sp.growth.def * (lvl - 1)) * awakenMult;
   let flatSpd = (sp.baseStats.spd + sp.growth.spd * (lvl - 1)) * (1 + unit.awakening * 0.03);
 
-  let atkPct = (sp.passiveBonus.atkPct ?? 0) + comp.statPct;
-  let magPct = (sp.passiveBonus.magPct ?? 0) + comp.statPct;
-  let defPct = (sp.passiveBonus.defPct ?? 0) + comp.statPct;
-  let hpPct = (sp.passiveBonus.hpPct ?? 0) + comp.statPct;
-  let spdFlat = sp.passiveBonus.spdFlat ?? 0;
-  let critRate = 6 + (sp.passiveBonus.critRate ?? 0);
+  let atkPct = (sp.passiveBonus.atkPct ?? 0) + comp.statPct + syn.atkPct;
+  let magPct = (sp.passiveBonus.magPct ?? 0) + comp.statPct + syn.magPct;
+  let defPct = (sp.passiveBonus.defPct ?? 0) + comp.statPct + syn.defPct;
+  let hpPct = (sp.passiveBonus.hpPct ?? 0) + comp.statPct + syn.hpPct;
+  let spdFlat = (sp.passiveBonus.spdFlat ?? 0) + syn.spdFlat;
+  let critRate = 6 + (sp.passiveBonus.critRate ?? 0) + syn.critRate;
   let critDmg = 155;
   let lifesteal = sp.passiveBonus.lifesteal ?? 0;
   let doubleHit = sp.passiveBonus.doubleHit ?? 0;
-  let regenPct = sp.passiveBonus.regenPct ?? 0;
-  let magicFind = (sp.passiveBonus.magicFind ?? 0) + blessing.magicFindBonus + comp.mfBonus;
-  let goldFind = blessing.goldBonusPct;
+  let regenPct = (sp.passiveBonus.regenPct ?? 0) + syn.regenPct;
+  let magicFind =
+    (sp.passiveBonus.magicFind ?? 0) + blessing.magicFindBonus + comp.mfBonus + syn.magicFind;
+  let goldFind =
+    (sp.passiveBonus.goldFind ?? 0) + blessing.goldBonusPct + syn.goldFind;
   let expFind = blessing.expBonusPct;
+  let stoneFind = 0;
+  let damageTakenMult = 1.0;
+
   const uniqueEffects: UniqueEffectId[] = [];
+  const setCounts = new Map<SetId, number>();
 
   for (const item of equipped) {
     flatHp += item.baseStats.hp ?? 0;
@@ -91,6 +105,10 @@ export function computeUnitStats(
     flatMag += item.baseStats.mag ?? 0;
     flatDef += item.baseStats.def ?? 0;
     flatSpd += item.baseStats.spd ?? 0;
+
+    if (item.setId) {
+      setCounts.set(item.setId, (setCounts.get(item.setId) ?? 0) + 1);
+    }
 
     for (const af of item.affixes) {
       switch (af.stat) {
@@ -141,13 +159,55 @@ export function computeUnitStats(
     }
   }
 
-  // Unique passive stat boosts
-  if (uniqueEffects.includes('clover_luck')) {
-    goldFind += 40;
+  // Apply 6 Equipment Set Bonuses (2pc & 4pc)
+  const activeSets: ActiveSetCount[] = [];
+  for (const [setId, count] of setCounts.entries()) {
+    activeSets.push({ setId, count });
+    if (count >= 2) {
+      if (setId === 'forest_guard') hpPct += 18;
+      else if (setId === 'ancient_rune') defPct += 22;
+      else if (setId === 'crimson_fury') atkPct += 20;
+      else if (setId === 'astral_mage') magPct += 22;
+      else if (setId === 'golden_greed') magicFind += 35;
+      else if (setId === 'lunar_blade') {
+        spdFlat += 10;
+        critRate += 10;
+      }
+    }
+    if (count >= 4) {
+      if (setId === 'forest_guard') {
+        regenPct += 8;
+        damageTakenMult *= 0.88;
+      } else if (setId === 'crimson_fury') {
+        critDmg += 50;
+        lifesteal += 10;
+      } else if (setId === 'golden_greed') {
+        goldFind += 45;
+        expFind += 35;
+        stoneFind += 40;
+      } else if (setId === 'lunar_blade') {
+        doubleHit += 22;
+      }
+    }
   }
-  if (uniqueEffects.includes('astral_compass')) {
-    critDmg += 45;
+  activeSets.sort((a, b) => b.count - a.count);
+
+  // Unique passive stat boosts (all 26 uniques)
+  if (uniqueEffects.includes('clover_luck')) goldFind += 40;
+  if (uniqueEffects.includes('astral_compass')) critDmg += 45;
+  if (uniqueEffects.includes('starlight_mantle')) damageTakenMult *= 0.85;
+  if (uniqueEffects.includes('mithril_fortress')) damageTakenMult *= 0.9;
+  if (uniqueEffects.includes('blazing_cloak')) regenPct += 6;
+  if (uniqueEffects.includes('forge_heart_amulet')) {
+    stoneFind += 60;
+    atkPct += 15;
+    magPct += 15;
   }
+  if (uniqueEffects.includes('mimic_crown')) {
+    magicFind += 35;
+    damageTakenMult *= 1.1;
+  }
+  if (uniqueEffects.includes('titan_gauntlet_relic')) hpPct += 15;
 
   const powerMult = 1 + (shrineBuffs?.powerBonus ?? 0);
   magicFind += shrineBuffs?.fortuneBonus ?? 0;
@@ -157,23 +217,36 @@ export function computeUnitStats(
     Math.round(flatHp * (1 + hpPct / 100) * blessing.statMult),
   );
   const maxMp = Math.max(20, Math.round(flatMp * (1 + (blessing.statMult - 1) * 0.5)));
-  const atk = Math.max(
-    8,
-    Math.round(flatAtk * (1 + atkPct / 100) * blessing.statMult * powerMult),
-  );
-  const mag = Math.max(
-    8,
-    Math.round(flatMag * (1 + magPct / 100) * blessing.statMult * powerMult),
-  );
   const def = Math.max(
     5,
     Math.round(flatDef * (1 + defPct / 100) * blessing.statMult),
   );
   const spd = Math.max(5, Math.round(flatSpd + spdFlat));
 
+  let atk = Math.max(
+    8,
+    Math.round(flatAtk * (1 + atkPct / 100) * blessing.statMult * powerMult),
+  );
+  let mag = Math.max(
+    8,
+    Math.round(flatMag * (1 + magPct / 100) * blessing.statMult * powerMult),
+  );
+
+  // Stat-conversion uniques & sets
+  if (uniqueEffects.includes('storm_bowblade')) {
+    atk += Math.round(spd * 1.2);
+  }
+  if (uniqueEffects.includes('mithril_fortress')) {
+    atk += Math.round(def * 0.35);
+  }
+  if (activeSets.some((s) => s.setId === 'ancient_rune' && s.count >= 4)) {
+    atk += Math.round(def * 0.3);
+    mag += Math.round(def * 0.3);
+  }
+
   const clampedCritRate = Math.min(95, critRate);
-  const clampedDoubleHit = Math.min(80, doubleHit);
-  const clampedLifesteal = Math.min(60, lifesteal);
+  const clampedDoubleHit = Math.min(85, doubleHit);
+  const clampedLifesteal = Math.min(65, lifesteal);
 
   const powerScore = Math.round(
     maxHp * 0.35 +
@@ -200,7 +273,10 @@ export function computeUnitStats(
     magicFind,
     goldFind,
     expFind,
+    stoneFind,
+    damageTakenMult,
     uniqueEffects,
+    activeSets,
     powerScore,
   };
 }
@@ -208,11 +284,12 @@ export function computeUnitStats(
 export function getPartyAggregatedLootBonuses(
   save: GameSave,
   shrineBuffs?: ActiveShrineBuffs,
-): { magicFind: number; goldFind: number; expFind: number } {
+): { magicFind: number; goldFind: number; expFind: number; stoneFind: number } {
   const invMap = new Map(save.inventory.map((it) => [it.id, it]));
   let mf = 0;
   let gf = 0;
   let ef = 0;
+  let sf = 0;
   let count = 0;
   for (const id of save.partyIds) {
     const unit = save.roster[id];
@@ -221,14 +298,15 @@ export function getPartyAggregatedLootBonuses(
     mf += st.magicFind;
     gf += st.goldFind;
     ef += st.expFind;
+    sf += st.stoneFind;
     count += 1;
   }
-  if (count === 0) return { magicFind: 0, goldFind: 0, expFind: 0 };
-  // Average party bonuses plus synergy for extra members
+  if (count === 0) return { magicFind: 0, goldFind: 0, expFind: 0, stoneFind: 0 };
   const scale = 1 / Math.max(1, Math.pow(count, 0.55));
   return {
     magicFind: Math.round(mf * scale),
     goldFind: Math.round(gf * scale),
     expFind: Math.round(ef * scale),
+    stoneFind: Math.round(sf * scale),
   };
 }

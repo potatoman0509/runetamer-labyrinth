@@ -7,8 +7,13 @@ export type ExpeditionChoiceKind =
   | 'battle'
   | 'elite'
   | 'boss'
+  | 'rare_encounter'
   | 'chest'
   | 'gold_chest'
+  | 'suspicious_chest'
+  | 'curse_altar'
+  | 'merchant'
+  | 'wandering_smith'
   | 'shrine_heal'
   | 'shrine_power'
   | 'shrine_fortune'
@@ -25,14 +30,15 @@ export interface ExpeditionChoice {
   tagColor: string;
   spriteKey: string;
   speciesIds?: string[];
+  merchantCostGold?: number;
   advancesStep: boolean;
 }
 
 export interface ExpeditionState {
   inVillage: boolean;
   biome: BiomeId;
-  floor: number; // 0 in village
-  step: number; // 1..maxSteps
+  floor: number;
+  step: number;
   maxSteps: number;
   bossDefeated: boolean;
   restUsedOnFloor: boolean;
@@ -91,7 +97,7 @@ export function generateStepChoices(
   const tierMods = getActiveTierModifiers(worldTier);
   const normalPool = getBiomeNormalMonsters(biome);
 
-  // Final step of the floor: Boss encounter or Stairs Down!
+  // Final step: Boss encounter or Stairs Down
   if (step >= maxSteps) {
     if (bossFloor && !bossDefeated) {
       const bossId = getBiomeBossId(biome);
@@ -108,7 +114,7 @@ export function generateStepChoices(
           subtitle:
             floor >= 20
               ? '撃破で次階層解放＆世界ランク昇格条件を達成！'
-              : '撃破で装備3点確定＆高確率でボスが仲間に！',
+              : '装備3点＋鍛冶石大量＋高確率でボスが仲間化！',
           tag: 'BOSS戦',
           tagColor: '#d94848',
           spriteKey: bossSp.spriteKey,
@@ -136,7 +142,7 @@ export function generateStepChoices(
         id: nextChoiceId(),
         kind: 'elite',
         title: `周囲の強敵と戦って鍛える（${grindLead.name}他）`,
-        subtitle: 'レベル上げと装備厳選をしてからボスへ挑戦',
+        subtitle: 'レベル上げと装備・鍛冶石稼ぎをしてから挑戦',
         tag: '★強敵',
         tagColor: '#c98820',
         spriteKey: grindLead.spriteKey,
@@ -147,7 +153,6 @@ export function generateStepChoices(
       return choices;
     }
 
-    // Floor cleared -> Descend to next floor, farm current floor, or return to village
     const farmPack = makeEnemyPack(biome, 2, 3);
     const farmLead = getSpecies(farmPack[0]!);
     return [
@@ -165,7 +170,7 @@ export function generateStepChoices(
         id: nextChoiceId(),
         kind: 'elite',
         title: `${floor}Fの強敵を狩って稼ぐ（${farmLead.name}他）`,
-        subtitle: 'この階層に留まって装備ドロップ＆仲間集めを続行',
+        subtitle: 'この階層に留まって装備ドロップ＆鍛冶石稼ぎを続行',
         tag: '★稼ぎ戦',
         tagColor: '#c98820',
         spriteKey: farmLead.spriteKey,
@@ -176,7 +181,7 @@ export function generateStepChoices(
         id: nextChoiceId(),
         kind: 'return_village',
         title: '始まりの村へ帰還する',
-        subtitle: '装備と金貨を持ち帰り、泉で全回復＆商店・祭壇を利用',
+        subtitle: '装備・鍛冶石・金貨を持ち帰り、泉で全回復＆商店・祭壇へ',
         tag: '帰還',
         tagColor: '#4c658a',
         spriteKey: 'fountain',
@@ -185,66 +190,135 @@ export function generateStepChoices(
     ];
   }
 
-  // Regular Exploration Step (1 .. maxSteps-1): Present 3 distinct tactical command choices!
+  // ===== REGULAR STEP (1 .. maxSteps-1): 3 Rich Tactical Choices =====
   const normalPack = makeEnemyPack(biome, 1, 3);
   const normalLead = getSpecies(normalPack[0]!);
 
   const elitePack = makeEnemyPack(biome, 2, 3);
   const eliteLead = getSpecies(elitePack[0]!);
 
-  // Choice 1: Standard Battle
-  const choice1: ExpeditionChoice = {
-    id: nextChoiceId(),
-    kind: 'battle',
-    title: `魔物の群れへ進む（${normalLead.name}${normalPack.length > 1 ? `他${normalPack.length - 1}体` : ''}）`,
-    subtitle: '堅実に経験値・金貨・仲間化＆装備ドロップを狙う',
-    tag: '通常戦',
-    tagColor: '#5c6a85',
-    spriteKey: normalLead.spriteKey,
-    speciesIds: normalPack,
-    advancesStep: true,
-  };
+  // Slot 1: Standard Battle OR Rare Encounter (Golden Slime / Void Herald!)
+  const rareRoll = Math.random();
+  let choice1: ExpeditionChoice;
+  if (rareRoll < 0.14 + (worldTier - 1) * 0.02) {
+    const isHerald = floor >= 8 && Math.random() < 0.45;
+    const rareId = isHerald ? 'void_herald' : 'gold_slime';
+    const rareSp = getSpecies(rareId);
+    choice1 = {
+      id: nextChoiceId(),
+      kind: 'rare_encounter',
+      title: `✦希少遭遇！${rareSp.name}が出現！`,
+      subtitle: '撃破で鍛冶石大量＋大量金貨＋高レア/固有装備確定級！',
+      tag: '✦超レア',
+      tagColor: '#d99a1e',
+      spriteKey: rareSp.spriteKey,
+      speciesIds: [rareId],
+      advancesStep: true,
+    };
+  } else {
+    choice1 = {
+      id: nextChoiceId(),
+      kind: 'battle',
+      title: `魔物の群れへ進む（${normalLead.name}${normalPack.length > 1 ? `他${normalPack.length - 1}体` : ''}）`,
+      subtitle: '堅実に経験値・金貨・鍛冶石・仲間化を狙う',
+      tag: '通常戦',
+      tagColor: '#5c6a85',
+      spriteKey: normalLead.spriteKey,
+      speciesIds: normalPack,
+      advancesStep: true,
+    };
+  }
 
-  // Choice 2: Elite Battle OR Gold Chest (high reward!)
-  const isGoldChestRoll = Math.random() < 0.24 + (worldTier - 1) * 0.04;
-  const choice2: ExpeditionChoice = isGoldChestRoll
-    ? {
-        id: nextChoiceId(),
-        kind: 'gold_chest',
-        title: '輝く黄金の宝箱を開ける',
-        subtitle: '高レア装備2点＆大量ゴールドを戦闘無しで獲得！',
-        tag: '黄金箱',
-        tagColor: '#d99a1e',
-        spriteKey: 'gold_chest',
-        advancesStep: true,
-      }
-    : {
-        id: nextChoiceId(),
-        kind: 'elite',
-        title: `黄金オーラの強敵に挑む（★${eliteLead.name}他）`,
-        subtitle: `敵が強い代わりに装備2点＆高レア率UP（強敵率${Math.round(tierMods.eliteChance * 100)}%）`,
-        tag: '★強敵',
-        tagColor: '#c9781c',
-        spriteKey: eliteLead.spriteKey,
-        speciesIds: elitePack,
-        advancesStep: true,
-      };
+  // Slot 2: High-Risk / High-Reward (Elite Battle, Gold Chest, Suspicious Chest/Mimic, or Curse Altar!)
+  const riskRoll = Math.random();
+  let choice2: ExpeditionChoice;
+  if (riskRoll < 0.22) {
+    choice2 = {
+      id: nextChoiceId(),
+      kind: 'suspicious_chest',
+      title: '怪しく光る秘宝箱を開ける',
+      subtitle: '超豪華トレジャーか、倒せば高レア確定のミミック強襲か…！',
+      tag: '怪しい箱',
+      tagColor: '#b55632',
+      spriteKey: 'mimic',
+      speciesIds: ['mimic'],
+      advancesStep: true,
+    };
+  } else if (riskRoll < 0.4) {
+    choice2 = {
+      id: nextChoiceId(),
+      kind: 'curse_altar',
+      title: '呪いの祭壇に血を捧げる',
+      subtitle: 'HP-25%＆敵+18%強化と引換にMF+85%＆鍛冶石＋高レア装備！',
+      tag: '呪い祭壇',
+      tagColor: '#9e2e4f',
+      spriteKey: 'curse_altar',
+      advancesStep: true,
+    };
+  } else if (riskRoll < 0.56) {
+    choice2 = {
+      id: nextChoiceId(),
+      kind: 'gold_chest',
+      title: '輝く黄金の宝箱を開ける',
+      subtitle: '高レア装備2点＆鍛冶石＆大量ゴールドを戦闘無しで獲得！',
+      tag: '黄金箱',
+      tagColor: '#d99a1e',
+      spriteKey: 'gold_chest',
+      advancesStep: true,
+    };
+  } else {
+    choice2 = {
+      id: nextChoiceId(),
+      kind: 'elite',
+      title: `黄金オーラの強敵に挑む（★${eliteLead.name}他）`,
+      subtitle: `強敵の代わりに装備2点＆鍛冶石＆高レア率UP（強敵率${Math.round(tierMods.eliteChance * 100)}%）`,
+      tag: '★強敵',
+      tagColor: '#c9781c',
+      spriteKey: eliteLead.spriteKey,
+      speciesIds: elitePack,
+      advancesStep: true,
+    };
+  }
 
-  // Choice 3: Discovery / Utility (Chest, Healing Shrine, Power Shrine, Fortune Shrine, or Camp Rest)
-  const utilityRoll = Math.random();
+  // Slot 3: Discovery / Utility (Wandering Smith, Dungeon Merchant, Chest, Shrines!)
+  const utilRoll = Math.random();
   let choice3: ExpeditionChoice;
-  if (utilityRoll < 0.36) {
+  if (utilRoll < 0.16) {
+    choice3 = {
+      id: nextChoiceId(),
+      kind: 'wandering_smith',
+      title: '旅の鍛冶師に装備を磨いてもらう',
+      subtitle: 'パーティ装備中のアイテム1点をその場で無料＋1強化！',
+      tag: '無料強化',
+      tagColor: '#c96f28',
+      spriteKey: 'blacksmith',
+      advancesStep: true,
+    };
+  } else if (utilRoll < 0.34) {
+    const cost = Math.max(40, Math.round((55 + floor * 14) * Math.pow(1.9, worldTier - 1)));
+    choice3 = {
+      id: nextChoiceId(),
+      kind: 'merchant',
+      title: `迷宮の行商人（${cost.toLocaleString()}Gで秘宝袋）`,
+      subtitle: '鍛冶石大量＋レア以上装備1点のお買い得パック！（金貨不足時は無料回復）',
+      tag: '行商人',
+      tagColor: '#3a7ab5',
+      spriteKey: 'merchant',
+      merchantCostGold: cost,
+      advancesStep: true,
+    };
+  } else if (utilRoll < 0.56) {
     choice3 = {
       id: nextChoiceId(),
       kind: 'chest',
       title: '脇道の宝箱を調べる',
-      subtitle: '装備1点とゴールドを安全に回収して前進する',
+      subtitle: '装備1点・鍛冶石・ゴールドを安全に回収して前進する',
       tag: '宝箱',
       tagColor: '#b57b2a',
       spriteKey: 'chest',
       advancesStep: true,
     };
-  } else if (utilityRoll < 0.58) {
+  } else if (utilRoll < 0.72) {
     choice3 = {
       id: nextChoiceId(),
       kind: 'shrine_heal',
@@ -255,7 +329,7 @@ export function generateStepChoices(
       spriteKey: 'shrine',
       advancesStep: true,
     };
-  } else if (utilityRoll < 0.78) {
+  } else if (utilRoll < 0.86) {
     choice3 = {
       id: nextChoiceId(),
       kind: 'shrine_power',
@@ -300,37 +374,34 @@ export function createDungeonExpedition(floor: number, worldTier: number): Exped
   };
 }
 
-/**
- * Picks the smartest choice automatically when Auto-Advance is enabled.
- */
 export function pickAutoExpeditionChoice(
   exp: ExpeditionState,
   partyAvgHpRatio: number,
 ): ExpeditionChoice | null {
   if (exp.inVillage || exp.choices.length === 0) return null;
 
-  // Priority 1: Stairs when floor is cleared
   const stairs = exp.choices.find((c) => c.kind === 'stairs');
   if (stairs) return stairs;
 
-  // Priority 2: Heal / Rest if party HP is low
   if (partyAvgHpRatio < 0.6) {
     const heal = exp.choices.find((c) => c.kind === 'shrine_heal' || c.kind === 'rest');
     if (heal) return heal;
   }
 
-  // Priority 3: Boss on boss step
   const boss = exp.choices.find((c) => c.kind === 'boss');
   if (boss) return boss;
 
-  // Priority 4: Gold Chest -> Fortune/Power Shrine -> Elite -> Chest -> Battle
   const order: ExpeditionChoiceKind[] = [
+    'rare_encounter',
+    'wandering_smith',
     'gold_chest',
+    'suspicious_chest',
     'shrine_fortune',
     'shrine_power',
     'elite',
     'chest',
     'battle',
+    'merchant',
     'shrine_heal',
   ];
   for (const kind of order) {

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { getSpecies, ROLE_LABELS } from '../game/data/monsters';
 import { computeUnitStats, expForNextLevel } from '../game/stats';
+import { computePartySynergies } from '../game/synergy';
 import type { ActiveShrineBuffs, GameSave } from '../game/types';
 import { PixelIcon } from './PixelIcon';
 
@@ -23,6 +24,7 @@ export function PartyPanel({
     () => new Map(save.inventory.map((it) => [it.id, it])),
     [save.inventory],
   );
+  const synergies = useMemo(() => computePartySynergies(save), [save]);
 
   const ownedMonsters = useMemo(() => {
     return Object.values(save.roster)
@@ -48,6 +50,36 @@ export function PartyPanel({
           >
             泉で全回復
           </button>
+        )}
+      </div>
+
+      {/* Party Formation Synergies */}
+      <div className="rpg-card" style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <div style={{ fontSize: 10, fontFamily: 'var(--font-pixel)', color: '#ffe570' }}>
+          ✦ パーティ編成シナジー
+        </div>
+        {synergies.active.length > 0 ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {synergies.active.map((syn) => (
+              <span
+                key={syn.id}
+                style={{
+                  fontSize: 9.5,
+                  padding: '2px 5px',
+                  borderRadius: 4,
+                  background: 'rgba(15, 13, 22, 0.72)',
+                  border: `1px solid ${syn.color}`,
+                  color: '#fff7e0',
+                }}
+              >
+                <strong style={{ color: syn.color }}>{syn.name}</strong> {syn.desc}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div className="muted-text">
+            同属性2体以上や「前衛＋火力＋支援」バランス編成で強力なパーティバフが発動！
+          </div>
         )}
       </div>
 

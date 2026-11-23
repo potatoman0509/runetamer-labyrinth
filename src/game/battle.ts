@@ -1,8 +1,9 @@
 import { getBiomeForFloor } from './data/biomes';
-import { generateEquipment, RARITY_META } from './data/equipment';
+import { generateEquipment, getSalvageValue, RARITY_META } from './data/equipment';
 import { getSpecies } from './data/monsters';
 import { createUnitInstance } from './save';
 import { computeUnitStats, expForNextLevel, getPartyAggregatedLootBonuses } from './stats';
+import { computePartySynergies } from './synergy';
 import type {
   ActiveShrineBuffs,
   AutoSellThreshold,
@@ -41,6 +42,7 @@ export function createBattleState(
   const biome = getBiomeForFloor(floor);
   const tierMods = getActiveTierModifiers(save.worldTier);
   const invMap = new Map(save.inventory.map((it) => [it.id, it]));
+  const syn = computePartySynergies(save);
 
   const allies: BattleUnitState[] = save.partyIds
     .map((id) => save.roster[id])
@@ -48,11 +50,16 @@ export function createBattleState(
     .map((u) => {
       const sp = getSpecies(u.speciesId);
       const st = computeUnitStats(u, save, shrineBuffs, invMap);
+      const activeSetIds4pc = st.activeSets
+        .filter((s) => s.count >= 4)
+        .map((s) => s.setId);
       const hp = Math.min(st.maxHp, Math.max(1, u.hp));
       const mp = Math.min(st.maxMp, Math.max(0, u.mp));
-      const startShield = st.uniqueEffects.includes('golden_aegis')
-        ? Math.round(st.maxHp * 0.25)
-        : 0;
+
+      let startShieldPct = syn.startShieldPct;
+      if (st.uniqueEffects.includes('golden_aegis')) startShieldPct += 25;
+      if (activeSetIds4pc.includes('ancient_rune')) startShieldPct += 25;
+
       const startSpd = st.uniqueEffects.includes('chronos_hourglass')
         ? Math.round(st.spd * 1.35)
         : st.spd;
@@ -70,7 +77,7 @@ export function createBattleState(
         maxHp: st.maxHp,
         mp,
         maxMp: st.maxMp,
-        shield: startShield,
+        shield: Math.min(Math.round(st.maxHp * 0.7), Math.round((st.maxHp * startShieldPct) / 100)),
         atk: st.atk,
         mag: st.mag,
         def: st.def,
@@ -80,7 +87,9 @@ export function createBattleState(
         lifesteal: st.lifesteal,
         doubleHit: st.doubleHit,
         regenPct: st.regenPct,
+        damageTakenMult: st.damageTakenMult,
         uniqueEffects: st.uniqueEffects,
+        activeSetIds4pc,
         defending: false,
         atkBuffTurns: 0,
         defBuffTurns: 0,
@@ -91,21 +100,34 @@ export function createBattleState(
       };
     });
 
+  // Team-wide battle-start uniques (Guardian Vow Rune)
+  const vowCount = allies.filter((a) => a.uniqueEffects.includes('guardian_vow_rune')).length;
+  if (vowCount > 0) {
+    for (const a of allies) {
+      a.shield = Math.min(
+        Math.round(a.maxHp * 0.75),
+        a.shield + Math.round(a.maxHp * 0.12 * vowCount),
+      );
+    }
+  }
+
   const isBossBattle = entity.kind === 'boss';
   const isEliteBattle = entity.kind === 'elite';
-  const speciesIds = entity.speciesIds && entity.speciesIds.length > 0 ? entity.speciesIds : ['leaf_slime'];
+  const isRareBattle = entity.kind === 'rare_enemy';
+  const speciesIds =
+    entity.speciesIds && entity.speciesIds.length > 0 ? entity.speciesIds : ['leaf_slime'];
 
-  // Enemy floor scaling curve: smooth early game, thrilling deep endless + World Tier curve
   const floorLevel = Math.max(1, Math.round(floor * 1.15 + (save.worldTier - 1) * 18));
   const floorMult = Math.pow(1.095, Math.max(0, floor - 1));
+  const curseMult = 1 + (shrineBuffs?.curseEnemyBonus ?? 0);
 
   const enemies: BattleUnitState[] = speciesIds.map((spId, idx) => {
     const sp = getSpecies(spId);
     const isBossUnit = sp.isBoss || (isBossBattle && idx === 0);
-    const isEliteUnit = !isBossUnit && isEliteBattle && idx === 0;
+    const isEliteUnit = !isBossUnit && (isEliteBattle || isRareBattle) && idx === 0;
 
-    const hpRoleMult = isBossUnit ? 2.65 : isEliteUnit ? 1.55 : 0.88;
-    const atkRoleMult = isBossUnit ? 1.32 : isEliteUnit ? 1.18 : 0.92;
+    const hpRoleMult = isBossUnit ? 2.65 : isRareBattle ? 1.75 : isEliteUnit ? 1.55 : 0.88;
+    const atkRoleMult = isBossUnit ? 1.32 : isRareBattle ? 1.2 : isEliteUnit ? 1.18 : 0.92;
     const defRoleMult = isBossUnit ? 1.22 : isEliteUnit ? 1.12 : 0.85;
 
     const maxHp = Math.max(
@@ -114,7 +136,8 @@ export function createBattleState(
         (sp.baseStats.hp * 0.72 + sp.growth.hp * (floor - 1) * 0.65) *
           floorMult *
           hpRoleMult *
-          tierMods.enemyHpMult,
+          tierMods.enemyHpMult *
+          curseMult,
       ),
     );
     const atk = Math.max(
@@ -123,7 +146,8 @@ export function createBattleState(
         (sp.baseStats.atk * 0.68 + sp.growth.atk * (floor - 1) * 0.52) *
           Math.pow(1.075, Math.max(0, floor - 1)) *
           atkRoleMult *
-          tierMods.enemyAtkMult,
+          tierMods.enemyAtkMult *
+          curseMult,
       ),
     );
     const mag = Math.max(
@@ -132,7 +156,8 @@ export function createBattleState(
         (sp.baseStats.mag * 0.68 + sp.growth.mag * (floor - 1) * 0.52) *
           Math.pow(1.075, Math.max(0, floor - 1)) *
           atkRoleMult *
-          tierMods.enemyAtkMult,
+          tierMods.enemyAtkMult *
+          curseMult,
       ),
     );
     const def = Math.max(
@@ -153,11 +178,11 @@ export function createBattleState(
       uid: `enemy_${idx}_${spId}`,
       isAlly: false,
       speciesId: spId,
-      name: isBossUnit ? `${sp.name}` : isEliteUnit ? `★${sp.name}` : sp.name,
+      name: isBossUnit ? `${sp.name}` : isRareBattle ? `✦${sp.name}` : isEliteUnit ? `★${sp.name}` : sp.name,
       spriteKey: sp.spriteKey,
       level: floorLevel,
       isBoss: isBossUnit,
-      isElite: isEliteUnit,
+      isElite: isEliteUnit || isRareBattle,
       hp: maxHp,
       maxHp,
       mp: 999,
@@ -172,7 +197,9 @@ export function createBattleState(
       lifesteal: 0,
       doubleHit: 0,
       regenPct: 0,
+      damageTakenMult: 1.0,
       uniqueEffects: [],
+      activeSetIds4pc: [],
       defending: false,
       atkBuffTurns: 0,
       defBuffTurns: 0,
@@ -191,6 +218,7 @@ export function createBattleState(
     entityId: entity.id,
     isBossBattle,
     isEliteBattle,
+    isRareBattle,
     turn: 1,
     allies,
     enemies,
@@ -200,9 +228,11 @@ export function createBattleState(
     logs: [
       isBossBattle
         ? `階層ボス「${enemies.find((e) => e.isBoss)?.name ?? entity.name}」が立ちはだかった！`
-        : isEliteBattle
-          ? `黄金のオーラを纏う強敵の群れが現れた！`
-          : `${enemies[0]?.name ?? '魔物'}たちが現れた！`,
+        : isRareBattle
+          ? `希少な魔物「${enemies[0]?.name}」と遭遇！大量の鍛冶石＆秘宝のチャンス！`
+          : isEliteBattle
+            ? `黄金のオーラを纏う強敵の群れが現れた！`
+            : `${enemies[0]?.name ?? '魔物'}たちが現れた！`,
     ],
     floatingTexts: [],
     vfx: [],
@@ -257,7 +287,7 @@ function applyHealing(
 
   if (allowOverhealShield && actual > missing) {
     const overflow = Math.min(Math.round(target.maxHp * 0.4), actual - missing);
-    target.shield = Math.min(Math.round(target.maxHp * 0.6), target.shield + overflow);
+    target.shield = Math.min(Math.round(target.maxHp * 0.65), target.shield + overflow);
   }
 
   state.floatingTexts.push({
@@ -285,12 +315,11 @@ function applyDamage(
   isCrit: boolean,
 ): number {
   if (defender.hp <= 0) return 0;
-  let dmg = Math.max(1, Math.round(rawDamage));
+  let dmg = Math.max(1, Math.round(rawDamage * defender.damageTakenMult));
   if (defender.defending) {
     dmg = Math.max(1, Math.round(dmg * 0.55));
   }
 
-  // Absorb with shield first
   let absorbed = 0;
   if (defender.shield > 0) {
     absorbed = Math.min(defender.shield, dmg);
@@ -298,10 +327,10 @@ function applyDamage(
     dmg -= absorbed;
   }
 
+  const wasAlive = defender.hp > 0;
   defender.hp = Math.max(0, defender.hp - dmg);
   defender.hurtTimer = 280;
 
-  // Phoenix Ash Rune death prevention
   if (
     defender.hp === 0 &&
     defender.uniqueEffects.includes('phoenix_ash_rune') &&
@@ -320,6 +349,16 @@ function applyDamage(
     });
   }
 
+  // Vampire Scythe on-kill heal
+  if (wasAlive && defender.hp === 0 && attacker.uniqueEffects.includes('vampire_scythe') && attacker.hp > 0) {
+    applyHealing(
+      state,
+      attacker,
+      Math.round(attacker.maxHp * 0.25),
+      attacker.uniqueEffects.includes('crimson_chalice'),
+    );
+  }
+
   state.floatingTexts.push({
     id: nextEffectId(),
     targetUid: defender.uid,
@@ -335,7 +374,6 @@ function applyDamage(
     createdAt: Date.now(),
   });
 
-  // Lifesteal
   const totalDealt = dmg + absorbed;
   if (attacker.lifesteal > 0 && attacker.hp > 0 && totalDealt > 0) {
     const drain = Math.max(1, Math.round((totalDealt * attacker.lifesteal) / 100));
@@ -347,7 +385,6 @@ function applyDamage(
     );
   }
 
-  // Dragonscale Thorns reflection
   if (
     defender.uniqueEffects.includes('dragonscale_thorns') &&
     attacker.hp > 0 &&
@@ -373,6 +410,7 @@ function calcDamageNumber(
   power: number,
   statScale: 'atk' | 'mag' | 'def' | 'hybrid',
   isSkill: boolean,
+  isAoE: boolean,
   critBonus = 0,
 ): { amount: number; isCrit: boolean } {
   const atkBuff = attacker.atkBuffTurns > 0 ? 1.3 : 1;
@@ -388,10 +426,25 @@ function calcDamageNumber(
   const mitigation = 100 / (100 + defense * 1.15);
   let dmg = offense * power * (0.93 + Math.random() * 0.14) * mitigation;
 
-  // Unique modifiers
+  // Unique & 4pc Set damage modifiers
   if (attacker.uniqueEffects.includes('berserker_axe')) {
     const missingPct = Math.max(0, (1 - attacker.hp / attacker.maxHp) * 100);
     dmg *= 1 + missingPct * 0.012;
+  }
+  if (attacker.uniqueEffects.includes('giant_slayer_blade') && (defender.isBoss || defender.isElite)) {
+    dmg *= 1.45;
+  }
+  if (isSkill && isAoE && attacker.uniqueEffects.includes('meteor_scepter')) {
+    dmg *= 1.35;
+  }
+  if (attacker.uniqueEffects.includes('blazing_cloak') && attacker.hp / attacker.maxHp >= 0.5) {
+    dmg *= 1.22;
+  }
+  if (attacker.uniqueEffects.includes('titan_gauntlet_relic') && statScale === 'atk') {
+    dmg *= 1.3;
+  }
+  if (attacker.uniqueEffects.includes('overdrive_rune')) {
+    dmg *= 1.25;
   }
   if (isSkill && attacker.uniqueEffects.includes('chronos_hourglass')) {
     dmg *= 1.2;
@@ -403,8 +456,19 @@ function calcDamageNumber(
   ) {
     dmg *= 1.35;
   }
+  if (isSkill && attacker.activeSetIds4pc.includes('astral_mage')) {
+    dmg *= 1.28;
+  }
+  if (statScale === 'atk' && attacker.activeSetIds4pc.includes('lunar_blade')) {
+    dmg *= 1.2;
+  }
 
-  const critChance = Math.min(98, attacker.critRate + critBonus);
+  let extraCrit = critBonus;
+  if (isSkill && isAoE && attacker.uniqueEffects.includes('meteor_scepter')) {
+    extraCrit += 12;
+  }
+
+  const critChance = Math.min(98, attacker.critRate + extraCrit);
   const isCrit = Math.random() * 100 < critChance;
   if (isCrit) {
     dmg *= attacker.critDmg / 100;
@@ -418,13 +482,20 @@ function startUnitTurnPassives(state: BattleState, actor: BattleUnitState): void
   if (actor.atkBuffTurns > 0) actor.atkBuffTurns -= 1;
   if (actor.defBuffTurns > 0) actor.defBuffTurns -= 1;
 
-  // Natural MP recovery per turn
-  const mpGain = actor.uniqueEffects.includes('sage_star_rune') ? 15 : 4;
   if (actor.isAlly) {
+    let mpGain = 4;
+    if (actor.uniqueEffects.includes('sage_star_rune')) mpGain += 12;
+    if (actor.uniqueEffects.includes('starlight_mantle')) mpGain += 8;
+    if (actor.activeSetIds4pc.includes('astral_mage')) mpGain += 8;
     actor.mp = Math.min(actor.maxMp, actor.mp + mpGain);
   }
 
-  // HP Regen (passive + affixes + World Tree Armor)
+  // Overdrive Rune self-burn (non-lethal, leaves at least 1 HP)
+  if (actor.uniqueEffects.includes('overdrive_rune') && actor.hp > 1) {
+    const cost = Math.max(1, Math.round(actor.maxHp * 0.05));
+    actor.hp = Math.max(1, actor.hp - cost);
+  }
+
   let totalRegenPct = actor.regenPct;
   if (actor.uniqueEffects.includes('world_tree_armor')) {
     totalRegenPct += 10;
@@ -455,7 +526,6 @@ export function chooseAutoAction(
     [...livingEnemies].sort((a, b) => a.hp - b.hp)[0]!;
 
   if (tactic === 'conserve') {
-    // Only use healing if an ally is below 55% HP
     const injured = livingAllies.some((a) => a.hp / a.maxHp < 0.55);
     if (injured) {
       for (const idx of [0, 1] as const) {
@@ -468,7 +538,6 @@ export function chooseAutoAction(
     return { type: 'attack', targetUid: targetEnemy.uid };
   }
 
-  // Check urgent heal
   const avgHpRatio =
     livingAllies.reduce((s, a) => s + a.hp / a.maxHp, 0) / Math.max(1, livingAllies.length);
   const anyoneLow = livingAllies.some((a) => a.hp / a.maxHp < 0.62);
@@ -480,7 +549,6 @@ export function chooseAutoAction(
     }
   }
 
-  // Shield or Buff if allies lack buffs/shield
   for (const idx of [0, 1] as const) {
     const sk = actor.skills[idx];
     const cost = getSkillMpCost(actor, sk);
@@ -500,15 +568,14 @@ export function chooseAutoAction(
     }
   }
 
-  // Offensive skills
   const canUseOffensive =
     tactic === 'allout' ||
     state.isBossBattle ||
     state.isEliteBattle ||
+    state.isRareBattle ||
     actor.mp >= actor.maxMp * 0.4;
 
   if (canUseOffensive) {
-    // Prefer AoE when >= 2 enemies, single-target nuke otherwise
     const candidates = ([0, 1] as const)
       .map((idx) => ({ idx, sk: actor.skills[idx], cost: getSkillMpCost(actor, actor.skills[idx]) }))
       .filter((c) => (c.sk.kind === 'damage' || c.sk.kind === 'drain') && actor.mp >= c.cost);
@@ -536,7 +603,6 @@ function chooseEnemyAction(state: BattleState, actor: BattleUnitState): PlayerAc
   const livingAllies = state.allies.filter((a) => a.hp > 0);
   if (livingAllies.length === 0) return { type: 'attack' };
 
-  // Prefer targeting tanks slightly more often
   const target = livingAllies[Math.floor(Math.random() * livingAllies.length)]!;
   const skillChance = actor.isBoss ? 0.55 : actor.isElite ? 0.42 : 0.28;
 
@@ -556,7 +622,6 @@ export function executeTurnAction(
   prev: BattleState,
   action: PlayerActionCommand,
 ): BattleState {
-  // Shallow-clone state & units cleanly for immutable React updates
   const state: BattleState = {
     ...prev,
     allies: prev.allies.map((u) => ({ ...u, lungeTimer: 0, hurtTimer: 0 })),
@@ -610,31 +675,28 @@ export function executeTurnAction(
     const target =
       livingFoes.find((f) => f.uid === action.targetUid) ?? livingFoes[0];
     if (target) {
-      const { amount, isCrit } = calcDamageNumber(actor, target, 1.0, 'atk', false);
+      const { amount, isCrit } = calcDamageNumber(actor, target, 1.0, 'atk', false, false);
       const dealt = applyDamage(state, actor, target, amount, 'physical', isCrit);
       state.logs.push(
         `${actor.name}の攻撃！${target.name}に${dealt}ダメージ${isCrit ? '（会心！）' : ''}`,
       );
 
-      // Sunblade team heal
       if (actor.uniqueEffects.includes('sunblade_heal')) {
         for (const fr of livingFriends) {
           applyHealing(state, fr, Math.round(fr.maxHp * 0.04), false);
         }
       }
 
-      // Echo Crit Rune guaranteed followup
       if (isCrit && actor.uniqueEffects.includes('echo_crit_rune') && target.hp > 0) {
         const echoDmg = Math.max(1, Math.round(amount * 0.5));
         const eDealt = applyDamage(state, actor, target, echoDmg, 'star', false);
         state.logs.push(`連撃ルーン発動！さらに${eDealt}追撃！`);
       }
 
-      // Double hit / Twin Fang extra strike
       const extraChance =
         actor.doubleHit + (actor.uniqueEffects.includes('twin_fang_strike') ? 35 : 0);
       if (target.hp > 0 && Math.random() * 100 < extraChance) {
-        const extra = calcDamageNumber(actor, target, 0.72, 'atk', false);
+        const extra = calcDamageNumber(actor, target, 0.72, 'atk', false, false);
         const xDealt = applyDamage(state, actor, target, extra.amount, 'physical', extra.isCrit);
         state.logs.push(`${actor.name}の追撃！${target.name}に${xDealt}ダメージ！`);
       }
@@ -643,7 +705,6 @@ export function executeTurnAction(
     const skill = actor.skills[action.skillIndex];
     const cost = actor.isAlly ? getSkillMpCost(actor, skill) : 0;
     if (actor.isAlly && actor.mp < cost) {
-      // Fallback to attack if out of MP
       return executeTurnAction(prev, { type: 'attack', targetUid: action.targetUid });
     }
     if (actor.isAlly) {
@@ -717,11 +778,10 @@ export function executeTurnAction(
       }
       state.logs.push(`${actor.name}の「${skill.name}」！味方全体が強化された！`);
     } else {
-      // Damage or Drain skill
-      const targets =
-        skill.target === 'all_enemies'
-          ? livingFoes
-          : [livingFoes.find((f) => f.uid === action.targetUid) ?? livingFoes[0]!].filter(Boolean);
+      const isAoE = skill.target === 'all_enemies';
+      const targets = isAoE
+        ? livingFoes
+        : [livingFoes.find((f) => f.uid === action.targetUid) ?? livingFoes[0]!].filter(Boolean);
       const hits = skill.hits ?? 1;
       let totalDmg = 0;
       let hadCrit = false;
@@ -735,6 +795,7 @@ export function executeTurnAction(
             skill.power,
             skill.statScale,
             true,
+            isAoE,
             skill.critBonus ?? 0,
           );
           if (isCrit) hadCrit = true;
@@ -769,7 +830,6 @@ export function executeTurnAction(
         }
       }
 
-      // Twin Fang trigger on physical skills
       if (
         actor.uniqueEffects.includes('twin_fang_strike') &&
         skill.statScale === 'atk' &&
@@ -777,7 +837,7 @@ export function executeTurnAction(
         targets[0].hp > 0 &&
         Math.random() < 0.35
       ) {
-        const extra = calcDamageNumber(actor, targets[0], 0.75, 'atk', false);
+        const extra = calcDamageNumber(actor, targets[0], 0.75, 'atk', false, false);
         const xDealt = applyDamage(state, actor, targets[0], extra.amount, 'physical', extra.isCrit);
         totalDmg += xDealt;
       }
@@ -788,7 +848,6 @@ export function executeTurnAction(
     }
   }
 
-  // Check Victory or Defeat
   if (state.enemies.every((e) => e.hp <= 0)) {
     state.phase = 'victory';
     state.activeUid = null;
@@ -811,7 +870,6 @@ function advanceToNextActor(state: BattleState): void {
     return;
   }
 
-  // Find next alive actor in queue
   let safety = 0;
   while (safety < 20) {
     safety += 1;
@@ -848,10 +906,6 @@ export function stepEnemyOrAutoTurn(
   return state;
 }
 
-/**
- * Applies victory rewards to the save state immutably and returns both the updated GameSave
- * and a detailed BattleReward summary for the victory UI!
- */
 export function resolveBattleVictory(
   save: GameSave,
   battle: BattleState,
@@ -861,7 +915,13 @@ export function resolveBattleVictory(
   const partyBonuses = getPartyAggregatedLootBonuses(save, shrineBuffs);
 
   const floorScale = 1 + (battle.floor - 1) * 0.32 + Math.pow(battle.floor, 1.28) * 0.08;
-  const battleTypeMult = battle.isBossBattle ? 3.2 : battle.isEliteBattle ? 1.85 : 1.0;
+  const battleTypeMult = battle.isBossBattle
+    ? 3.2
+    : battle.isRareBattle
+      ? 2.8
+      : battle.isEliteBattle
+        ? 1.85
+        : 1.0;
 
   const exp = Math.max(
     18,
@@ -881,16 +941,32 @@ export function resolveBattleVictory(
         battle.enemies.length *
         floorScale *
         battleTypeMult *
+        (battle.isRareBattle ? 2.2 : 1) *
         tierMods.goldMult *
         (1 + partyBonuses.goldFind / 100),
     ),
   );
 
-  // Clone save pieces
+  // Forge Stones earned directly from battle!
+  const baseStones = battle.isRareBattle
+    ? 14
+    : battle.isBossBattle
+      ? 9
+      : battle.isEliteBattle
+        ? 4
+        : 1;
+  const forgeStones = Math.max(
+    1,
+    Math.round(
+      (baseStones + Math.floor(battle.floor / 5)) *
+        (1 + (battle.worldTier - 1) * 0.45) *
+        (1 + partyBonuses.stoneFind / 100),
+    ),
+  );
+
   const roster = { ...save.roster };
   const leveledUpIds: string[] = [];
 
-  // Sync post-battle HP/MP & apply EXP to active party
   for (const allyState of battle.allies) {
     const unitId = allyState.speciesId;
     const existing = roster[unitId];
@@ -915,56 +991,62 @@ export function resolveBattleVictory(
     roster[unitId] = updated;
   }
 
-  // Generate Loot Drops!
   const dropCount = battle.isBossBattle
     ? 3
-    : battle.isEliteBattle
+    : battle.isRareBattle
       ? 2
-      : Math.random() < 0.72
-        ? 1
-        : 0;
+      : battle.isEliteBattle
+        ? 2
+        : Math.random() < 0.74
+          ? 1
+          : 0;
 
   const keptItems: EquipmentItem[] = [];
-  let autoSoldCount = 0;
+  let autoProcessedCount = 0;
   let autoSoldGold = 0;
+  let autoSalvagedStones = 0;
   let mythicsFound = 0;
   const discoveredUniques = new Set(save.discoveredUniques);
+  const mode = save.settings.autoLootMode;
 
   for (let i = 0; i < dropCount; i += 1) {
     const source = battle.isBossBattle
       ? 'boss'
-      : battle.isEliteBattle
-        ? 'elite'
-        : 'normal';
+      : battle.isRareBattle
+        ? 'rare_enemy'
+        : battle.isEliteBattle
+          ? 'elite'
+          : 'normal';
     const item = generateEquipment(
       battle.floor,
       battle.worldTier,
-      partyBonuses.magicFind,
+      partyBonuses.magicFind + (battle.isRareBattle ? 50 : 0),
       source,
     );
     if (item.rarity === 'mythic') mythicsFound += 1;
     if (item.uniqueId) discoveredUniques.add(item.uniqueId);
 
     if (!item.uniqueId && shouldAutoSell(item.rarity, save.settings.autoSell)) {
-      autoSoldCount += 1;
-      autoSoldGold += item.sellValue;
+      autoProcessedCount += 1;
+      if (mode === 'salvage') {
+        autoSalvagedStones += getSalvageValue(item);
+      } else {
+        autoSoldGold += item.sellValue;
+      }
     } else {
       keptItems.push(item);
     }
   }
 
-  // Monster Recruitment rolls! (Simple, rewarding, never wasted!)
   const discoveredMonsters = new Set(save.discoveredMonsters);
   const recruited: BattleReward['recruited'] = [];
   const partyIds = [...save.partyIds];
   const heroLevel = roster.hero?.level ?? 1;
 
-  // Deduplicate species in the defeated enemy pack so max 1 recruit roll per species per fight
   const uniqueEnemySpecies = Array.from(new Set(battle.enemies.map((e) => e.speciesId)));
   for (const spId of uniqueEnemySpecies) {
     const sp = getSpecies(spId);
     const isAlreadyOwned = Boolean(roster[spId]);
-    // Generous recruit rate for undiscovered monsters so collection feels awesome!
     const chance = isAlreadyOwned ? sp.recruitRate * 0.45 : Math.min(0.85, sp.recruitRate * 1.45);
 
     if (Math.random() < chance) {
@@ -986,7 +1068,6 @@ export function resolveBattleVictory(
     }
   }
 
-  // Check World Tier Unlock (Beating Floor 20+ Boss on your current highest unlocked tier!)
   let maxUnlockedTier = save.maxUnlockedTier;
   let worldTierUnlocked: number | null = null;
   if (
@@ -1011,6 +1092,7 @@ export function resolveBattleVictory(
   const nextSave: GameSave = {
     ...save,
     gold: save.gold + gold + autoSoldGold,
+    forgeStones: save.forgeStones + forgeStones + autoSalvagedStones,
     maxUnlockedTier,
     highestFloorByTier: nextHighestByTier,
     partyIds,
@@ -1028,7 +1110,6 @@ export function resolveBattleVictory(
     },
   };
 
-  // Full heal leveled-up units & newly joined units to their new max stats
   for (const id of [...leveledUpIds, ...recruited.filter((r) => r.isNew).map((r) => r.speciesId)]) {
     const u = nextSave.roster[id];
     if (u) {
@@ -1046,9 +1127,12 @@ export function resolveBattleVictory(
     reward: {
       exp,
       gold,
+      forgeStones,
       items: keptItems,
-      autoSoldCount,
+      autoProcessedCount,
+      autoProcessedMode: mode,
       autoSoldGold,
+      autoSalvagedStones,
       recruited,
       leveledUpIds,
       worldTierUnlocked,

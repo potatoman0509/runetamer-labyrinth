@@ -4,6 +4,7 @@ import type {
   EquipmentItem,
   EquipSlot,
   Rarity,
+  SetId,
   UniqueEffectId,
 } from '../types';
 
@@ -17,6 +18,7 @@ export interface RarityMeta {
   powerMult: number;
   affixCount: number;
   sellMult: number;
+  salvageBase: number;
   rank: number;
 }
 
@@ -40,6 +42,7 @@ export const RARITY_META: Record<Rarity, RarityMeta> = {
     powerMult: 1.0,
     affixCount: 0,
     sellMult: 1,
+    salvageBase: 1,
     rank: 0,
   },
   uncommon: {
@@ -52,6 +55,7 @@ export const RARITY_META: Record<Rarity, RarityMeta> = {
     powerMult: 1.22,
     affixCount: 1,
     sellMult: 2,
+    salvageBase: 2,
     rank: 1,
   },
   rare: {
@@ -64,6 +68,7 @@ export const RARITY_META: Record<Rarity, RarityMeta> = {
     powerMult: 1.5,
     affixCount: 2,
     sellMult: 4,
+    salvageBase: 4,
     rank: 2,
   },
   epic: {
@@ -76,6 +81,7 @@ export const RARITY_META: Record<Rarity, RarityMeta> = {
     powerMult: 1.9,
     affixCount: 3,
     sellMult: 8,
+    salvageBase: 8,
     rank: 3,
   },
   legendary: {
@@ -88,6 +94,7 @@ export const RARITY_META: Record<Rarity, RarityMeta> = {
     powerMult: 2.45,
     affixCount: 4,
     sellMult: 18,
+    salvageBase: 16,
     rank: 4,
   },
   mythic: {
@@ -100,6 +107,7 @@ export const RARITY_META: Record<Rarity, RarityMeta> = {
     powerMult: 3.25,
     affixCount: 5,
     sellMult: 40,
+    salvageBase: 34,
     rank: 5,
   },
 };
@@ -110,6 +118,64 @@ export const SLOT_LABELS: Record<EquipSlot, string> = {
   relic: '遺物',
   rune: 'ルーン',
 };
+
+// ===== 6 EQUIPMENT SETS (2pc & 4pc bonuses) =====
+export interface SetDef {
+  id: SetId;
+  name: string;
+  color: string;
+  bonus2Desc: string;
+  bonus4Desc: string;
+}
+
+export const SET_LIST: SetDef[] = [
+  {
+    id: 'forest_guard',
+    name: '森の守護',
+    color: '#63d471',
+    bonus2Desc: '最大HP+18%',
+    bonus4Desc: '毎T再生+8%＆被ダメージ-12%',
+  },
+  {
+    id: 'ancient_rune',
+    name: '古代ルーン',
+    color: '#69c9e8',
+    bonus2Desc: '防御+22%',
+    bonus4Desc: '開幕バリア+25%＆防御の30%を攻魔へ加算',
+  },
+  {
+    id: 'crimson_fury',
+    name: '紅蓮の狂戦',
+    color: '#ff785a',
+    bonus2Desc: '攻撃+20%',
+    bonus4Desc: '会心倍率+50%＆吸血+10%',
+  },
+  {
+    id: 'astral_mage',
+    name: '星屑の魔導',
+    color: '#7da8ff',
+    bonus2Desc: '魔力+22%',
+    bonus4Desc: 'スキル威力+28%＆毎T MP+8',
+  },
+  {
+    id: 'golden_greed',
+    name: '黄金トレハン',
+    color: '#ffd65c',
+    bonus2Desc: 'トレハン+35%',
+    bonus4Desc: '金貨+45%・EXP+35%・鍛冶石獲得+40%',
+  },
+  {
+    id: 'lunar_blade',
+    name: '銀月の連撃',
+    color: '#d4b8ff',
+    bonus2Desc: '素早さ+10＆会心率+10%',
+    bonus4Desc: '追撃率+22%＆物理攻撃+20%',
+  },
+];
+
+export const SET_MAP: Record<SetId, SetDef> = Object.fromEntries(
+  SET_LIST.map((s) => [s.id, s]),
+) as Record<SetId, SetDef>;
 
 interface BaseTemplate {
   name: string;
@@ -187,7 +253,9 @@ export interface UniqueTemplate {
   guaranteedAffix: { stat: AffixStat; label: string; value: number; isPercent: boolean };
 }
 
+// ===== 26 HANDCRAFTED UNIQUE EQUIPMENT TEMPLATES =====
 export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
+  // Weapons (8)
   {
     id: 'sunblade_heal',
     name: '陽だまりの聖剣',
@@ -229,6 +297,48 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     guaranteedAffix: { stat: 'critDmg', label: '会心倍率', value: 35, isPercent: true },
   },
   {
+    id: 'giant_slayer_blade',
+    name: '巨神殺しの大剣',
+    slot: 'weapon',
+    iconKey: 'sword',
+    minTier: 1,
+    desc: 'ボス・強敵への与ダメージ+45%',
+    weights: { atk: 1.5, def: 0.35 },
+    guaranteedAffix: { stat: 'atkPct', label: '攻撃', value: 24, isPercent: true },
+  },
+  {
+    id: 'meteor_scepter',
+    name: '星降りの魔笏',
+    slot: 'weapon',
+    iconKey: 'staff',
+    minTier: 1,
+    desc: '全体攻撃スキルの威力+35%＆会心率+12%',
+    weights: { mag: 1.55, spd: 0.45 },
+    guaranteedAffix: { stat: 'critRate', label: '会心率', value: 12, isPercent: true },
+  },
+  {
+    id: 'vampire_scythe',
+    name: '紅月の吸血鎌',
+    slot: 'weapon',
+    iconKey: 'axe',
+    minTier: 1,
+    desc: '吸血+20%＆敵を倒すたびHP25%回復',
+    weights: { atk: 1.4, mag: 0.45 },
+    guaranteedAffix: { stat: 'lifesteal', label: '吸血', value: 20, isPercent: true },
+  },
+  {
+    id: 'storm_bowblade',
+    name: '迅雷の双刃剣',
+    slot: 'weapon',
+    iconKey: 'dagger',
+    minTier: 2,
+    desc: '素早さの120%を攻撃力に加算（Tier II+解放）',
+    weights: { atk: 1.1, spd: 1.0 },
+    guaranteedAffix: { stat: 'spdFlat', label: '素早さ', value: 14, isPercent: false },
+  },
+
+  // Armor (6)
+  {
     id: 'world_tree_armor',
     name: '世界樹の翠鎧',
     slot: 'armor',
@@ -258,6 +368,38 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     weights: { def: 1.45, atk: 0.45, hp: 2.6 },
     guaranteedAffix: { stat: 'atkPct', label: '攻撃', value: 14, isPercent: true },
   },
+  {
+    id: 'starlight_mantle',
+    name: '星光の外套',
+    slot: 'armor',
+    iconKey: 'robe',
+    minTier: 1,
+    desc: '被ダメージ-15%＆毎ターンMP+8回復',
+    weights: { def: 1.0, mag: 0.85, hp: 2.4 },
+    guaranteedAffix: { stat: 'magPct', label: '魔力', value: 18, isPercent: true },
+  },
+  {
+    id: 'mithril_fortress',
+    name: '白銀要塞の重鎧',
+    slot: 'armor',
+    iconKey: 'plate',
+    minTier: 1,
+    desc: '防御力の35%を攻撃力に加算＆被ダメ-10%',
+    weights: { def: 1.7, hp: 3.2 },
+    guaranteedAffix: { stat: 'defPct', label: '防御', value: 28, isPercent: true },
+  },
+  {
+    id: 'blazing_cloak',
+    name: '不死鳥の炎マント',
+    slot: 'armor',
+    iconKey: 'robe',
+    minTier: 2,
+    desc: 'HP50%以上で与ダメ+22%＆毎T再生+6%（Tier II+）',
+    weights: { def: 1.15, atk: 0.55, mag: 0.55, hp: 2.6 },
+    guaranteedAffix: { stat: 'hpPct', label: '最大HP', value: 24, isPercent: true },
+  },
+
+  // Relics (7)
   {
     id: 'clover_luck',
     name: '幸運の四葉遺物',
@@ -294,10 +436,42 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'relic',
     iconKey: 'compass',
     minTier: 2,
-    desc: '自身の会心率+15%＆会心倍率+45%（Tier II+解放）',
+    desc: '自身の会心率+15%＆会心倍率+45%（Tier II+）',
     weights: { atk: 0.75, mag: 0.75, spd: 0.6 },
     guaranteedAffix: { stat: 'critRate', label: '会心率', value: 15, isPercent: true },
   },
+  {
+    id: 'forge_heart_amulet',
+    name: '鍛冶神の炉心護符',
+    slot: 'relic',
+    iconKey: 'amulet',
+    minTier: 1,
+    desc: '鍛冶石の獲得量+60%＆攻撃/魔力+15%',
+    weights: { atk: 0.6, mag: 0.6, hp: 2.4 },
+    guaranteedAffix: { stat: 'magicFind', label: 'トレハン', value: 30, isPercent: true },
+  },
+  {
+    id: 'mimic_crown',
+    name: 'ミミック王の黄金冠',
+    slot: 'relic',
+    iconKey: 'chalice',
+    minTier: 1,
+    desc: '金貨+65%・トレハン+35%・被ダメ+10%（ハイリスク）',
+    weights: { atk: 0.75, mag: 0.75, spd: 0.5 },
+    guaranteedAffix: { stat: 'goldFind', label: '金貨増', value: 65, isPercent: true },
+  },
+  {
+    id: 'titan_gauntlet_relic',
+    name: '巨人の剛力篭手',
+    slot: 'relic',
+    iconKey: 'amulet',
+    minTier: 1,
+    desc: '通常攻撃・物理スキル威力+30%＆最大HP+15%',
+    weights: { atk: 0.95, hp: 2.8 },
+    guaranteedAffix: { stat: 'atkPct', label: '攻撃', value: 20, isPercent: true },
+  },
+
+  // Runes (5)
   {
     id: 'echo_crit_rune',
     name: '連撃の古ルーン',
@@ -324,9 +498,29 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'rune',
     iconKey: 'rune_blue',
     minTier: 2,
-    desc: '毎ターンMP+12回復＆魔力+25%（Tier II+解放）',
+    desc: '毎ターンMP+12回復＆魔力+25%（Tier II+）',
     weights: { mag: 1.15, hp: 1.5 },
     guaranteedAffix: { stat: 'magPct', label: '魔力', value: 25, isPercent: true },
+  },
+  {
+    id: 'overdrive_rune',
+    name: '限界突破の赤ルーン',
+    slot: 'rune',
+    iconKey: 'rune_red',
+    minTier: 1,
+    desc: '全与ダメージ+25%（毎ターンHP5%消費）',
+    weights: { atk: 1.1, mag: 1.1 },
+    guaranteedAffix: { stat: 'critDmg', label: '会心倍率', value: 40, isPercent: true },
+  },
+  {
+    id: 'guardian_vow_rune',
+    name: '聖騎士の誓いルーン',
+    slot: 'rune',
+    iconKey: 'rune_green',
+    minTier: 1,
+    desc: '戦闘開始時に味方全体へ最大HP12%分のバリア',
+    weights: { def: 1.1, hp: 2.5 },
+    guaranteedAffix: { stat: 'defPct', label: '防御', value: 20, isPercent: true },
   },
 ];
 
@@ -348,7 +542,7 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]!;
 }
 
-export type LootSource = 'normal' | 'elite' | 'boss' | 'chest' | 'gold_chest' | 'shop';
+export type LootSource = 'normal' | 'elite' | 'boss' | 'rare_enemy' | 'chest' | 'gold_chest' | 'shop';
 
 export function rollRarity(
   worldTier: number,
@@ -360,14 +554,14 @@ export function rollRarity(
   const luck = mfFactor * tierBoost;
 
   let weights: Record<Rarity, number>;
-  if (source === 'boss') {
+  if (source === 'boss' || source === 'rare_enemy') {
     weights = {
       common: 0,
       uncommon: 0,
-      rare: 22,
-      epic: 40 * Math.pow(luck, 0.25),
-      legendary: 28 * Math.pow(luck, 0.55),
-      mythic: 10 * Math.pow(luck, 0.85),
+      rare: 18,
+      epic: 38 * Math.pow(luck, 0.25),
+      legendary: 31 * Math.pow(luck, 0.55),
+      mythic: 13 * Math.pow(luck, 0.85),
     };
   } else if (source === 'gold_chest' || source === 'elite') {
     weights = {
@@ -407,6 +601,27 @@ export function rollRarity(
   return 'rare';
 }
 
+function rollSingleAffix(
+  itemLevel: number,
+  worldTier: number,
+  rarityRank: number,
+  excludeStats: Set<AffixStat>,
+): Affix | null {
+  const pool = AFFIX_POOL.filter((a) => !excludeStats.has(a.stat));
+  if (pool.length === 0) return null;
+  const def = pick(pool);
+  const raw =
+    randRange(def.min, def.max) +
+    itemLevel * def.scalePerLevel * (0.7 + rarityRank * 0.15);
+  const val = Math.max(1, Math.round(raw * (1 + (worldTier - 1) * 0.12)));
+  return {
+    stat: def.stat,
+    label: def.label,
+    value: val,
+    isPercent: def.isPercent,
+  };
+}
+
 export function generateEquipment(
   floor: number,
   worldTier: number,
@@ -420,16 +635,14 @@ export function generateEquipment(
   const rarity = forcedRarity ?? rollRarity(safeTier, magicFind, source);
   const meta = RARITY_META[rarity];
 
-  // Item level scales with floor + world tier bonus
   const itemLevel = Math.max(
     1,
     Math.round(safeFloor + (safeTier - 1) * 22 + randRange(-1, 2)),
   );
 
-  // Unique roll for legendary/mythic
   let uniqueTemplate: UniqueTemplate | undefined;
   const uniqueChance =
-    rarity === 'mythic' ? 0.62 : rarity === 'legendary' ? 0.28 : 0;
+    rarity === 'mythic' ? 0.65 : rarity === 'legendary' ? 0.34 : 0;
   if (uniqueChance > 0 && Math.random() < uniqueChance) {
     const eligible = UNIQUE_TEMPLATES.filter(
       (u) => u.minTier <= safeTier && (!forcedSlot || u.slot === forcedSlot),
@@ -453,7 +666,14 @@ export function generateEquipment(
       }
     : pick(BASE_TEMPLATES[slot]);
 
-  // Smooth exponential + linear power curve so deeper floors & higher world tiers feel awesome
+  // Roll Equipment Set on Rare+ items! (Even uniques can occasionally belong to a set on Epic+/Mythic!)
+  let setId: SetId | undefined;
+  const setChance =
+    meta.rank >= 4 ? 0.7 : meta.rank === 3 ? 0.6 : meta.rank === 2 ? 0.45 : 0;
+  if (setChance > 0 && Math.random() < setChance) {
+    setId = pick(SET_LIST).id;
+  }
+
   const tierPower = Math.pow(1.42, safeTier - 1);
   const floorPower = (10 + itemLevel * 2.4 + Math.pow(itemLevel, 1.24) * 0.52) * tierPower;
   const rollMult = meta.powerMult * randRange(0.92, 1.12);
@@ -478,7 +698,6 @@ export function generateEquipment(
     );
   }
 
-  // Generate unique affixes (no duplicate stat types)
   const affixes: Affix[] = [];
   const usedStats = new Set<AffixStat>();
   if (uniqueTemplate) {
@@ -488,21 +707,11 @@ export function generateEquipment(
     usedStats.add(g.stat);
   }
 
-  const targetCount = meta.affixCount;
-  const availablePool = AFFIX_POOL.filter((a) => !usedStats.has(a.stat));
-  while (affixes.length < targetCount && availablePool.length > 0) {
-    const idx = Math.floor(Math.random() * availablePool.length);
-    const def = availablePool.splice(idx, 1)[0]!;
-    const raw =
-      randRange(def.min, def.max) +
-      itemLevel * def.scalePerLevel * (0.7 + meta.rank * 0.15);
-    const val = Math.max(1, Math.round(raw * (1 + (safeTier - 1) * 0.12)));
-    affixes.push({
-      stat: def.stat,
-      label: def.label,
-      value: val,
-      isPercent: def.isPercent,
-    });
+  while (affixes.length < meta.affixCount) {
+    const next = rollSingleAffix(itemLevel, safeTier, meta.rank, usedStats);
+    if (!next) break;
+    usedStats.add(next.stat);
+    affixes.push(next);
   }
 
   const name = uniqueTemplate
@@ -522,6 +731,9 @@ export function generateEquipment(
     rarity,
     itemLevel,
     worldTier: safeTier,
+    enhanceLevel: 0,
+    rerollCount: 0,
+    setId,
     baseStats,
     affixes,
     uniqueId: uniqueTemplate?.id,
@@ -529,6 +741,115 @@ export function generateEquipment(
     uniqueDesc: uniqueTemplate?.desc,
     locked: Boolean(uniqueTemplate) || rarity === 'mythic',
     sellValue,
+  };
+}
+
+// ===== BLACKSMITHING: SALVAGE / ENHANCE (+15 w/ BREAKTHROUGHS) / 1-SLOT REROLL =====
+export const MAX_ENHANCE_LEVEL = 15;
+
+export function getSalvageValue(item: EquipmentItem): number {
+  const base = RARITY_META[item.rarity].salvageBase;
+  const tierBonus = 1 + (item.worldTier - 1) * 0.4;
+  const enhanceRefund = item.enhanceLevel * 2;
+  return Math.max(1, Math.round(base * tierBonus) + enhanceRefund);
+}
+
+export function getEnhanceCost(item: EquipmentItem): { stones: number; gold: number; isBreakthrough: boolean } {
+  const nextLv = item.enhanceLevel + 1;
+  const isBreakthrough = nextLv === 5 || nextLv === 10 || nextLv === 15;
+  const rarityFactor = 1 + RARITY_META[item.rarity].rank * 0.25;
+  const stones = Math.max(
+    1,
+    Math.round((2 + nextLv * 1.4 + (isBreakthrough ? 4 : 0)) * rarityFactor),
+  );
+  const gold = Math.max(
+    25,
+    Math.round((30 + item.itemLevel * 8 + nextLv * 25) * rarityFactor * (isBreakthrough ? 1.5 : 1)),
+  );
+  return { stones, gold, isBreakthrough };
+}
+
+/**
+ * Deterministic enhancement (+1 up to +15).
+ * Increases base stats every level, and triggers a Masterwork Breakthrough at +5, +10, +15
+ * that boosts EVERY affix on the item by +25%!
+ */
+export function enhanceEquipment(item: EquipmentItem): {
+  upgraded: EquipmentItem;
+  isBreakthrough: boolean;
+} {
+  if (item.enhanceLevel >= MAX_ENHANCE_LEVEL) {
+    return { upgraded: item, isBreakthrough: false };
+  }
+  const nextLv = item.enhanceLevel + 1;
+  const isBreakthrough = nextLv === 5 || nextLv === 10 || nextLv === 15;
+
+  const bump = (v?: number, minAdd = 2) =>
+    v !== undefined ? v + Math.max(minAdd, Math.round(v * 0.085)) : undefined;
+
+  const nextBase: EquipmentItem['baseStats'] = {
+    ...(item.baseStats.atk !== undefined ? { atk: bump(item.baseStats.atk, 2) } : {}),
+    ...(item.baseStats.mag !== undefined ? { mag: bump(item.baseStats.mag, 2) } : {}),
+    ...(item.baseStats.def !== undefined ? { def: bump(item.baseStats.def, 2) } : {}),
+    ...(item.baseStats.hp !== undefined ? { hp: bump(item.baseStats.hp, 6) } : {}),
+    ...(item.baseStats.spd !== undefined ? { spd: bump(item.baseStats.spd, 1) } : {}),
+  };
+
+  const nextAffixes = isBreakthrough
+    ? item.affixes.map((af) => ({
+        ...af,
+        value: Math.max(af.value + 1, Math.round(af.value * 1.25)),
+        masterworked: true,
+      }))
+    : item.affixes;
+
+  return {
+    isBreakthrough,
+    upgraded: {
+      ...item,
+      enhanceLevel: nextLv,
+      baseStats: nextBase,
+      affixes: nextAffixes,
+      sellValue: Math.round(item.sellValue * 1.12),
+    },
+  };
+}
+
+export function getRerollCost(item: EquipmentItem): { stones: number; gold: number } {
+  const rank = RARITY_META[item.rarity].rank;
+  const tries = item.rerollCount;
+  const stones = Math.max(2, Math.round((3 + rank * 2) * (1 + tries * 0.35)));
+  const gold = Math.max(40, Math.round((50 + item.itemLevel * 12) * (1 + tries * 0.4)));
+  return { stones, gold };
+}
+
+/**
+ * Rerolls a single chosen affix slot into a fresh non-duplicate affix.
+ * Preserves Breakthrough scaling bonuses already earned on the item!
+ */
+export function rerollAffixSlot(item: EquipmentItem, affixIndex: number): EquipmentItem {
+  if (affixIndex < 0 || affixIndex >= item.affixes.length) return item;
+  const used = new Set<AffixStat>(item.affixes.map((a) => a.stat));
+  const fresh = rollSingleAffix(
+    item.itemLevel,
+    item.worldTier,
+    RARITY_META[item.rarity].rank,
+    used,
+  );
+  if (!fresh) return item;
+
+  // Apply existing breakthrough multiplier if item is already +5 / +10 / +15
+  const breakthroughs = Math.floor(item.enhanceLevel / 5);
+  if (breakthroughs > 0) {
+    fresh.value = Math.max(fresh.value + 1, Math.round(fresh.value * Math.pow(1.25, breakthroughs)));
+    fresh.masterworked = true;
+  }
+
+  const nextAffixes = item.affixes.map((af, idx) => (idx === affixIndex ? fresh : af));
+  return {
+    ...item,
+    rerollCount: item.rerollCount + 1,
+    affixes: nextAffixes,
   };
 }
 
@@ -543,9 +864,8 @@ export function calculateItemScore(item: EquipmentItem): number {
   for (const af of item.affixes) {
     score += af.value * 4.5;
   }
-  if (item.uniqueId) {
-    score *= 1.25;
-  }
+  if (item.setId) score *= 1.06;
+  if (item.uniqueId) score *= 1.25;
   return Math.round(score);
 }
 
@@ -558,6 +878,8 @@ export function createStarterWeapon(): EquipmentItem {
     rarity: 'uncommon',
     itemLevel: 1,
     worldTier: 1,
+    enhanceLevel: 0,
+    rerollCount: 0,
     baseStats: { atk: 12, mag: 6 },
     affixes: [{ stat: 'magicFind', label: 'トレハン', value: 12, isPercent: true }],
     locked: false,

@@ -1,13 +1,19 @@
 import { useMemo, useState } from 'react';
 import {
   calculateItemScore,
+  getEnhanceCost,
+  getRerollCost,
+  getSalvageValue,
+  MAX_ENHANCE_LEVEL,
   RARITY_META,
+  SET_MAP,
   SLOT_LABELS,
 } from '../game/data/equipment';
 import { getSpecies } from '../game/data/monsters';
 import { computeUnitStats } from '../game/stats';
 import type {
   ActiveShrineBuffs,
+  AutoLootMode,
   AutoSellThreshold,
   EquipmentItem,
   EquipSlot,
@@ -23,18 +29,22 @@ interface EquipmentPanelProps {
   onUnequip: (unitId: string, slot: EquipSlot) => void;
   onToggleLock: (itemId: string) => void;
   onSellItem: (itemId: string) => void;
-  onBulkSell: (maxRarity: 'uncommon' | 'rare') => void;
+  onSalvageItem: (itemId: string) => void;
+  onEnhanceItem: (itemId: string) => void;
+  onRerollAffix: (itemId: string, affixIndex: number) => void;
+  onBulkProcess: (maxRarity: 'uncommon' | 'rare', mode: AutoLootMode) => void;
   onChangeAutoSell: (threshold: AutoSellThreshold) => void;
+  onToggleAutoLootMode: () => void;
 }
 
 const SLOTS: EquipSlot[] = ['weapon', 'armor', 'relic', 'rune'];
 
 const AUTO_SELL_OPTIONS: { value: AutoSellThreshold; label: string }[] = [
-  { value: 'none', label: '自動売:OFF' },
-  { value: 'common', label: '自動売:C以下' },
-  { value: 'uncommon', label: '自動売:UC以下' },
-  { value: 'rare', label: '自動売:R以下' },
-  { value: 'epic', label: '自動売:E以下' },
+  { value: 'none', label: 'OFF' },
+  { value: 'common', label: 'C以下' },
+  { value: 'uncommon', label: 'UC以下' },
+  { value: 'rare', label: 'R以下' },
+  { value: 'epic', label: 'E以下' },
 ];
 
 export function EquipmentPanel({
@@ -45,12 +55,17 @@ export function EquipmentPanel({
   onUnequip,
   onToggleLock,
   onSellItem,
-  onBulkSell,
+  onSalvageItem,
+  onEnhanceItem,
+  onRerollAffix,
+  onBulkProcess,
   onChangeAutoSell,
+  onToggleAutoLootMode,
 }: EquipmentPanelProps) {
   const [selectedUnitId, setSelectedUnitId] = useState<string>(save.partyIds[0] ?? 'hero');
   const [slotFilter, setSlotFilter] = useState<EquipSlot | 'all'>('all');
   const [selectedItemId, setSelectedItemId] = useState<string | null>(initialItemId ?? null);
+  const [selectedAffixIdx, setSelectedAffixIdx] = useState<number | null>(null);
 
   const activeUnitId = save.roster[selectedUnitId] ? selectedUnitId : 'hero';
   const unit = save.roster[activeUnitId]!;
@@ -60,7 +75,6 @@ export function EquipmentPanel({
     [save.inventory],
   );
 
-  // Track which unit currently equips each item
   const equippedOwnerMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const u of Object.values(save.roster)) {
@@ -86,9 +100,18 @@ export function EquipmentPanel({
   const selectedItem: EquipmentItem | null =
     (selectedItemId ? invMap.get(selectedItemId) : null) ?? filteredItems[0] ?? null;
 
-  // Currently equipped item in the same slot on selected unit for 1-tap diff comparison
+  const validAffixIdx =
+    selectedItem &&
+    selectedAffixIdx !== null &&
+    selectedAffixIdx >= 0 &&
+    selectedAffixIdx < selectedItem.affixes.length
+      ? selectedAffixIdx
+      : null;
+
   const currentInSlot: EquipmentItem | null = selectedItem
-    ? (unit.equipped[selectedItem.slot] ? invMap.get(unit.equipped[selectedItem.slot]!) ?? null : null)
+    ? unit.equipped[selectedItem.slot]
+      ? invMap.get(unit.equipped[selectedItem.slot]!) ?? null
+      : null
     : null;
 
   const scoreDiff =
@@ -101,15 +124,23 @@ export function EquipmentPanel({
   const ownerOfSelected = selectedItem ? equippedOwnerMap.get(selectedItem.id) : undefined;
   const isEquippedBySelectedUnit = ownerOfSelected === unit.id;
 
+  const enhanceCost = selectedItem ? getEnhanceCost(selectedItem) : null;
+  const rerollCost = selectedItem ? getRerollCost(selectedItem) : null;
+  const salvageStones = selectedItem ? getSalvageValue(selectedItem) : 0;
+
   const cycleAutoSell = () => {
     const idx = AUTO_SELL_OPTIONS.findIndex((o) => o.value === save.settings.autoSell);
     const next = AUTO_SELL_OPTIONS[(idx + 1) % AUTO_SELL_OPTIONS.length]!;
     onChangeAutoSell(next.value);
   };
 
+  const autoModeLabel = save.settings.autoLootMode === 'salvage' ? '自動分解' : '自動売却';
+  const autoThresholdLabel =
+    AUTO_SELL_OPTIONS.find((o) => o.value === save.settings.autoSell)?.label ?? 'OFF';
+
   return (
     <div className="panel-body" style={{ gap: 5 }}>
-      {/* Party Member Selector (All 4 can equip all 4 slots!) */}
+      {/* Party Member Selector */}
       <div className="unit-pill-row">
         {save.partyIds.map((pid) => {
           const u = save.roster[pid];
@@ -144,7 +175,7 @@ export function EquipmentPanel({
         })}
       </div>
 
-      {/* Selected Unit Compact Stats + 4 Equipped Slots */}
+      {/* Selected Unit Stats + Active Set Badges + 4 Equipped Slots */}
       <div className="rpg-card" style={{ padding: '5px 7px', display: 'flex', flexDirection: 'column', gap: 4 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 8px', fontSize: 10 }}>
           <span>ATK <strong>{unitStats.atk}</strong></span>
@@ -154,6 +185,32 @@ export function EquipmentPanel({
           <span>会心 <strong>{unitStats.critRate}%</strong></span>
           <span style={{ color: 'var(--accent-amber)' }}>MF <strong>+{unitStats.magicFind}%</strong></span>
         </div>
+
+        {/* Active Equipment Sets */}
+        {unitStats.activeSets.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+            {unitStats.activeSets.map((as) => {
+              const sdef = SET_MAP[as.setId];
+              const active = as.count >= 2;
+              return (
+                <span
+                  key={as.setId}
+                  style={{
+                    fontSize: 9,
+                    fontFamily: 'var(--font-pixel)',
+                    padding: '1px 5px',
+                    borderRadius: 4,
+                    background: active ? 'rgba(20, 18, 28, 0.85)' : 'rgba(20, 18, 28, 0.45)',
+                    border: `1px solid ${active ? sdef.color : 'var(--border-subtle)'}`,
+                    color: active ? sdef.color : 'var(--text-dim)',
+                  }}
+                >
+                  {sdef.name} {as.count}/4{as.count >= 4 ? ' ★全発動' : as.count >= 2 ? ' ★発動' : ''}
+                </span>
+              );
+            })}
+          </div>
+        )}
 
         <div className="slot-grid">
           {SLOTS.map((slot) => {
@@ -168,7 +225,10 @@ export function EquipmentPanel({
                 style={rm ? { borderColor: rm.border } : undefined}
                 onClick={() => {
                   setSlotFilter(slot);
-                  if (eqItem) setSelectedItemId(eqItem.id);
+                  if (eqItem) {
+                    setSelectedItemId(eqItem.id);
+                    setSelectedAffixIdx(null);
+                  }
                 }}
               >
                 {eqItem ? (
@@ -179,7 +239,10 @@ export function EquipmentPanel({
                   </span>
                 )}
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: 8.5, color: 'var(--text-dim)' }}>{SLOT_LABELS[slot]}</div>
+                  <div style={{ fontSize: 8.5, color: 'var(--text-dim)' }}>
+                    {SLOT_LABELS[slot]}
+                    {eqItem && eqItem.enhanceLevel > 0 ? ` +${eqItem.enhanceLevel}` : ''}
+                  </div>
                   <div
                     style={{
                       fontSize: 10,
@@ -199,7 +262,7 @@ export function EquipmentPanel({
         </div>
       </div>
 
-      {/* Selected Item Detail & 1-Tap Compare Card */}
+      {/* Selected Item Detail, Blacksmithing (+15 Enhance & 1-Slot Reroll) & Actions */}
       {selectedItem && (
         <div
           className="rpg-card"
@@ -226,6 +289,9 @@ export function EquipmentPanel({
               >
                 {selectedItem.locked ? '🔒' : ''}
                 {selectedItem.name}
+                {selectedItem.enhanceLevel > 0 && (
+                  <span style={{ color: '#ffe570' }}> +{selectedItem.enhanceLevel}</span>
+                )}
               </div>
               <div style={{ fontSize: 9.5, color: 'var(--text-muted)' }}>
                 {SLOT_LABELS[selectedItem.slot]} iLv.{selectedItem.itemLevel} (T{selectedItem.worldTier}) 評価
@@ -240,6 +306,22 @@ export function EquipmentPanel({
             </div>
           </div>
 
+          {/* Set Info */}
+          {selectedItem.setId && (
+            <div
+              style={{
+                fontSize: 9.5,
+                color: SET_MAP[selectedItem.setId].color,
+                background: 'rgba(15, 13, 22, 0.65)',
+                padding: '2px 6px',
+                borderRadius: 4,
+                lineHeight: 1.3,
+              }}
+            >
+              <strong>【{SET_MAP[selectedItem.setId].name}セット】</strong> 2部位:{SET_MAP[selectedItem.setId].bonus2Desc} / 4部位:{SET_MAP[selectedItem.setId].bonus4Desc}
+            </div>
+          )}
+
           {/* Base stats */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 7px', fontSize: 10 }}>
             {selectedItem.baseStats.atk && <span>攻撃+{selectedItem.baseStats.atk}</span>}
@@ -249,24 +331,41 @@ export function EquipmentPanel({
             {selectedItem.baseStats.spd && <span>素早さ+{selectedItem.baseStats.spd}</span>}
           </div>
 
-          {/* Random Affixes */}
+          {/* Random Affixes (Tap any affix to select for 1-slot Reroll!) */}
           {selectedItem.affixes.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-              {selectedItem.affixes.map((af, idx) => (
-                <span
-                  key={`${af.stat}_${idx}`}
-                  style={{
-                    fontSize: 9.5,
-                    background: 'rgba(15, 13, 22, 0.65)',
-                    padding: '1px 5px',
-                    borderRadius: 3,
-                    color: '#d9f2ff',
-                  }}
-                >
-                  {af.label}+{af.value}
-                  {af.isPercent ? '%' : ''}
-                </span>
-              ))}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                {selectedItem.affixes.map((af, idx) => {
+                  const isPicked = validAffixIdx === idx;
+                  return (
+                    <button
+                      key={`${af.stat}_${idx}`}
+                      type="button"
+                      onClick={() => setSelectedAffixIdx(isPicked ? null : idx)}
+                      style={{
+                        fontSize: 9.5,
+                        background: isPicked ? '#543b1e' : 'rgba(15, 13, 22, 0.72)',
+                        border: isPicked
+                          ? '1px solid #ffe570'
+                          : af.masterworked
+                            ? '1px solid rgba(255, 214, 92, 0.55)'
+                            : '1px solid rgba(255,255,255,0.12)',
+                        padding: '2px 5px',
+                        borderRadius: 4,
+                        color: af.masterworked ? '#ffe570' : '#d9f2ff',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {af.masterworked ? '★' : ''}
+                      {af.label}+{af.value}
+                      {af.isPercent ? '%' : ''}
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: 8.5, color: 'var(--text-dim)' }}>
+                ※OPをタップ選択すると1枠だけ再鍛造できます（+5/+10/+15で全OP底上げ！）
+              </div>
             </div>
           )}
 
@@ -286,8 +385,54 @@ export function EquipmentPanel({
             </div>
           )}
 
-          {/* 1-Tap Action Buttons */}
-          <div style={{ display: 'flex', gap: 4, marginTop: 2, minWidth: 0 }}>
+          {/* Blacksmithing Row: Enhance (+1..+15) & 1-Slot Reroll */}
+          <div style={{ display: 'flex', gap: 4, minWidth: 0 }}>
+            {selectedItem.enhanceLevel < MAX_ENHANCE_LEVEL && enhanceCost ? (
+              <button
+                id="btn-enhance-selected"
+                type="button"
+                className={`rpg-btn sm ${enhanceCost.isBreakthrough ? 'primary' : 'emerald'}`}
+                style={{ flex: 1 }}
+                disabled={save.forgeStones < enhanceCost.stones || save.gold < enhanceCost.gold}
+                onClick={() => onEnhanceItem(selectedItem.id)}
+              >
+                {enhanceCost.isBreakthrough
+                  ? `★突破+${selectedItem.enhanceLevel + 1}`
+                  : `🔨強化+${selectedItem.enhanceLevel + 1}`}{' '}
+                (石{enhanceCost.stones}/{enhanceCost.gold}G)
+              </button>
+            ) : (
+              <button type="button" className="rpg-btn sm" style={{ flex: 1 }} disabled>
+                ★強化MAX (+15)
+              </button>
+            )}
+
+            {selectedItem.affixes.length > 0 && rerollCost && (
+              <button
+                id="btn-reroll-affix"
+                type="button"
+                className="rpg-btn sm active-toggle"
+                style={{ flex: 1 }}
+                disabled={
+                  validAffixIdx === null ||
+                  save.forgeStones < rerollCost.stones ||
+                  save.gold < rerollCost.gold
+                }
+                onClick={() => {
+                  if (validAffixIdx !== null) {
+                    onRerollAffix(selectedItem.id, validAffixIdx);
+                  }
+                }}
+              >
+                {validAffixIdx !== null
+                  ? `🔄再鍛造(石${rerollCost.stones}/${rerollCost.gold}G)`
+                  : '🔄OP選択で再鍛造'}
+              </button>
+            )}
+          </div>
+
+          {/* 1-Tap Equip / Lock / Salvage / Sell Row */}
+          <div style={{ display: 'flex', gap: 4, minWidth: 0 }}>
             {isEquippedBySelectedUnit ? (
               <button
                 type="button"
@@ -305,9 +450,7 @@ export function EquipmentPanel({
                 style={{ flex: 1 }}
                 onClick={() => onEquip(unit.id, selectedItem.id)}
               >
-                {ownerOfSelected
-                  ? `移して装備`
-                  : `${getSpecies(unit.speciesId).name}に装備`}
+                {ownerOfSelected ? '移して装備' : `${getSpecies(unit.speciesId).name}に装備`}
               </button>
             )}
             <button
@@ -315,7 +458,15 @@ export function EquipmentPanel({
               className="rpg-btn sm"
               onClick={() => onToggleLock(selectedItem.id)}
             >
-              {selectedItem.locked ? '解除' : 'ロック'}
+              {selectedItem.locked ? '解除' : '🔒'}
+            </button>
+            <button
+              type="button"
+              className="rpg-btn sm"
+              disabled={selectedItem.locked || Boolean(ownerOfSelected)}
+              onClick={() => onSalvageItem(selectedItem.id)}
+            >
+              分解+{salvageStones}石
             </button>
             <button
               type="button"
@@ -329,14 +480,14 @@ export function EquipmentPanel({
         </div>
       )}
 
-      {/* Filter + Bulk Sell + Auto-Sell Controls */}
+      {/* Filter + Auto-Sell / Auto-Salvage Controls */}
       <div className="filter-row">
         <button
           type="button"
           className={`pill-chip ${slotFilter === 'all' ? 'active' : ''}`}
           onClick={() => setSlotFilter('all')}
         >
-          全て({save.inventory.length})
+          全({save.inventory.length})
         </button>
         {SLOTS.map((s) => (
           <button
@@ -351,29 +502,43 @@ export function EquipmentPanel({
         <button
           type="button"
           className="pill-chip"
-          style={{ marginLeft: 'auto', color: '#ffd86b' }}
+          style={{ marginLeft: 'auto', color: '#8ae8ff' }}
+          onClick={onToggleAutoLootMode}
+        >
+          {autoModeLabel}
+        </button>
+        <button
+          type="button"
+          className="pill-chip"
+          style={{ color: '#ffd86b' }}
           onClick={cycleAutoSell}
         >
-          {AUTO_SELL_OPTIONS.find((o) => o.value === save.settings.autoSell)?.label}
+          {autoThresholdLabel}
         </button>
       </div>
 
-      <div style={{ display: 'flex', gap: 5 }}>
+      {/* 1-Tap Bulk Salvage / Bulk Sell */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 4 }}>
         <button
           type="button"
           className="rpg-btn sm"
-          style={{ flex: 1 }}
-          onClick={() => onBulkSell('uncommon')}
+          onClick={() => onBulkProcess('uncommon', 'salvage')}
         >
-          UC以下を一括売却
+          UC以下一括分解
         </button>
         <button
           type="button"
           className="rpg-btn sm"
-          style={{ flex: 1 }}
-          onClick={() => onBulkSell('rare')}
+          onClick={() => onBulkProcess('rare', 'salvage')}
         >
-          R以下を一括売却
+          R以下一括分解
+        </button>
+        <button
+          type="button"
+          className="rpg-btn sm"
+          onClick={() => onBulkProcess('rare', 'sell')}
+        >
+          R以下一括売却
         </button>
       </div>
 
@@ -394,15 +559,18 @@ export function EquipmentPanel({
               key={item.id}
               type="button"
               className={`item-row ${selectedItem?.id === item.id ? 'selected' : ''}`}
-              style={{ borderLeft: `4px solid ${rm.border}` }}
-              onClick={() => setSelectedItemId(item.id)}
+              style={{ borderLeft: `3px solid ${rm.border}` }}
+              onClick={() => {
+                setSelectedItemId(item.id);
+                setSelectedAffixIdx(null);
+              }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
-                <PixelIcon spriteKey={item.iconKey} size={24} />
-                <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
+                <PixelIcon spriteKey={item.iconKey} size={22} />
+                <div style={{ minWidth: 0, flex: 1 }}>
                   <div
                     style={{
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: 700,
                       color: rm.color,
                       whiteSpace: 'nowrap',
@@ -412,14 +580,24 @@ export function EquipmentPanel({
                   >
                     {item.locked ? '🔒' : ''}
                     {item.name}
+                    {item.enhanceLevel > 0 ? ` +${item.enhanceLevel}` : ''}
                   </div>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                  <div
+                    style={{
+                      fontSize: 9.5,
+                      color: 'var(--text-muted)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
                     {SLOT_LABELS[item.slot]} iLv.{item.itemLevel}
-                    {ownerId ? ` [${getSpecies(ownerId).name}装備中]` : ''}
+                    {item.setId ? ` [${SET_MAP[item.setId].name}]` : ''}
+                    {ownerId ? ` (${getSpecies(ownerId).name})` : ''}
                   </div>
                 </div>
               </div>
-              <div style={{ textAlign: 'right', flexShrink: 0, fontSize: 11 }}>
+              <div style={{ textAlign: 'right', flexShrink: 0, fontSize: 10 }}>
                 {ownerId === unit.id ? (
                   <span style={{ color: '#ffe570', fontFamily: 'var(--font-pixel)' }}>装備中</span>
                 ) : diff > 0 ? (
@@ -434,8 +612,8 @@ export function EquipmentPanel({
           );
         })}
         {filteredItems.length === 0 && (
-          <div className="muted-text" style={{ textAlign: 'center', padding: 12 }}>
-            該当する装備がありません。迷宮で魔物や宝箱から掘り出しましょう！
+          <div className="muted-text" style={{ textAlign: 'center', padding: 10 }}>
+            該当する装備がありません。迷宮で掘り出しましょう！
           </div>
         )}
       </div>

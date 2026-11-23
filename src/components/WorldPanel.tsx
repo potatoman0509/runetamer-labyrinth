@@ -281,6 +281,8 @@ export function WorldPanel({
             <div>獲得装備: <strong>{save.stats.totalItemsLooted.toLocaleString()}</strong></div>
             <div>ミシック: <strong style={{ color: '#ff7084' }}>{save.stats.totalMythicsFound}</strong></div>
             <div>最高階層: <strong>{save.stats.highestFloorReached}F</strong></div>
+            <div>鍛冶強化: <strong>{save.stats.totalForgeUpgrades}回</strong></div>
+            <div>OP再鍛造: <strong>{save.stats.totalRerolls}回</strong></div>
           </div>
 
           <div className="rpg-card" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

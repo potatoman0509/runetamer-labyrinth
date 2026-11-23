@@ -1,0 +1,19 @@
+{
+  "name": "ルーンテイマー迷宮記",
+  "short_name": "ルーンテイマー",
+  "description": "16bitドット絵モンスター収集＆装備ハクスラやり込みRPG",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1b1922",
+  "theme_color": "#1b1922",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

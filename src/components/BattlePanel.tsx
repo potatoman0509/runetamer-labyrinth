@@ -62,12 +62,12 @@ export function BattlePanel({
     return (
       <div className="panel-body">
         <div className="rpg-card-gold" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontFamily: 'var(--font-pixel)', fontSize: 16, color: '#ffe570' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: 'var(--font-pixel)', fontSize: 15, color: '#ffe570' }}>
               ★ 戦闘勝利！
             </span>
             <span className="muted-text">
-              EXP +{r.exp.toLocaleString()} / {r.gold.toLocaleString()}G
+              EXP+{r.exp.toLocaleString()} / {r.gold.toLocaleString()}G / 💎石+{r.forgeStones}
             </span>
           </div>
 
@@ -169,9 +169,11 @@ export function BattlePanel({
             </div>
           )}
 
-          {r.autoSoldCount > 0 && (
+          {r.autoProcessedCount > 0 && (
             <div className="muted-text">
-              自動売却: {r.autoSoldCount}個 → +{r.autoSoldGold.toLocaleString()}G
+              {r.autoProcessedMode === 'salvage'
+                ? `自動分解: ${r.autoProcessedCount}個 → 💎鍛冶石+${r.autoSalvagedStones}`
+                : `自動売却: ${r.autoProcessedCount}個 → +${r.autoSoldGold.toLocaleString()}G`}
             </div>
           )}
 
