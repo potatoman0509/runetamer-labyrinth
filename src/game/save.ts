@@ -177,6 +177,8 @@ function normalizeItem(it: Partial<EquipmentItem>): EquipmentItem {
     ...(it as EquipmentItem),
     enhanceLevel: typeof it.enhanceLevel === 'number' ? it.enhanceLevel : 0,
     rerollCount: typeof it.rerollCount === 'number' ? it.rerollCount : 0,
+    affixes: Array.isArray(it.affixes) ? it.affixes : [],
+    baseStats: it.baseStats && typeof it.baseStats === 'object' ? it.baseStats : {},
   };
 }
 
@@ -193,20 +195,64 @@ export function validateSave(data: unknown): GameSave | null {
     return null;
   }
   const fallback = createInitialSave();
+  const safeRoster: Record<string, UnitInstance> = {};
+  for (const [k, u] of Object.entries(s.roster)) {
+    if (!u || typeof u !== 'object' || !u.speciesId) continue;
+    safeRoster[k] = {
+      ...u,
+      level: typeof u.level === 'number' && u.level >= 1 ? u.level : 1,
+      exp: typeof u.exp === 'number' && u.exp >= 0 ? u.exp : 0,
+      awakening: typeof u.awakening === 'number' && u.awakening >= 0 ? u.awakening : 0,
+      hp: typeof u.hp === 'number' && u.hp >= 0 ? u.hp : 100,
+      mp: typeof u.mp === 'number' && u.mp >= 0 ? u.mp : 20,
+      equipped: {
+        weapon: u.equipped?.weapon ?? null,
+        armor: u.equipped?.armor ?? null,
+        relic: u.equipped?.relic ?? null,
+        rune: u.equipped?.rune ?? null,
+      },
+    };
+  }
+  if (!safeRoster.hero) return null;
+
+  const safeParty = s.partyIds.filter((id) => Boolean(safeRoster[id]));
+  if (!safeParty.includes('hero')) safeParty.unshift('hero');
+
   return {
     ...fallback,
     ...s,
     version: CURRENT_SAVE_VERSION,
-    forgeStones: typeof s.forgeStones === 'number' ? s.forgeStones : fallback.forgeStones,
-    inventory: s.inventory.map(normalizeItem),
-    settings: { ...fallback.settings, ...(s.settings ?? {}) },
-    stats: { ...fallback.stats, ...(s.stats ?? {}) },
+    gold: typeof s.gold === 'number' && Number.isFinite(s.gold) ? s.gold : fallback.gold,
+    forgeStones:
+      typeof s.forgeStones === 'number' && Number.isFinite(s.forgeStones)
+        ? s.forgeStones
+        : fallback.forgeStones,
+    worldTier: typeof s.worldTier === 'number' && s.worldTier >= 1 ? s.worldTier : 1,
+    maxUnlockedTier:
+      typeof s.maxUnlockedTier === 'number' && s.maxUnlockedTier >= 1 ? s.maxUnlockedTier : 1,
+    partyIds: safeParty.slice(0, 4),
+    roster: safeRoster,
+    inventory: s.inventory.filter((it) => Boolean(it && it.id && it.slot)).map(normalizeItem),
+    settings: {
+      ...fallback.settings,
+      ...(s.settings ?? {}),
+      autoLootMode: s.settings?.autoLootMode === 'salvage' ? 'salvage' : 'sell',
+    },
+    stats: {
+      ...fallback.stats,
+      ...(s.stats ?? {}),
+      totalForgeUpgrades:
+        typeof s.stats?.totalForgeUpgrades === 'number' ? s.stats.totalForgeUpgrades : 0,
+      totalRerolls: typeof s.stats?.totalRerolls === 'number' ? s.stats.totalRerolls : 0,
+    },
     highestFloorByTier: { ...fallback.highestFloorByTier, ...(s.highestFloorByTier ?? {}) },
-    discoveredMonsters: Array.isArray(s.discoveredMonsters) ? s.discoveredMonsters : fallback.discoveredMonsters,
+    discoveredMonsters: Array.isArray(s.discoveredMonsters)
+      ? s.discoveredMonsters
+      : fallback.discoveredMonsters,
     discoveredUniques: Array.isArray(s.discoveredUniques) ? s.discoveredUniques : [],
     shopItems:
       Array.isArray(s.shopItems) && s.shopItems.length > 0
-        ? s.shopItems.map(normalizeItem)
+        ? s.shopItems.filter((it) => Boolean(it && it.id && it.slot)).map(normalizeItem)
         : fallback.shopItems,
   };
 }
