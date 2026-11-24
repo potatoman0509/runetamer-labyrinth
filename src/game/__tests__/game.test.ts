@@ -28,7 +28,20 @@ import {
   pickAutoExpeditionChoice,
   STEPS_PER_FLOOR,
 } from '../expedition';
-import { createInitialSave, createUnitInstance, exportSaveCode, importSaveCode } from '../save';
+import {
+  createInitialSave,
+  createUnitInstance,
+  deleteSaveSlot,
+  exportSaveCode,
+  exportSaveJson,
+  getSlotStorageKey,
+  importSaveCode,
+  importSaveJson,
+  listSaveSlotSummaries,
+  loadGameFromSlot,
+  SAVE_STORAGE_KEY,
+  saveGameToSlot,
+} from '../save';
 import {
   canUpgradeSkillNode,
   getAvailableSp,
@@ -384,5 +397,77 @@ describe('RuneTamer Labyrinth Core & v2 Systems', () => {
     expect(bonuses.bonusSp).toBe(3); // 1 + 2
     expect(getAvailableSp(claimedSave)).toBe(baseSp + 3);
     expect(computeUnitStats(claimedSave.roster.hero!, claimedSave).atk).toBeGreaterThan(baseAtk);
+  });
+
+  it('supports 3-slot Adventure Book storage with Slot 1 legacy compatibility and JSON file export/import', () => {
+    expect(getSlotStorageKey(1)).toBe(SAVE_STORAGE_KEY);
+    expect(getSlotStorageKey(2)).not.toBe(SAVE_STORAGE_KEY);
+    expect(getSlotStorageKey(3)).not.toBe(getSlotStorageKey(2));
+
+    // In-memory localStorage shim for Node Vitest runner
+    const store = new Map<string, string>();
+    const prevStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => {
+          store.set(k, v);
+        },
+        removeItem: (k: string) => {
+          store.delete(k);
+        },
+      },
+    });
+
+    try {
+      const s1 = createInitialSave();
+      s1.gold = 1111;
+      s1.roster.hero!.level = 7;
+      saveGameToSlot(1, s1);
+
+      const s2 = createInitialSave();
+      s2.gold = 2222;
+      s2.roster.hero!.level = 15;
+      s2.worldTier = 2;
+      saveGameToSlot(2, s2);
+
+      const summaries = listSaveSlotSummaries();
+      expect(summaries.length).toBe(3);
+      expect(summaries[0]!.exists).toBe(true);
+      expect(summaries[0]!.heroLevel).toBe(7);
+      expect(summaries[1]!.exists).toBe(true);
+      expect(summaries[1]!.heroLevel).toBe(15);
+      expect(summaries[2]!.exists).toBe(false);
+
+      expect(loadGameFromSlot(1)?.gold).toBe(1111);
+      expect(loadGameFromSlot(2)?.gold).toBe(2222);
+
+      deleteSaveSlot(2);
+      expect(loadGameFromSlot(2)).toBeNull();
+
+      // JSON file export/import with checksum validation + RTL1 fallback
+      const jsonText = exportSaveJson(s2);
+      const okJson = importSaveJson(jsonText);
+      expect(okJson.ok).toBe(true);
+      if (okJson.ok) {
+        expect(okJson.save.gold).toBe(2222);
+        expect(okJson.save.worldTier).toBe(2);
+      }
+
+      const tampered = jsonText.replace('2222', '9999');
+      expect(importSaveJson(tampered).ok).toBe(false);
+
+      const codeFallback = importSaveJson(exportSaveCode(s1));
+      expect(codeFallback.ok).toBe(true);
+      if (codeFallback.ok) {
+        expect(codeFallback.save.gold).toBe(1111);
+      }
+    } finally {
+      Object.defineProperty(globalThis, 'localStorage', {
+        configurable: true,
+        value: prevStorage,
+      });
+    }
   });
 });

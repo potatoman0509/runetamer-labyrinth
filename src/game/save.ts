@@ -5,7 +5,48 @@ import type { EquipmentItem, GameSave, UnitInstance } from './types';
 import { generateShopInventory } from './worldTier';
 
 export const SAVE_STORAGE_KEY = 'runetamer_labyrinth_save_v1';
+export const ACTIVE_SLOT_STORAGE_KEY = 'runetamer_labyrinth_active_slot_v1';
 export const CURRENT_SAVE_VERSION = 3;
+
+export type SaveSlotId = 1 | 2 | 3;
+export const SAVE_SLOT_IDS: SaveSlotId[] = [1, 2, 3];
+
+export interface SaveSlotSummary {
+  slot: SaveSlotId;
+  exists: boolean;
+  savedAt: number;
+  heroLevel: number;
+  worldTier: number;
+  highestFloor: number;
+  gold: number;
+  forgeStones: number;
+  partySprites: string[];
+}
+
+export function getSlotStorageKey(slot: SaveSlotId): string {
+  // Slot 1 reuses the legacy storage key so existing players keep their save seamlessly
+  if (slot === 1) return SAVE_STORAGE_KEY;
+  return `runetamer_labyrinth_save_slot_${slot}`;
+}
+
+export function getActiveSaveSlot(): SaveSlotId {
+  try {
+    const raw = localStorage.getItem(ACTIVE_SLOT_STORAGE_KEY);
+    if (raw === '2') return 2;
+    if (raw === '3') return 3;
+  } catch {
+    // Ignore storage access errors
+  }
+  return 1;
+}
+
+export function setActiveSaveSlot(slot: SaveSlotId): void {
+  try {
+    localStorage.setItem(ACTIVE_SLOT_STORAGE_KEY, String(slot));
+  } catch {
+    // Ignore storage access errors
+  }
+}
 
 export function createUnitInstance(speciesId: string, level = 1): UnitInstance {
   const sp = SPECIES_MAP[speciesId] ?? HERO_SPECIES;
@@ -92,18 +133,20 @@ export function createInitialSave(): GameSave {
   return baseSave;
 }
 
-export function saveGameToLocal(save: GameSave): void {
+export function saveGameToSlot(slot: SaveSlotId, save: GameSave): number {
+  const now = Date.now();
   try {
-    const payload: GameSave = { ...save, savedAt: Date.now() };
-    localStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(payload));
+    const payload: GameSave = { ...save, savedAt: now };
+    localStorage.setItem(getSlotStorageKey(slot), JSON.stringify(payload));
   } catch {
     // Ignore storage quota / sandboxed iframe errors gracefully
   }
+  return now;
 }
 
-export function loadGameFromLocal(): GameSave | null {
+export function loadGameFromSlot(slot: SaveSlotId): GameSave | null {
   try {
-    const raw = localStorage.getItem(SAVE_STORAGE_KEY);
+    const raw = localStorage.getItem(getSlotStorageKey(slot));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as GameSave;
     return validateSave(parsed);
@@ -112,12 +155,71 @@ export function loadGameFromLocal(): GameSave | null {
   }
 }
 
-export function clearLocalSave(): void {
+export function deleteSaveSlot(slot: SaveSlotId): void {
   try {
-    localStorage.removeItem(SAVE_STORAGE_KEY);
+    localStorage.removeItem(getSlotStorageKey(slot));
   } catch {
     // Ignore
   }
+}
+
+export function getSaveSlotSummary(slot: SaveSlotId): SaveSlotSummary {
+  const data = loadGameFromSlot(slot);
+  if (!data) {
+    return {
+      slot,
+      exists: false,
+      savedAt: 0,
+      heroLevel: 0,
+      worldTier: 1,
+      highestFloor: 0,
+      gold: 0,
+      forgeStones: 0,
+      partySprites: [],
+    };
+  }
+  const partySprites = data.partyIds
+    .map((id) => data.roster[id])
+    .filter((u): u is UnitInstance => Boolean(u))
+    .map((u) => (SPECIES_MAP[u.speciesId] ?? HERO_SPECIES).spriteKey);
+
+  return {
+    slot,
+    exists: true,
+    savedAt: data.savedAt,
+    heroLevel: data.roster.hero?.level ?? 1,
+    worldTier: data.worldTier,
+    highestFloor: data.stats.highestFloorReached,
+    gold: data.gold,
+    forgeStones: data.forgeStones,
+    partySprites,
+  };
+}
+
+export function listSaveSlotSummaries(): SaveSlotSummary[] {
+  return SAVE_SLOT_IDS.map((slot) => getSaveSlotSummary(slot));
+}
+
+export function formatSavedAt(ts: number): string {
+  if (!ts || !Number.isFinite(ts)) return '--/-- --:--';
+  const d = new Date(ts);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${mm}/${dd} ${hh}:${mi}`;
+}
+
+export function saveGameToLocal(save: GameSave): void {
+  saveGameToSlot(getActiveSaveSlot(), save);
+}
+
+export function loadGameFromLocal(): GameSave | null {
+  return loadGameFromSlot(getActiveSaveSlot());
+}
+
+export function clearLocalSave(): void {
+  deleteSaveSlot(getActiveSaveSlot());
 }
 
 function simpleChecksum(str: string): string {
@@ -157,7 +259,7 @@ export function exportSaveCode(save: GameSave): string {
 export function importSaveCode(code: string): { ok: true; save: GameSave } | { ok: false; error: string } {
   const trimmed = code.trim();
   if (!trimmed.startsWith('RTL1:')) {
-    return { ok: false, error: 'セーブコードの形式が正しくありません（RTL1: で始まる必要があります）。' };
+    return { ok: false, error: '形式が無効。RTL1: で始まるコードを入力してください。' };
   }
   const parts = trimmed.split(':');
   if (parts.length !== 3) {
@@ -165,7 +267,7 @@ export function importSaveCode(code: string): { ok: true; save: GameSave } | { o
   }
   const [, checksum, encoded] = parts;
   if (!encoded || simpleChecksum(encoded) !== checksum) {
-    return { ok: false, error: 'チェックサムが一致しません。コピー漏れがないか確認してください。' };
+    return { ok: false, error: 'チェックサム不一致。コピー漏れを確認してください。' };
   }
   try {
     const json = fromBase64Utf8(encoded);
@@ -178,6 +280,73 @@ export function importSaveCode(code: string): { ok: true; save: GameSave } | { o
   } catch {
     return { ok: false, error: 'セーブコードの復号に失敗しました。' };
   }
+}
+
+interface ExportedSaveFileEnvelope {
+  format: 'runetamer-labyrinth-save';
+  version: number;
+  exportedAt: number;
+  checksum: string;
+  save: GameSave;
+}
+
+export function exportSaveJson(save: GameSave): string {
+  const now = Date.now();
+  const payload: GameSave = { ...save, savedAt: now };
+  const serialized = JSON.stringify(payload);
+  const envelope: ExportedSaveFileEnvelope = {
+    format: 'runetamer-labyrinth-save',
+    version: CURRENT_SAVE_VERSION,
+    exportedAt: now,
+    checksum: simpleChecksum(serialized),
+    save: payload,
+  };
+  return JSON.stringify(envelope, null, 2);
+}
+
+export function importSaveJson(
+  rawText: string,
+): { ok: true; save: GameSave } | { ok: false; error: string } {
+  const trimmed = rawText.trim();
+  if (!trimmed) {
+    return { ok: false, error: 'ファイルが空です。' };
+  }
+  // Allow loading a plain text file containing an RTL1 save code too
+  if (trimmed.startsWith('RTL1:')) {
+    return importSaveCode(trimmed);
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as Partial<ExportedSaveFileEnvelope> & Partial<GameSave>;
+    if (parsed && parsed.format === 'runetamer-labyrinth-save' && parsed.save) {
+      const serialized = JSON.stringify(parsed.save);
+      if (parsed.checksum && simpleChecksum(serialized) !== parsed.checksum) {
+        return { ok: false, error: 'ファイルが破損または改ざんされています。' };
+      }
+      const valid = validateSave(parsed.save);
+      if (!valid) {
+        return { ok: false, error: 'セーブファイルの内容が無効です。' };
+      }
+      return { ok: true, save: valid };
+    }
+    // Fallback: direct GameSave JSON
+    const valid = validateSave(parsed);
+    if (!valid) {
+      return { ok: false, error: '対応していないファイル形式です。' };
+    }
+    return { ok: true, save: valid };
+  } catch {
+    return { ok: false, error: 'JSONの読み込みに失敗しました。' };
+  }
+}
+
+export function buildSaveFileName(slot: SaveSlotId): string {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `runetamer_slot${slot}_${yyyy}${mm}${dd}_${hh}${mi}.json`;
 }
 
 function normalizeItem(it: Partial<EquipmentItem>): EquipmentItem {
@@ -236,6 +405,7 @@ export function validateSave(data: unknown): GameSave | null {
     ...fallback,
     ...s,
     version: CURRENT_SAVE_VERSION,
+    savedAt: typeof s.savedAt === 'number' && Number.isFinite(s.savedAt) ? s.savedAt : fallback.savedAt,
     gold: typeof s.gold === 'number' && Number.isFinite(s.gold) ? s.gold : fallback.gold,
     forgeStones:
       typeof s.forgeStones === 'number' && Number.isFinite(s.forgeStones)

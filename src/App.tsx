@@ -5,7 +5,7 @@ import { EquipmentPanel } from './components/EquipmentPanel';
 import { GameCanvas } from './components/GameCanvas';
 import { PartyPanel } from './components/PartyPanel';
 import { PixelIcon } from './components/PixelIcon';
-import { WorldPanel } from './components/WorldPanel';
+import { WorldPanel, type WorldSection } from './components/WorldPanel';
 import { ACHIEVEMENT_MAP, getUnclaimedAchievements } from './game/achievements';
 import {
   createBattleState,
@@ -38,11 +38,18 @@ import {
   type ExpeditionState,
 } from './game/expedition';
 import {
-  clearLocalSave,
+  buildSaveFileName,
   createInitialSave,
+  deleteSaveSlot,
+  exportSaveJson,
+  getActiveSaveSlot,
   importSaveCode,
-  loadGameFromLocal,
-  saveGameToLocal,
+  importSaveJson,
+  listSaveSlotSummaries,
+  loadGameFromSlot,
+  saveGameToSlot,
+  setActiveSaveSlot,
+  type SaveSlotId,
 } from './game/save';
 import {
   ALL_HERO_SKILLS,
@@ -82,12 +89,18 @@ const EMPTY_SHRINE_BUFFS: ActiveShrineBuffs = {
 const INITIAL_RUN_POTIONS = { hp: 3, mp: 2 };
 
 export function App() {
-  const [save, setSave] = useState<GameSave>(() => loadGameFromLocal() ?? createInitialSave());
+  const [activeSlot, setActiveSlot] = useState<SaveSlotId>(() => getActiveSaveSlot());
+  const [save, setSave] = useState<GameSave>(
+    () => loadGameFromSlot(getActiveSaveSlot()) ?? createInitialSave(),
+  );
+  const [lastSavedAt, setLastSavedAt] = useState<number>(() => save.savedAt);
+  const [slotRevision, setSlotRevision] = useState(0);
   const [expedition, setExpedition] = useState<ExpeditionState>(() => createVillageExpedition());
   const [battle, setBattle] = useState<BattleState | null>(null);
   const [pendingAdvanceOnWin, setPendingAdvanceOnWin] = useState(false);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('explore');
+  const [worldSection, setWorldSection] = useState<WorldSection>('altar');
   const [focusItemId, setFocusItemId] = useState<string | null>(null);
   const [selectedEnemyUid, setSelectedEnemyUid] = useState<string | null>(null);
   const [shrineBuffs, setShrineBuffs] = useState<ActiveShrineBuffs>(EMPTY_SHRINE_BUFFS);
@@ -107,8 +120,8 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    saveGameToLocal(save);
-  }, [save]);
+    saveGameToSlot(activeSlot, save);
+  }, [activeSlot, save]);
 
   const invMap = useMemo(
     () => new Map(save.inventory.map((it) => [it.id, it])),
@@ -1141,33 +1154,167 @@ export function App() {
     showToast(`ミステリー箱・${item.name}`);
   }, [save, showToast]);
 
-  const handleImportSave = useCallback(
-    (code: string) => {
-      const res = importSaveCode(code);
-      if (!res.ok) return { ok: false, error: res.error };
-      setSave(res.save);
+  const handleManualSaveSlot = useCallback(
+    (slot: SaveSlotId) => {
+      const ts = saveGameToSlot(slot, save);
+      if (slot === activeSlot) {
+        setLastSavedAt(ts);
+      }
+      setSlotRevision((n) => n + 1);
+      showToast(`💾 冒険の書 ${slot} に記録した`);
+    },
+    [activeSlot, save, showToast],
+  );
+
+  const handleLoadSaveSlot = useCallback(
+    (slot: SaveSlotId) => {
+      const loaded = loadGameFromSlot(slot);
+      if (!loaded) return;
+      setActiveSaveSlot(slot);
+      setActiveSlot(slot);
+      setSave(loaded);
+      setLastSavedAt(loaded.savedAt);
       setBattle(null);
+      setAutoAdvance(false);
+      setShrineBuffs(EMPTY_SHRINE_BUFFS);
       setRunPotions(INITIAL_RUN_POTIONS);
       setExpedition(createVillageExpedition());
       setActiveTab('explore');
-      showToast('セーブコードを復元した');
-      return { ok: true };
+      setSlotRevision((n) => n + 1);
+      showToast(`📖 冒険の書 ${slot} を読み込んだ`);
     },
     [showToast],
   );
 
-  const handleResetSave = useCallback(() => {
-    clearLocalSave();
-    const fresh = createInitialSave();
-    setSave(fresh);
-    setBattle(null);
-    setAutoAdvance(false);
-    setShrineBuffs(EMPTY_SHRINE_BUFFS);
-    setRunPotions(INITIAL_RUN_POTIONS);
-    setExpedition(createVillageExpedition());
-    setActiveTab('explore');
-    showToast('セーブデータを初期化した');
-  }, [showToast]);
+  const handleNewSaveInSlot = useCallback(
+    (slot: SaveSlotId) => {
+      const fresh = createInitialSave();
+      const ts = saveGameToSlot(slot, fresh);
+      setActiveSaveSlot(slot);
+      setActiveSlot(slot);
+      setSave(fresh);
+      setLastSavedAt(ts);
+      setBattle(null);
+      setAutoAdvance(false);
+      setShrineBuffs(EMPTY_SHRINE_BUFFS);
+      setRunPotions(INITIAL_RUN_POTIONS);
+      setExpedition(createVillageExpedition());
+      setActiveTab('explore');
+      setSlotRevision((n) => n + 1);
+      showToast(`📖 冒険の書 ${slot} で冒険を開始した`);
+    },
+    [showToast],
+  );
+
+  const handleDeleteSaveSlot = useCallback(
+    (slot: SaveSlotId) => {
+      deleteSaveSlot(slot);
+      if (slot === activeSlot) {
+        const fresh = createInitialSave();
+        const ts = saveGameToSlot(slot, fresh);
+        setSave(fresh);
+        setLastSavedAt(ts);
+        setBattle(null);
+        setAutoAdvance(false);
+        setShrineBuffs(EMPTY_SHRINE_BUFFS);
+        setRunPotions(INITIAL_RUN_POTIONS);
+        setExpedition(createVillageExpedition());
+        setActiveTab('explore');
+        setSlotRevision((n) => n + 1);
+        showToast(`冒険の書 ${slot} を初期化した`);
+        return;
+      }
+      setSlotRevision((n) => n + 1);
+      showToast(`冒険の書 ${slot} を削除した`);
+    },
+    [activeSlot, showToast],
+  );
+
+  const handleExportSaveFile = useCallback(() => {
+    const json = exportSaveJson(save);
+    const ts = saveGameToSlot(activeSlot, save);
+    setLastSavedAt(ts);
+    setSlotRevision((n) => n + 1);
+    try {
+      const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = buildSaveFileName(activeSlot);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      // Fallback ignored in restricted environments
+    }
+    showToast('📁 セーブファイルを保存した');
+  }, [activeSlot, save, showToast]);
+
+  const handleImportSaveFile = useCallback(
+    (rawText: string) => {
+      const res = importSaveJson(rawText);
+      if (!res.ok) return { ok: false, error: res.error };
+      const ts = saveGameToSlot(activeSlot, res.save);
+      setSave(res.save);
+      setLastSavedAt(ts);
+      setBattle(null);
+      setAutoAdvance(false);
+      setShrineBuffs(EMPTY_SHRINE_BUFFS);
+      setRunPotions(INITIAL_RUN_POTIONS);
+      setExpedition(createVillageExpedition());
+      setActiveTab('explore');
+      setSlotRevision((n) => n + 1);
+      showToast(`📁 冒険の書 ${activeSlot} へ復元した`);
+      return { ok: true };
+    },
+    [activeSlot, showToast],
+  );
+
+  const handleImportSave = useCallback(
+    (code: string) => {
+      const res = importSaveCode(code);
+      if (!res.ok) return { ok: false, error: res.error };
+      const ts = saveGameToSlot(activeSlot, res.save);
+      setSave(res.save);
+      setLastSavedAt(ts);
+      setBattle(null);
+      setAutoAdvance(false);
+      setShrineBuffs(EMPTY_SHRINE_BUFFS);
+      setRunPotions(INITIAL_RUN_POTIONS);
+      setExpedition(createVillageExpedition());
+      setActiveTab('explore');
+      setSlotRevision((n) => n + 1);
+      showToast(`冒険の書 ${activeSlot} へ復元した`);
+      return { ok: true };
+    },
+    [activeSlot, showToast],
+  );
+
+  const slotSummaries = useMemo(() => {
+    // Re-read storage on revision/slot change, and reflect live active save immediately
+    void slotRevision;
+    const base = listSaveSlotSummaries();
+    const livePartySprites = save.partyIds
+      .map((id) => save.roster[id])
+      .filter((u): u is NonNullable<typeof u> => Boolean(u))
+      .map((u) => getSpecies(u.speciesId).spriteKey);
+    return base.map((entry) =>
+      entry.slot === activeSlot
+        ? {
+            ...entry,
+            exists: true,
+            savedAt: Math.max(entry.savedAt, lastSavedAt),
+            heroLevel: save.roster.hero?.level ?? 1,
+            worldTier: save.worldTier,
+            highestFloor: save.stats.highestFloorReached,
+            gold: save.gold,
+            forgeStones: save.forgeStones,
+            partySprites: livePartySprites,
+          }
+        : entry,
+    );
+  }, [activeSlot, lastSavedAt, save, slotRevision]);
 
   const biomeDef = BIOMES[expedition.biome];
   const inVillage = expedition.inVillage;
@@ -1212,6 +1359,25 @@ export function App() {
               💎{save.forgeStones.toLocaleString()}
             </span>
             <span className="gold-pill">{save.gold.toLocaleString()}G</span>
+            {!battle && (
+              <button
+                id="btn-hud-save"
+                type="button"
+                className="gold-pill"
+                style={{
+                  color: '#a3ffbe',
+                  borderColor: 'rgba(130, 255, 158, 0.45)',
+                  cursor: 'pointer',
+                  background: 'rgba(20, 44, 30, 0.85)',
+                }}
+                onClick={() => {
+                  setActiveTab('world');
+                  setWorldSection('save');
+                }}
+              >
+                💾書{activeSlot}
+              </button>
+            )}
           </div>
         </header>
 
@@ -1587,6 +1753,17 @@ export function App() {
                 <WorldPanel
                   save={save}
                   inVillage={inVillage}
+                  section={worldSection}
+                  onChangeSection={setWorldSection}
+                  activeSlot={activeSlot}
+                  lastSavedAt={lastSavedAt}
+                  slotSummaries={slotSummaries}
+                  onManualSaveSlot={handleManualSaveSlot}
+                  onLoadSaveSlot={handleLoadSaveSlot}
+                  onNewSaveInSlot={handleNewSaveInSlot}
+                  onDeleteSaveSlot={handleDeleteSaveSlot}
+                  onExportSaveFile={handleExportSaveFile}
+                  onImportSaveFile={handleImportSaveFile}
                   onSelectWorldTier={handleSelectWorldTier}
                   onEnterDungeonFloor={enterDungeonFloor}
                   onStartBossRush={handleStartBossRush}
@@ -1594,7 +1771,6 @@ export function App() {
                   onRefreshShop={handleRefreshShop}
                   onBuyMysteryBox={handleBuyMysteryBox}
                   onImportSaveCode={handleImportSave}
-                  onResetSave={handleResetSave}
                 />
               )}
 
