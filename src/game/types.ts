@@ -250,12 +250,15 @@ export interface BattleUnitState {
   uniqueEffects: UniqueEffectId[];
   activeSetIds4pc: SetId[];
   defending: boolean;
+  charging: boolean;
+  enraged: boolean;
+  poisonTurns: number;
   atkBuffTurns: number;
   defBuffTurns: number;
   phoenixUsed: boolean;
   skills: [SkillDef, SkillDef];
-  lungeTimer: number;
-  hurtTimer: number;
+  lungeUntilMs: number;
+  hurtUntilMs: number;
 }
 
 export interface BattleFloatingText {
@@ -264,13 +267,14 @@ export interface BattleFloatingText {
   text: string;
   color: string;
   isCrit?: boolean;
+  isWeak?: boolean;
   createdAt: number;
 }
 
 export interface BattleVfx {
   id: string;
   targetUid: string;
-  element: ElementType | 'heal' | 'shield' | 'buff';
+  element: ElementType | 'heal' | 'shield' | 'buff' | 'ultimate';
   createdAt: number;
 }
 
@@ -306,6 +310,7 @@ export interface BattleState {
   logs: string[];
   floatingTexts: BattleFloatingText[];
   vfx: BattleVfx[];
+  shakeUntilMs: number;
   reward: BattleReward | null;
 }
 

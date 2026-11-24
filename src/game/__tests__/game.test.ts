@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createBattleState,
   executeTurnAction,
+  isElementalWeakness,
   resolveBattleVictory,
   stepEnemyOrAutoTurn,
 } from '../battle';
@@ -209,5 +210,32 @@ describe('RuneTamer Labyrinth Core & v2 Systems', () => {
 
     const bad = importSaveCode(`${code.slice(0, -2)}AA`);
     expect(bad.ok).toBe(false);
+  });
+
+  it('supports elemental weakness cycle and telegraphed boss charge -> ultimate nuke', () => {
+    expect(isElementalWeakness('fire', 'leaf_slime')).toBe(true);
+    expect(isElementalWeakness('nature', 'stone_imp')).toBe(true);
+    expect(isElementalWeakness('holy', 'ember_pup')).toBe(true);
+    expect(isElementalWeakness('fire', 'ember_pup')).toBe(false);
+
+    const save = createInitialSave();
+    const boss = {
+      id: 'boss_5',
+      kind: 'boss' as const,
+      x: 0,
+      y: 0,
+      spriteKey: 'ancient_treant',
+      name: '森の古樹王',
+      speciesIds: ['ancient_treant'],
+      interacted: false,
+    };
+    const b0 = createBattleState(save, boss, 5);
+    const enemyUid = b0.enemies[0]!.uid;
+    const charged = executeTurnAction({ ...b0, activeUid: enemyUid }, { type: 'enemy_charge' });
+    expect(charged.enemies[0]!.charging).toBe(true);
+
+    const nuked = executeTurnAction({ ...charged, activeUid: enemyUid }, { type: 'enemy_ultimate' });
+    expect(nuked.enemies[0]!.charging).toBe(false);
+    expect(nuked.shakeUntilMs).toBeGreaterThan(0);
   });
 });

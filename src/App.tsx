@@ -600,7 +600,15 @@ export function App() {
   const handleFinishBattle = useCallback(() => {
     if (!battle) return;
     if (battle.phase === 'defeat') {
-      returnToVillage('全滅したため始まりの村へ帰還した。泉で全回復！');
+      const lostGold = Math.floor(save.gold * 0.15);
+      if (lostGold > 0) {
+        setSave((prev) => ({ ...prev, gold: Math.max(0, prev.gold - lostGold) }));
+      }
+      returnToVillage(
+        lostGold > 0
+          ? `☠ 全滅…${lostGold.toLocaleString()}Gを失い始まりの村へ帰還した。装備を鍛えて再挑戦！`
+          : '☠ 全滅したため始まりの村へ帰還した。装備を鍛えて再挑戦！',
+      );
       return;
     }
     if (battle.phase === 'fled') {
@@ -617,7 +625,7 @@ export function App() {
     }
     setBattle(null);
     setPendingAdvanceOnWin(false);
-  }, [battle, returnToVillage]);
+  }, [battle, returnToVillage, save.gold]);
 
   useEffect(() => {
     if (!autoAdvance || !battle || battle.phase !== 'victory' || !battle.reward) return;
@@ -970,6 +978,16 @@ export function App() {
               {inVillage ? biomeDef.shortName : `${biomeDef.shortName} ${expedition.floor}F`}
             </h1>
             <span className="tier-badge">T{toRoman(save.worldTier)}</span>
+            <span
+              className="tier-badge"
+              style={{
+                background: 'linear-gradient(180deg, #8c202e 0%, #57111b 100%)',
+                borderColor: '#ff7084',
+                color: '#ffd6dd',
+              }}
+            >
+              ☠超高難度
+            </span>
           </div>
           <div className="hud-right">
             <span className="gold-pill" style={{ color: '#8ae8ff', borderColor: 'rgba(138, 232, 255, 0.45)' }}>

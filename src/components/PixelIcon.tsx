@@ -15,7 +15,7 @@ export function PixelIcon({
   alt = '',
 }: PixelIconProps) {
   const src = useMemo(
-    () => getSpriteDataUrl(spriteKey, 3, silhouette),
+    () => getSpriteDataUrl(spriteKey, 2, silhouette),
     [spriteKey, silhouette],
   );
 

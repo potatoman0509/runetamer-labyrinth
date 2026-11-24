@@ -194,13 +194,13 @@ export function BattlePanel({
   if (battle.phase === 'defeat' || battle.phase === 'fled') {
     return (
       <div className="panel-body">
-        <div className="rpg-card-gold" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 16, color: '#ff8a8a' }}>
-            {battle.phase === 'defeat' ? 'パーティは力尽きた…' : '戦闘から撤退した'}
+        <div className="rpg-card-gold" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 15, color: '#ff8a8a' }}>
+            {battle.phase === 'defeat' ? '☠ パーティは壊滅した…' : '戦闘から撤退した'}
           </div>
           <div className="muted-text">
             {battle.phase === 'defeat'
-              ? '装備・仲間・ゴールドはそのまま残ります。村の回復の泉で立て直して再挑戦しましょう！'
+              ? '装備・仲間・鍛冶石はそのまま残りますが、所持金の15%を落として村へ撤退します。装備強化や防御タイミングを見直して再挑戦しよう！'
               : '安全に距離を取った。'}
           </div>
           <button
@@ -215,6 +215,8 @@ export function BattlePanel({
       </div>
     );
   }
+
+  const chargingEnemy = battle.enemies.find((e) => e.hp > 0 && e.charging);
 
   return (
     <div className="panel-body" style={{ gap: 5 }}>
@@ -239,8 +241,11 @@ export function BattlePanel({
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
+                      color: ally.poisonTurns > 0 ? '#e3a6ff' : undefined,
                     }}
                   >
+                    {ally.poisonTurns > 0 ? '☠' : ''}
+                    {ally.defending ? '🛡' : ''}
                     {ally.name}
                   </div>
                   <div
@@ -267,6 +272,24 @@ export function BattlePanel({
           );
         })}
       </div>
+
+      {/* Urgent Boss/Elite Ultimate Warning Banner */}
+      {chargingEnemy && (
+        <div
+          style={{
+            background: 'rgba(180, 32, 54, 0.35)',
+            border: '1px solid #ff667a',
+            borderRadius: 5,
+            padding: '3px 7px',
+            fontFamily: 'var(--font-pixel)',
+            fontSize: 10,
+            color: '#ffd1d8',
+            textAlign: 'center',
+          }}
+        >
+          ⚠ {chargingEnemy.name}が大技溜め中！🛡防御(-65%)やバリアで耐えろ！
+        </div>
+      )}
 
       {/* Battle Toolbar: Auto / Speed / Tactic */}
       <div className="battle-toolbar">
@@ -366,11 +389,11 @@ export function BattlePanel({
             <button
               id="btn-cmd-defend"
               type="button"
-              className="rpg-btn sm"
+              className={`rpg-btn sm ${chargingEnemy ? 'emerald' : ''}`}
               disabled={!canPlayerAct}
               onClick={() => onCommand({ type: 'defend' })}
             >
-              🛡防御
+              🛡防御-65%
             </button>
             <button
               id="btn-cmd-flee"

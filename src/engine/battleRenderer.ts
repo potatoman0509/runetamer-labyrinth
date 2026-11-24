@@ -1,6 +1,6 @@
 import { BIOMES } from '../game/data/biomes';
 import type { BattleState, BattleUnitState, DungeonBiomeId } from '../game/types';
-import { getSpriteCanvas } from './pixelSprites';
+import { ANIM_FRAME_COUNT, getSpriteCanvas } from './pixelSprites';
 
 function drawBattleBackdrop(
   ctx: CanvasRenderingContext2D,
@@ -10,90 +10,112 @@ function drawBattleBackdrop(
   timeMs: number,
 ): void {
   const pal = BIOMES[biome].palette;
-  const horizonY = Math.round(h * 0.44);
+  const horizonY = Math.round(h * 0.45);
 
-  // Sky / upper cavern gradient bands (pixel-stepped for 16-bit look!)
-  const bands = 6;
+  // Fine 16-bit SNES stepped sky gradient
+  const bands = 8;
   for (let i = 0; i < bands; i += 1) {
-    ctx.fillStyle = i < 3 ? pal.skyTop : pal.skyBottom;
-    ctx.globalAlpha = i < 3 ? 1 - i * 0.12 : 0.65 + (i - 3) * 0.12;
+    ctx.fillStyle = i < 4 ? pal.skyTop : pal.skyBottom;
+    ctx.globalAlpha = i < 4 ? 1 - i * 0.08 : 0.65 + (i - 4) * 0.09;
     const by = Math.round((horizonY / bands) * i);
-    const bh = Math.ceil(horizonY / bands) + 1;
-    ctx.fillRect(0, by, w, bh);
+    ctx.fillRect(0, by, w, Math.ceil(horizonY / bands) + 1);
   }
   ctx.globalAlpha = 1;
 
-  // Distant biome silhouettes
   if (biome === 'forest') {
-    // Distant warm forest canopy hills
-    ctx.fillStyle = '#255c37';
-    for (let x = -10; x < w + 20; x += 38) {
-      ctx.fillRect(x, horizonY - 26, 28, 28);
-      ctx.fillStyle = '#367d46';
-      ctx.fillRect(x + 6, horizonY - 34, 18, 20);
-      ctx.fillStyle = '#255c37';
+    const sway = Math.round(Math.sin(timeMs / 700) * 2);
+    for (let x = -10; x < w + 24; x += 30) {
+      ctx.fillStyle = '#1e4d2e';
+      ctx.fillRect(x, horizonY - 26, 24, 28);
+      ctx.fillStyle = '#2d6e3f';
+      ctx.fillRect(x + 4 + sway, horizonY - 36, 18, 20);
+      ctx.fillStyle = '#53a655';
+      ctx.fillRect(x + 7 + sway, horizonY - 38, 10, 6);
     }
-    // Sunbeams
-    ctx.fillStyle = 'rgba(255, 248, 184, 0.12)';
-    ctx.fillRect(w * 0.2, 0, 26, horizonY + 40);
-    ctx.fillRect(w * 0.65, 0, 18, horizonY + 30);
+    // Animated sunlit shafts
+    const beamAlpha = 0.08 + Math.sin(timeMs / 900) * 0.04;
+    ctx.fillStyle = `rgba(255, 250, 196, ${beamAlpha})`;
+    ctx.fillRect(w * 0.18, 0, 22, horizonY + 45);
+    ctx.fillRect(w * 0.52, 0, 14, horizonY + 35);
+    ctx.fillRect(w * 0.78, 0, 18, horizonY + 40);
   } else if (biome === 'ruins') {
-    // Ancient stone pillars with glowing cyan runes
-    for (let x = 24; x < w; x += 74) {
-      ctx.fillStyle = '#474f61';
-      ctx.fillRect(x, 12, 18, horizonY - 10);
-      ctx.fillStyle = '#68738a';
-      ctx.fillRect(x + 2, 12, 4, horizonY - 12);
+    for (let x = 20; x < w; x += 66) {
+      ctx.fillStyle = '#3b4252';
+      ctx.fillRect(x, 8, 18, horizonY - 6);
+      ctx.fillStyle = '#5f6a80';
+      ctx.fillRect(x + 2, 8, 4, horizonY - 8);
+      // Flickering wall torch!
+      const flicker = Math.floor(timeMs / 110 + x) % 3;
+      ctx.fillStyle = '#7d4d2a';
+      ctx.fillRect(x + 17, 34, 4, 8);
+      ctx.fillStyle = '#ff8026';
+      ctx.fillRect(x + 16, 27 - flicker, 6, 7 + flicker);
+      ctx.fillStyle = '#ffe86b';
+      ctx.fillRect(x + 17, 29 - flicker, 4, 4);
+      // Glowing carved rune
       ctx.fillStyle = '#6beeff';
-      ctx.globalAlpha = 0.55 + Math.sin(timeMs / 400 + x) * 0.3;
-      ctx.fillRect(x + 8, 28, 3, 14);
-      ctx.fillRect(x + 8, 52, 3, 10);
+      ctx.globalAlpha = 0.5 + Math.sin(timeMs / 360 + x) * 0.35;
+      ctx.fillRect(x + 8, 22, 2, 16);
+      ctx.fillRect(x + 6, 28, 6, 2);
       ctx.globalAlpha = 1;
     }
   } else if (biome === 'volcano') {
-    // Distant lava waterfall & jagged basalt crags
-    ctx.fillStyle = '#331512';
-    for (let x = 0; x < w; x += 48) {
-      ctx.fillRect(x, horizonY - 30, 36, 30);
-      ctx.fillRect(x + 10, horizonY - 44, 16, 16);
+    ctx.fillStyle = '#2e1210';
+    for (let x = 0; x < w; x += 42) {
+      ctx.fillRect(x, horizonY - 32, 34, 32);
+      ctx.fillRect(x + 8, horizonY - 46, 16, 16);
     }
-    // Glowing magma river along horizon
-    ctx.fillStyle = '#ff6d24';
-    ctx.fillRect(0, horizonY - 8, w, 10);
-    ctx.fillStyle = '#ffe066';
-    const shift = Math.floor(timeMs / 180) % 24;
+    // Bubbling magma river along horizon
+    ctx.fillStyle = '#e8451e';
+    ctx.fillRect(0, horizonY - 10, w, 12);
+    ctx.fillStyle = '#ff962e';
+    ctx.fillRect(0, horizonY - 7, w, 5);
+    ctx.fillStyle = '#ffe566';
+    const shift = Math.floor(timeMs / 130) % 24;
     for (let x = -24; x < w + 24; x += 24) {
-      ctx.fillRect(x + shift, horizonY - 5, 10, 3);
+      ctx.fillRect(x + shift, horizonY - 6, 10, 2);
+      const bubble = Math.floor(timeMs / 240 + x) % 4 === 0;
+      if (bubble) ctx.fillRect(x + 4, horizonY - 11, 4, 3);
     }
   } else if (biome === 'abyss') {
-    // Twinkling starfield + crescent moon
-    ctx.fillStyle = '#fff3ad';
-    ctx.fillRect(w - 58, 18, 18, 18);
+    // Crescent moon & shooting star
+    ctx.fillStyle = '#fff5be';
+    ctx.fillRect(w - 54, 14, 16, 16);
     ctx.fillStyle = pal.skyTop;
-    ctx.fillRect(w - 52, 16, 14, 14);
-    for (let i = 0; i < 24; i += 1) {
-      const sx = (i * 47 + 13) % w;
-      const sy = (i * 29 + 7) % (horizonY - 8);
+    ctx.fillRect(w - 48, 12, 12, 12);
+
+    const shootPhase = (timeMs % 4200) / 4200;
+    if (shootPhase < 0.22) {
+      const t = shootPhase / 0.22;
+      const sx = Math.round(w * (0.85 - t * 0.6));
+      const sy = Math.round(12 + t * 44);
+      ctx.fillStyle = '#fff9d6';
+      ctx.fillRect(sx, sy, 4, 2);
+      ctx.fillStyle = 'rgba(124, 232, 255, 0.55)';
+      ctx.fillRect(sx + 4, sy - 2, 10, 2);
+    }
+
+    for (let i = 0; i < 30; i += 1) {
+      const sx = (i * 43 + 11) % w;
+      const sy = (i * 23 + 6) % (horizonY - 6);
       ctx.fillStyle = i % 3 === 0 ? '#7ce8ff' : '#fff5c2';
-      ctx.globalAlpha = 0.35 + ((Math.sin(timeMs / 320 + i) + 1) / 2) * 0.65;
-      ctx.fillRect(sx, sy, i % 4 === 0 ? 3 : 2, i % 4 === 0 ? 3 : 2);
+      ctx.globalAlpha = 0.3 + ((Math.sin(timeMs / 280 + i) + 1) / 2) * 0.7;
+      ctx.fillRect(sx, sy, i % 5 === 0 ? 2 : 1, i % 5 === 0 ? 2 : 1);
     }
     ctx.globalAlpha = 1;
   }
 
-  // Battleground floor with warm checkered perspective stripes
+  // Fine perspective pixel ground with subtle dither tiles
   ctx.fillStyle = pal.groundPrimary;
   ctx.fillRect(0, horizonY, w, h - horizonY);
   ctx.fillStyle = pal.groundSecondary;
-  for (let row = 0; row < 5; row += 1) {
-    const ry = horizonY + row * Math.ceil((h - horizonY) / 5);
-    if (row % 2 === 1) {
-      ctx.fillRect(0, ry, w, Math.ceil((h - horizonY) / 5));
-    }
+  const rows = 6;
+  const rh = Math.ceil((h - horizonY) / rows);
+  for (let row = 0; row < rows; row += 1) {
+    if (row % 2 === 1) ctx.fillRect(0, horizonY + row * rh, w, rh);
   }
-  // Horizon border
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.fillRect(0, horizonY, w, 3);
+  ctx.fillStyle = 'rgba(0,0,0,0.34)';
+  ctx.fillRect(0, horizonY, w, 2);
 }
 
 interface UnitAnchor {
@@ -108,27 +130,26 @@ function getUnitPositions(
   h: number,
 ): Map<string, UnitAnchor> {
   const map = new Map<string, UnitAnchor>();
-  const topY = Math.round(h * 0.43);
-  const usableH = Math.round(h * 0.5);
+  const topY = Math.round(h * 0.46);
+  const usableH = Math.round(h * 0.48);
 
-  const baseScale = w < 350 ? 2 : 3;
-  const bossScale = w < 350 ? 3 : 4;
+  // 32x32 HD sprites rendered at crisp 2x (64x64) and bosses at 2x-3x (64-96px)!
+  const baseScale = w < 320 ? 1 : 2;
+  const bossScale = w < 380 ? 2 : 3;
 
-  // Enemies on left side (facing right)
   const eCount = state.enemies.length;
   state.enemies.forEach((e, idx) => {
     const t = eCount === 1 ? 0.5 : idx / (eCount - 1);
-    const x = Math.round(w * (e.isBoss ? 0.25 : idx % 2 === 0 ? 0.2 : 0.31));
-    const y = Math.round(topY + 12 + t * (usableH - 30));
+    const x = Math.round(w * (e.isBoss ? 0.24 : idx % 2 === 0 ? 0.18 : 0.31));
+    const y = Math.round(topY + 12 + t * (usableH - 28));
     map.set(e.uid, { x, y, scale: e.isBoss ? bossScale : baseScale });
   });
 
-  // Allies on right side (facing left)
   const aCount = state.allies.length;
   state.allies.forEach((a, idx) => {
     const t = aCount === 1 ? 0.5 : idx / (aCount - 1);
-    const x = Math.round(w * (idx % 2 === 0 ? 0.76 : 0.85));
-    const y = Math.round(topY + 10 + t * (usableH - 28));
+    const x = Math.round(w * (idx % 2 === 0 ? 0.75 : 0.86));
+    const y = Math.round(topY + 10 + t * (usableH - 26));
     map.set(a.uid, { x, y, scale: baseScale });
   });
 
@@ -142,55 +163,93 @@ function drawVfxEffect(
   element: BattleState['vfx'][number]['element'],
   progress: number, // 0..1
 ): void {
-  const alpha = Math.max(0, 1 - progress);
+  const alpha = Math.max(0, 1 - progress * 0.92);
   ctx.save();
   ctx.globalAlpha = alpha;
 
-  if (element === 'heal') {
-    ctx.fillStyle = '#7aff99';
-    for (let i = 0; i < 6; i += 1) {
-      const ang = (i / 6) * Math.PI * 2 + progress * 2;
-      const rx = x + Math.cos(ang) * (10 + progress * 14);
-      const ry = y - progress * 22 + Math.sin(ang) * 6;
-      ctx.fillRect(Math.round(rx) - 2, Math.round(ry) - 4, 4, 8);
-      ctx.fillRect(Math.round(rx) - 4, Math.round(ry) - 2, 8, 4);
+  if (element === 'ultimate') {
+    // Dramatic Boss Ultimate Double Shockwave + Lightning!
+    const r1 = 10 + progress * 38;
+    const r2 = 6 + progress * 24;
+    ctx.strokeStyle = '#ff4d6a';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(x, y, r1, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = '#ffe566';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, r2, 0, Math.PI * 2);
+    ctx.stroke();
+    for (let i = 0; i < 12; i += 1) {
+      const ang = (i / 12) * Math.PI * 2 + progress * 2.5;
+      const d = 8 + progress * 32;
+      ctx.fillStyle = i % 2 === 0 ? '#ff667a' : '#fff5b8';
+      ctx.fillRect(Math.round(x + Math.cos(ang) * d) - 2, Math.round(y + Math.sin(ang) * d) - 2, 4, 4);
+    }
+  } else if (element === 'heal') {
+    // DQ6 rising healing ribbons & sparkles
+    for (let i = 0; i < 8; i += 1) {
+      const ang = (i / 8) * Math.PI * 2 + progress * 3.5;
+      const rx = x + Math.cos(ang) * (14 * (1 - progress * 0.4));
+      const ry = y + 10 - progress * 32 + Math.sin(ang) * 5;
+      ctx.fillStyle = i % 2 === 0 ? '#7aff99' : '#fff5b8';
+      ctx.fillRect(Math.round(rx) - 1, Math.round(ry) - 3, 2, 6);
+      ctx.fillRect(Math.round(rx) - 3, Math.round(ry) - 1, 6, 2);
     }
   } else if (element === 'shield' || element === 'buff') {
     ctx.strokeStyle = element === 'shield' ? '#70dcff' : '#ffe066';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(x, y, 14 + progress * 16, 0, Math.PI * 2);
+    ctx.arc(x, y, 16 + progress * 18, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x, y, 10 + progress * 14, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (element === 'fire') {
+    // Rising pixel fire pillar + embers
+    for (let i = 0; i < 10; i += 1) {
+      const spread = (i - 4.5) * 4;
+      const rise = progress * 32 + (i % 3) * 6;
+      ctx.fillStyle = i % 3 === 0 ? '#fff5b8' : i % 2 === 0 ? '#ff962e' : '#e63b24';
+      ctx.fillRect(Math.round(x + spread), Math.round(y + 12 - rise), 4, 6);
+    }
+  } else if (element === 'star' || element === 'holy') {
+    // Cascading starlight meteors + starburst
+    ctx.strokeStyle = '#fff5b8';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x - 24, y - 24);
+    ctx.lineTo(x + 24 * progress, y + 24 * progress);
+    ctx.moveTo(x + 24, y - 24);
+    ctx.lineTo(x - 24 * progress, y + 24 * progress);
+    ctx.stroke();
+    for (let i = 0; i < 10; i += 1) {
+      const ang = (i / 10) * Math.PI * 2 + progress * 2;
+      const d = 4 + progress * 28;
+      ctx.fillStyle = i % 2 === 0 ? '#7ce8ff' : '#ffe566';
+      ctx.fillRect(Math.round(x + Math.cos(ang) * d) - 2, Math.round(y + Math.sin(ang) * d) - 2, 4, 4);
+    }
   } else {
-    // Elemental / Slash burst pixels
+    // DQ6 fluid curved pixel slash arc + sparks
     const colorMap: Record<string, [string, string]> = {
       physical: ['#ffffff', '#ffe082'],
       nature: ['#80ff72', '#d9ff8c'],
       earth: ['#d9a066', '#ffe3a3'],
-      fire: ['#ff6833', '#ffe566'],
-      star: ['#7ce8ff', '#fff08a'],
-      holy: ['#fff7b8', '#7ce8ff'],
     };
     const [c1, c2] = colorMap[element] ?? ['#ffffff', '#ffe066'];
-    // Diagonal slash line
     ctx.strokeStyle = c1;
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.moveTo(x - 18, y - 16 + progress * 10);
-    ctx.lineTo(x + 18, y + 16 - progress * 10);
+    ctx.arc(x, y, 22, -Math.PI * 0.75 + progress * 0.8, -Math.PI * 0.1 + progress * 1.4);
     ctx.stroke();
-
-    // Burst sparks
     for (let i = 0; i < 8; i += 1) {
       const ang = (i / 8) * Math.PI * 2;
       const dist = 6 + progress * 24;
       ctx.fillStyle = i % 2 === 0 ? c1 : c2;
-      ctx.fillRect(
-        Math.round(x + Math.cos(ang) * dist) - 2,
-        Math.round(y + Math.sin(ang) * dist) - 2,
-        5,
-        5,
-      );
+      ctx.fillRect(Math.round(x + Math.cos(ang) * dist) - 2, Math.round(y + Math.sin(ang) * dist) - 2, 4, 4);
     }
   }
 
@@ -206,12 +265,20 @@ export function renderBattleScene(
   selectedTargetUid: string | null,
 ): Map<string, UnitAnchor> {
   ctx.imageSmoothingEnabled = false;
+  const now = Date.now();
+
+  // Impact camera shake on crits / WEAK hits / Boss Ultimates!
+  const shaking = now < state.shakeUntilMs;
+  const camShakeX = shaking ? Math.round(Math.sin(timeMs * 0.09) * 4) : 0;
+  const camShakeY = shaking ? Math.round(Math.cos(timeMs * 0.11) * 3) : 0;
+
+  ctx.save();
+  ctx.translate(camShakeX, camShakeY);
+
   drawBattleBackdrop(ctx, state.biome, width, height, timeMs);
 
   const anchors = getUnitPositions(state, width, height);
   const allUnits: BattleUnitState[] = [...state.enemies, ...state.allies];
-
-  // Sort by Y for clean depth overlap
   allUnits.sort((a, b) => (anchors.get(a.uid)?.y ?? 0) - (anchors.get(b.uid)?.y ?? 0));
 
   for (const unit of allUnits) {
@@ -219,104 +286,185 @@ export function renderBattleScene(
     if (!pos) continue;
 
     const isDead = unit.hp <= 0;
-    const bob = isDead ? 0 : Math.round(Math.sin(timeMs / 220 + pos.y) * 2);
-    const lungeOffset =
-      unit.lungeTimer > 0 ? (unit.isAlly ? -16 : 16) : 0;
-    const shakeX =
-      unit.hurtTimer > 0 ? Math.round(Math.sin(timeMs / 24) * 5) : 0;
+    // Silky DQ6 8-frame pixel animation (~11fps idle, faster when enraged or charging!)
+    const frameInterval = unit.charging ? 60 : unit.enraged ? 75 : 92;
+    const frameSeed = Math.abs(unit.uid.charCodeAt(unit.uid.length - 1) ?? 0);
+    const frameIdx = isDead
+      ? 0
+      : (Math.floor(timeMs / frameInterval) + frameSeed) % ANIM_FRAME_COUNT;
+
+    // Smooth parabolic attack lunge curve!
+    let lungeOffset = 0;
+    let lungeProgress = 0;
+    if (now < unit.lungeUntilMs) {
+      lungeProgress = 1 - (unit.lungeUntilMs - now) / 340; // 0..1
+      const arc = Math.sin(lungeProgress * Math.PI);
+      lungeOffset = Math.round((unit.isAlly ? -28 : 28) * arc);
+    }
+
+    const isHurt = now < unit.hurtUntilMs;
+    const hurtShakeX = isHurt ? Math.round(Math.sin(timeMs * 0.08) * 5) : 0;
 
     const drawScale = Math.round(pos.scale);
-    const sprite = getSpriteCanvas(unit.spriteKey, drawScale, unit.isAlly);
+    const sprite = getSpriteCanvas(unit.spriteKey, drawScale, unit.isAlly, false, frameIdx);
     const sw = sprite.width;
     const sh = sprite.height;
 
-    const cx = pos.x + lungeOffset + shakeX;
-    const cy = pos.y + bob;
+    const cx = pos.x + lungeOffset + hurtShakeX;
+    const cy = pos.y;
 
-    // Ground shadow
+    // Ground shadow (stretches subtly with animation!)
     ctx.fillStyle = 'rgba(0, 0, 0, 0.36)';
-    ctx.fillRect(Math.round(cx - sw * 0.36), Math.round(pos.y + sh * 0.34), Math.round(sw * 0.72), 6);
+    ctx.fillRect(
+      Math.round(cx - sw * 0.3),
+      Math.round(pos.y + sh * 0.38),
+      Math.round(sw * 0.6),
+      5,
+    );
 
-    // Selected enemy target reticle
+    // Charging crimson warning aura!
+    if (!isDead && unit.charging) {
+      const r = sw * 0.45 + Math.sin(timeMs / 90) * 4;
+      ctx.strokeStyle = 'rgba(255, 68, 92, 0.92)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+      // Crackling charge sparks orbiting inward
+      for (let i = 0; i < 6; i += 1) {
+        const ang = (timeMs / 160) + (i / 6) * Math.PI * 2;
+        ctx.fillStyle = i % 2 === 0 ? '#ff667a' : '#ffe566';
+        ctx.fillRect(
+          Math.round(cx + Math.cos(ang) * r) - 2,
+          Math.round(cy + Math.sin(ang) * r) - 2,
+          4,
+          4,
+        );
+      }
+    } else if (!isDead && unit.enraged) {
+      // Boss Enrage fiery ring
+      const r = sw * 0.42 + Math.sin(timeMs / 130) * 2;
+      ctx.strokeStyle = 'rgba(255, 130, 48, 0.78)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Selected enemy reticle
     if (!unit.isAlly && !isDead && selectedTargetUid === unit.uid) {
       const pulse = 0.65 + Math.sin(timeMs / 150) * 0.3;
       ctx.strokeStyle = `rgba(255, 224, 92, ${pulse})`;
       ctx.lineWidth = 2;
       ctx.strokeRect(
-        Math.round(cx - sw / 2 - 4),
-        Math.round(cy - sh / 2 - 4),
-        sw + 8,
-        sh + 8,
+        Math.round(cx - sw / 2 - 2),
+        Math.round(cy - sh / 2 - 2),
+        sw + 4,
+        sh + 4,
       );
     }
 
-    // Active turn golden pointer above acting unit
+    // Active turn golden pointer
     if (state.activeUid === unit.uid && !isDead) {
-      const arrowY = Math.round(cy - sh / 2 - 12 + Math.sin(timeMs / 140) * 3);
+      const arrowY = Math.round(cy - sh / 2 - 12 + Math.sin(timeMs / 130) * 3);
       ctx.fillStyle = '#ffe359';
       ctx.beginPath();
       ctx.moveTo(cx, arrowY + 7);
-      ctx.lineTo(cx - 6, arrowY);
-      ctx.lineTo(cx + 6, arrowY);
+      ctx.lineTo(cx - 5, arrowY);
+      ctx.lineTo(cx + 5, arrowY);
       ctx.closePath();
       ctx.fill();
     }
 
+    // Motion-blur pixel afterimages during attack lunge (DQ6 speed trail!)
+    if (!isDead && Math.abs(lungeOffset) > 5) {
+      ctx.save();
+      ctx.globalAlpha = 0.28;
+      ctx.drawImage(sprite, Math.round(pos.x + lungeOffset * 0.5 - sw / 2), Math.round(cy - sh / 2));
+      ctx.globalAlpha = 0.14;
+      ctx.drawImage(sprite, Math.round(pos.x - sw / 2), Math.round(cy - sh / 2));
+      ctx.restore();
+    }
+
     ctx.save();
     if (isDead) {
-      ctx.globalAlpha = 0.28;
+      ctx.globalAlpha = 0.26;
+    } else if (isHurt && Math.floor(timeMs / 45) % 2 === 0) {
+      ctx.globalAlpha = 0.55;
     }
     ctx.drawImage(sprite, Math.round(cx - sw / 2), Math.round(cy - sh / 2));
 
     // Shield bubble
     if (!isDead && unit.shield > 0) {
-      ctx.strokeStyle = 'rgba(115, 214, 255, 0.75)';
+      ctx.strokeStyle = 'rgba(115, 214, 255, 0.78)';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(cx, cy, sw * 0.52, 0, Math.PI * 2);
+      ctx.arc(cx, cy, sw * 0.44, 0, Math.PI * 2);
       ctx.stroke();
+    }
+
+    // Poison floating violet droplets
+    if (!isDead && unit.poisonTurns > 0) {
+      const py = cy - 6 - ((timeMs / 22) % 16);
+      ctx.fillStyle = '#d47cff';
+      ctx.fillRect(Math.round(cx - 8), Math.round(py), 3, 3);
+      ctx.fillRect(Math.round(cx + 6), Math.round(py + 6), 3, 3);
     }
     ctx.restore();
 
-    // Overhead mini HP/Shield bar for enemies (and subtle bar for allies)
+    // Overhead HP bar + Charge/Enrage tags for enemies
     if (!isDead && !unit.isAlly) {
-      const bw = unit.isBoss ? 68 : 46;
+      const bw = unit.isBoss ? 68 : 48;
       const bx = Math.round(cx - bw / 2);
-      const by = Math.round(cy - sh / 2 - 9);
-      ctx.fillStyle = 'rgba(16, 15, 24, 0.85)';
+      const by = Math.round(cy - sh / 2 - 8);
+      ctx.fillStyle = 'rgba(16, 15, 24, 0.88)';
       ctx.fillRect(bx - 1, by - 1, bw + 2, 7);
       ctx.fillStyle = '#3b2429';
       ctx.fillRect(bx, by, bw, 5);
       const ratio = Math.max(0, Math.min(1, unit.hp / unit.maxHp));
-      ctx.fillStyle = unit.isBoss ? '#ff5768' : unit.isElite ? '#ffba3b' : '#eb5959';
+      ctx.fillStyle = unit.charging ? '#ff385c' : unit.isBoss ? '#ff5768' : unit.isElite ? '#ffba3b' : '#eb5959';
       ctx.fillRect(bx, by, Math.round(bw * ratio), 5);
+
+      if (unit.charging) {
+        ctx.font = 'bold 10px "DotGothic16", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#14121d';
+        ctx.fillText('⚠大技!', cx + 1, by - 3);
+        ctx.fillStyle = '#ff667a';
+        ctx.fillText('⚠大技!', cx, by - 4);
+      } else if (unit.enraged) {
+        ctx.font = 'bold 10px "DotGothic16", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#ff9638';
+        ctx.fillText('🔥怒り', cx, by - 4);
+      }
     }
   }
 
-  // Render Pixel VFX Bursts
-  const now = Date.now();
+  // Render Multi-Stage Pixel VFX
   for (const fx of state.vfx) {
     const elapsed = now - fx.createdAt;
-    if (elapsed > 420) continue;
+    if (elapsed > 460) continue;
     const anchor = anchors.get(fx.targetUid);
     if (!anchor) continue;
-    drawVfxEffect(ctx, anchor.x, anchor.y, fx.element, elapsed / 420);
+    drawVfxEffect(ctx, anchor.x, anchor.y, fx.element, elapsed / 460);
   }
 
-  // Render Floating Damage / Heal Numbers
+  // Render Crisp Outlined Floating Numbers
   for (const ft of state.floatingTexts) {
     const elapsed = now - ft.createdAt;
-    if (elapsed > 950) continue;
+    if (elapsed > 980) continue;
     const anchor = anchors.get(ft.targetUid);
     if (!anchor) continue;
-    const progress = elapsed / 950;
+    const progress = elapsed / 980;
     const fx = anchor.x;
-    const fy = anchor.y - 18 - progress * 26;
+    const fy = anchor.y - 18 - progress * 28;
     ctx.save();
     ctx.globalAlpha = Math.max(0, 1 - Math.max(0, progress - 0.55) * 2.2);
-    ctx.font = ft.isCrit
-      ? 'bold 17px "DotGothic16", sans-serif'
-      : 'bold 14px "DotGothic16", sans-serif';
+    ctx.font =
+      ft.isCrit || ft.isWeak
+        ? 'bold 16px "DotGothic16", sans-serif'
+        : 'bold 13px "DotGothic16", sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#14121d';
     ctx.fillText(ft.text, fx + 2, fy + 2);
@@ -326,5 +474,6 @@ export function renderBattleScene(
     ctx.restore();
   }
 
+  ctx.restore();
   return anchors;
 }
