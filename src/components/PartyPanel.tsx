@@ -14,9 +14,11 @@ import {
 } from '../game/skillTree';
 import {
   canEvolveMonster,
+  canTrueEvolveMonster,
   computeUnitStats,
   expForNextLevel,
   getEvolutionRequirement,
+  getTrueEvolutionRequirement,
 } from '../game/stats';
 import { computePartySynergies } from '../game/synergy';
 import type { ActiveShrineBuffs, GameSave } from '../game/types';
@@ -27,6 +29,7 @@ interface PartyPanelProps {
   shrineBuffs: ActiveShrineBuffs;
   onTogglePartyMember: (unitId: string) => void;
   onEvolveMonster: (unitId: string) => void;
+  onTrueEvolveMonster: (unitId: string) => void;
   onUpgradeSkillNode: (nodeId: string) => void;
   onResetSkillTree: () => void;
   onEquipHeroSkill: (slotIndex: 0 | 1, skillId: string) => void;
@@ -39,6 +42,7 @@ export function PartyPanel({
   shrineBuffs,
   onTogglePartyMember,
   onEvolveMonster,
+  onTrueEvolveMonster,
   onUpgradeSkillNode,
   onResetSkillTree,
   onEquipHeroSkill,
@@ -137,9 +141,7 @@ export function PartyPanel({
                 ))}
               </div>
             ) : (
-              <div className="muted-text">
-                同属性や役割の組み合わせでシナジー発動
-              </div>
+              <div className="muted-text">未発動</div>
             )}
           </div>
 
@@ -156,6 +158,8 @@ export function PartyPanel({
               const isMonster = pid !== 'hero';
               const evoReq = getEvolutionRequirement(u);
               const canEvo = canEvolveMonster(u, save.forgeStones);
+              const trueReq = getTrueEvolutionRequirement(u);
+              const canTrueEvo = canTrueEvolveMonster(u, save.forgeStones);
 
               return (
                 <div key={pid} className="rpg-card-gold" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -163,7 +167,21 @@ export function PartyPanel({
                     <PixelIcon spriteKey={sp.spriteKey} size={26} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                        {isMonster && u.evolved && (
+                        {isMonster && u.trueEvolved ? (
+                          <span
+                            style={{
+                              fontSize: 9,
+                              fontFamily: 'var(--font-pixel)',
+                              padding: '0 4px',
+                              borderRadius: 3,
+                              background: 'linear-gradient(135deg, #7ce8ff, #ff9ce6, #ffe86b)',
+                              color: '#171224',
+                              fontWeight: 700,
+                            }}
+                          >
+                            真
+                          </span>
+                        ) : isMonster && u.evolved ? (
                           <span
                             style={{
                               fontSize: 9,
@@ -177,7 +195,7 @@ export function PartyPanel({
                           >
                             極
                           </span>
-                        )}
+                        ) : null}
                         <strong style={{ fontSize: 11.5 }}>{sp.name}</strong>
                         <span className="role-badge" style={{ background: role.color }}>
                           {role.label}
@@ -196,19 +214,20 @@ export function PartyPanel({
                           whiteSpace: 'nowrap',
                         }}
                       >
-                        {isMonster && u.evolved
-                          ? '極進化：全能力+35%・スキル+25%'
-                          : `${sp.passiveName}：${sp.passiveDesc}`}
+                        {isMonster && u.trueEvolved
+                          ? '真極：全能力+48%・スキル+30%'
+                          : isMonster && u.evolved
+                            ? '極進化：全能力+24%・スキル+16%'
+                            : `${sp.passiveName}：${sp.passiveDesc}`}
                       </div>
                     </div>
                     {isMonster && (
                       <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
-                        {!u.evolved && (
+                        {!u.evolved ? (
                           <button
                             type="button"
                             className={`rpg-btn sm ${canEvo ? 'primary' : ''}`}
                             disabled={!canEvo}
-                            title={evoReq.discounted ? '★+2割引' : 'Lv10以上と鍛冶石で極進化'}
                             onClick={() => onEvolveMonster(pid)}
                             style={{ fontSize: 9.5, padding: '2px 5px' }}
                           >
@@ -216,7 +235,19 @@ export function PartyPanel({
                               ? `Lv${evoReq.minLevel}〜`
                               : `✦極 💎${evoReq.stoneCost}`}
                           </button>
-                        )}
+                        ) : !u.trueEvolved ? (
+                          <button
+                            type="button"
+                            className={`rpg-btn sm ${canTrueEvo ? 'primary' : ''}`}
+                            disabled={!canTrueEvo}
+                            onClick={() => onTrueEvolveMonster(pid)}
+                            style={{ fontSize: 9.5, padding: '2px 5px' }}
+                          >
+                            {u.level < trueReq.minLevel
+                              ? `Lv${trueReq.minLevel}〜`
+                              : `✦真 💎${trueReq.stoneCost}`}
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           className="rpg-btn sm"
@@ -253,7 +284,6 @@ export function PartyPanel({
           {/* Monster Ranch Roster */}
           <div className="section-heading" style={{ marginTop: 2 }}>
             <span>モンスター牧場 {ownedMonsters.length}体</span>
-            <span className="muted-text">Lv10から極進化</span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -264,13 +294,29 @@ export function PartyPanel({
               const st = computeUnitStats(u, save, shrineBuffs, invMap);
               const evoReq = getEvolutionRequirement(u);
               const canEvo = canEvolveMonster(u, save.forgeStones);
+              const trueReq = getTrueEvolutionRequirement(u);
+              const canTrueEvo = canTrueEvolveMonster(u, save.forgeStones);
 
               return (
                 <div key={u.id} className="rpg-card" style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
                   <PixelIcon spriteKey={sp.spriteKey} size={24} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
-                      {u.evolved && (
+                      {u.trueEvolved ? (
+                        <span
+                          style={{
+                            fontSize: 8.5,
+                            fontFamily: 'var(--font-pixel)',
+                            padding: '0 3px',
+                            borderRadius: 3,
+                            background: 'linear-gradient(135deg, #7ce8ff, #ff9ce6, #ffe86b)',
+                            color: '#171224',
+                            fontWeight: 700,
+                          }}
+                        >
+                          真
+                        </span>
+                      ) : u.evolved ? (
                         <span
                           style={{
                             fontSize: 8.5,
@@ -284,7 +330,7 @@ export function PartyPanel({
                         >
                           極
                         </span>
-                      )}
+                      ) : null}
                       <strong style={{ fontSize: 10.5 }}>{sp.name}</strong>
                       <span className="role-badge" style={{ background: role.color }}>
                         {role.label}
@@ -307,7 +353,7 @@ export function PartyPanel({
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
-                    {!u.evolved && (
+                    {!u.evolved ? (
                       <button
                         type="button"
                         className={`rpg-btn sm ${canEvo ? 'primary' : ''}`}
@@ -317,7 +363,17 @@ export function PartyPanel({
                       >
                         {u.level < evoReq.minLevel ? `Lv${evoReq.minLevel}` : `✦💎${evoReq.stoneCost}`}
                       </button>
-                    )}
+                    ) : !u.trueEvolved ? (
+                      <button
+                        type="button"
+                        className={`rpg-btn sm ${canTrueEvo ? 'primary' : ''}`}
+                        disabled={!canTrueEvo}
+                        onClick={() => onTrueEvolveMonster(u.id)}
+                        style={{ fontSize: 9, padding: '2px 5px' }}
+                      >
+                        {u.level < trueReq.minLevel ? `Lv${trueReq.minLevel}` : `真💎${trueReq.stoneCost}`}
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       className={`rpg-btn sm ${inParty ? '' : 'emerald'}`}
@@ -334,38 +390,33 @@ export function PartyPanel({
           </div>
         </>
       ) : (
-        /* ===== HERO SKILL TREE TAB ===== */
+        /* ===== HERO SKILL TREE TAB (4 BRANCHES) ===== */
         <>
-          <div className="rpg-card-gold" style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-              <div>
-                <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 12, color: '#ffe570' }}>
-                  主人公スキルツリー
-                </div>
-                <div style={{ fontSize: 10, color: '#fff2bd' }}>
-                  残りSP <strong style={{ color: '#82ff9e', fontSize: 12 }}>{availableSp}</strong> / 累計 {totalSp}
-                </div>
+          <div className="rpg-card-gold" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+            <div>
+              <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 12, color: '#ffe570' }}>
+                スキルツリー
               </div>
-              <button
-                id="btn-reset-skilltree"
-                type="button"
-                className="rpg-btn sm"
-                disabled={!inVillage || spentSp === 0}
-                onClick={onResetSkillTree}
-              >
-                SPリセット
-              </button>
+              <div style={{ fontSize: 10, color: '#fff2bd' }}>
+                SP <strong style={{ color: '#82ff9e', fontSize: 12 }}>{availableSp}</strong> / {totalSp}
+              </div>
             </div>
-            <div className="muted-text">
-              LvUP・世界ランク・実績でSP獲得。村で無料リセット可。
-            </div>
+            <button
+              id="btn-reset-skilltree"
+              type="button"
+              className="rpg-btn sm"
+              disabled={!inVillage || spentSp === 0}
+              onClick={onResetSkillTree}
+            >
+              SPリセット
+            </button>
           </div>
 
           {/* Equipped Hero Skill Slots (2 active slots) */}
           <div className="rpg-card" style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             <div className="section-heading">
               <span>装備中スキル</span>
-              <span className="muted-text">解放 {unlockedSkillIds.length}/8</span>
+              <span className="muted-text">解放 {unlockedSkillIds.length}/10</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 4 }}>
               {([0, 1] as const).map((slotIdx) => {
@@ -464,9 +515,9 @@ export function PartyPanel({
             </div>
           </div>
 
-          {/* 3 Branch Selector */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 4 }}>
-            {(['sword', 'magic', 'command'] as const).map((b) => {
+          {/* 4 Branch Selector */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 3 }}>
+            {(['sword', 'magic', 'command', 'void'] as const).map((b) => {
               const meta = BRANCH_META[b];
               const pts = SKILL_TREE_NODES.filter((n) => n.branch === b).reduce(
                 (s, n) => s + (save.heroSkillTree[n.id] ?? 0),
@@ -475,12 +526,13 @@ export function PartyPanel({
               return (
                 <button
                   key={b}
+                  id={`btn-branch-${b}`}
                   type="button"
                   className={`rpg-btn sm ${branch === b ? 'primary' : ''}`}
                   onClick={() => setBranch(b)}
-                  style={{ fontSize: 10 }}
+                  style={{ fontSize: 9.5, padding: '4px 2px' }}
                 >
-                  {meta.label} {pts}
+                  {meta.label}{pts > 0 ? ` ${pts}` : ''}
                 </button>
               );
             })}

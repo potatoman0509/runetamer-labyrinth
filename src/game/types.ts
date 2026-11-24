@@ -1,5 +1,5 @@
-export type BiomeId = 'village' | 'forest' | 'ruins' | 'volcano' | 'abyss';
-export type DungeonBiomeId = 'forest' | 'ruins' | 'volcano' | 'abyss';
+export type BiomeId = 'village' | 'forest' | 'ruins' | 'volcano' | 'abyss' | 'glacier' | 'sanctum';
+export type DungeonBiomeId = 'forest' | 'ruins' | 'volcano' | 'abyss' | 'glacier' | 'sanctum';
 
 export type Rarity =
   | 'common'
@@ -21,7 +21,11 @@ export type SetId =
   | 'crimson_fury'
   | 'astral_mage'
   | 'golden_greed'
-  | 'lunar_blade';
+  | 'lunar_blade'
+  | 'frost_monarch'
+  | 'seraph_radiance'
+  | 'blood_pact'
+  | 'void_walker';
 
 export type AffixStat =
   | 'atkPct'
@@ -64,7 +68,31 @@ export type UniqueEffectId =
   | 'mimic_crown'
   | 'titan_gauntlet_relic'
   | 'overdrive_rune'
-  | 'guardian_vow_rune';
+  | 'guardian_vow_rune'
+  // v6+ New Uniques (14 -> total 40)
+  | 'frostbite_blade'
+  | 'seraph_lance'
+  | 'eclipse_reaper_scythe'
+  | 'prism_wand'
+  | 'glacier_plate'
+  | 'seraph_robe'
+  | 'abyssal_carapace'
+  | 'fenrir_fang_relic'
+  | 'halo_diadem'
+  | 'void_heart_relic'
+  | 'crystal_scale_relic'
+  | 'blizzard_rune'
+  | 'judgment_rune'
+  | 'eternal_tamer_rune';
+
+export type StatusEffectType = 'poison' | 'burn' | 'freeze' | 'def_break';
+
+export type TrialModId =
+  | 'iron_foes'
+  | 'drought'
+  | 'no_potions'
+  | 'swift_foes'
+  | 'blood_boss';
 
 export interface Affix {
   stat: AffixStat;
@@ -113,7 +141,13 @@ export interface SkillDef {
   kind: 'damage' | 'heal' | 'shield' | 'buff_atk' | 'buff_def' | 'drain';
   hits?: number;
   critBonus?: number;
-  bossBonus?: number; // extra mult vs boss/elite
+  bossBonus?: number;
+  statusBonus?: number; // extra mult vs afflicted targets
+  statusEffect?: {
+    type: StatusEffectType;
+    chance: number;
+    turns: number;
+  };
   description: string;
 }
 
@@ -175,6 +209,7 @@ export interface UnitInstance {
   exp: number;
   awakening: number;
   evolved?: boolean; // Extreme Evolution (【極】)
+  trueEvolved?: boolean; // True Evolution (【真】)
   hp: number;
   mp: number;
   equipped: EquippedSet;
@@ -205,6 +240,8 @@ export interface ComputedUnitStats {
   skillPowerBonusPct: number;
   weaknessBonusPct: number;
   mpRegenBonus: number;
+  armorPenPct: number;
+  statusDmgBonusPct: number;
   uniqueEffects: UniqueEffectId[];
   activeSets: ActiveSetCount[];
   powerScore: number;
@@ -236,6 +273,7 @@ export interface BattleUnitState {
   isBoss: boolean;
   isElite: boolean;
   evolved: boolean;
+  trueEvolved: boolean;
   hp: number;
   maxHp: number;
   mp: number;
@@ -254,12 +292,17 @@ export interface BattleUnitState {
   skillPowerBonusPct: number;
   weaknessBonusPct: number;
   mpRegenBonus: number;
+  armorPenPct: number;
+  statusDmgBonusPct: number;
   uniqueEffects: UniqueEffectId[];
   activeSetIds4pc: SetId[];
   defending: boolean;
   charging: boolean;
   enraged: boolean;
   poisonTurns: number;
+  burnTurns: number;
+  freezeTurns: number;
+  defBreakTurns: number;
   atkBuffTurns: number;
   defBuffTurns: number;
   phoenixUsed: boolean;
@@ -281,7 +324,7 @@ export interface BattleFloatingText {
 export interface BattleVfx {
   id: string;
   targetUid: string;
-  element: ElementType | 'heal' | 'shield' | 'buff' | 'ultimate' | 'limit_break';
+  element: ElementType | 'heal' | 'shield' | 'buff' | 'ultimate' | 'limit_break' | 'freeze' | 'burn';
   createdAt: number;
 }
 
@@ -309,9 +352,10 @@ export interface BattleState {
   isBossBattle: boolean;
   isEliteBattle: boolean;
   isRareBattle: boolean;
-  bossRushWave?: number; // 1..5 if in Boss Rush Arena
+  bossRushWave?: number; // 1..8 if in Boss Rush Arena
+  activeTrials: TrialModId[];
   turn: number;
-  limitGauge: number; // 0..100 shared party Limit Break gauge!
+  limitGauge: number; // 0..100
   hpPotions: number;
   mpPotions: number;
   allies: BattleUnitState[];
@@ -353,7 +397,9 @@ export interface GameStats {
   totalForgeUpgrades: number;
   totalRerolls: number;
   totalEvolutions: number;
+  totalTrueEvolutions: number;
   bossRushClears: number;
+  trialClears: number;
   maxEnhanceReached: number;
 }
 
@@ -376,6 +422,7 @@ export interface GameSave {
   heroEquippedSkillIds: [string, string];
   claimedAchievements: string[];
   bossRushBestWave: number;
+  activeTrials: TrialModId[];
   settings: GameSettings;
   stats: GameStats;
 }

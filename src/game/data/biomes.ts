@@ -24,9 +24,9 @@ export interface BiomeDef {
 export const BIOMES: Record<BiomeId, BiomeDef> = {
   village: {
     id: 'village',
-    name: '陽だまりの始まりの村',
+    name: '始まりの村',
     shortName: '始まりの村',
-    subtitle: '冒険者の拠点',
+    subtitle: '拠点',
     floorRangeLabel: '拠点',
     palette: {
       skyTop: '#6cb7e8',
@@ -43,9 +43,9 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
   },
   forest: {
     id: 'forest',
-    name: '緑の始まりの森',
+    name: '始まりの森',
     shortName: '始まりの森',
-    subtitle: '木漏れ日と古樹の迷宮',
+    subtitle: '古樹の迷宮',
     bossSpeciesId: 'ancient_treant',
     floorRangeLabel: '1〜5F',
     palette: {
@@ -63,9 +63,9 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
   },
   ruins: {
     id: 'ruins',
-    name: '古代石の迷宮',
+    name: '古代遺跡',
     shortName: '古代遺跡',
-    subtitle: 'ルーンが灯る石造りの回廊',
+    subtitle: '石造りの回廊',
     bossSpeciesId: 'rune_golem',
     floorRangeLabel: '6〜10F',
     palette: {
@@ -83,9 +83,9 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
   },
   volcano: {
     id: 'volcano',
-    name: '紅蓮の溶岩洞窟',
+    name: '溶岩洞窟',
     shortName: '溶岩洞窟',
-    subtitle: '灼熱のマグマと竜の巣窟',
+    subtitle: '灼熱の竜窟',
     bossSpeciesId: 'crimson_wyrm',
     floorRangeLabel: '11〜15F',
     palette: {
@@ -105,7 +105,7 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
     id: 'abyss',
     name: '星屑の深淵',
     shortName: '星屑の深淵',
-    subtitle: '星光が瞬く果てなき境界',
+    subtitle: '星光の境界',
     bossSpeciesId: 'star_devourer',
     floorRangeLabel: '16〜20F',
     palette: {
@@ -121,6 +121,46 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
       badgeText: '#fff6d6',
     },
   },
+  glacier: {
+    id: 'glacier',
+    name: '氷結回廊',
+    shortName: '氷結回廊',
+    subtitle: '白銀の極寒界',
+    bossSpeciesId: 'fenrir_lord',
+    floorRangeLabel: '21〜25F',
+    palette: {
+      skyTop: '#183754',
+      skyBottom: '#4b8fb8',
+      groundPrimary: '#7cb5d4',
+      groundSecondary: '#5f9bc0',
+      wallTop: '#336a91',
+      wallFront: '#204966',
+      accent: '#9cf2ff',
+      particle: '#e3fbff',
+      badgeBg: '#29658a',
+      badgeText: '#e8fbff',
+    },
+  },
+  sanctum: {
+    id: 'sanctum',
+    name: '黄金聖域',
+    shortName: '黄金聖域',
+    subtitle: '終焉の神殿',
+    bossSpeciesId: 'seraph_omega',
+    floorRangeLabel: '26〜30F',
+    palette: {
+      skyTop: '#4a2b52',
+      skyBottom: '#b8833e',
+      groundPrimary: '#c9a66b',
+      groundSecondary: '#ad884e',
+      wallTop: '#8a6230',
+      wallFront: '#543818',
+      accent: '#ffe875',
+      particle: '#fff6ba',
+      badgeBg: '#8c611e',
+      badgeText: '#fff7d4',
+    },
+  },
 };
 
 export const DUNGEON_BIOME_ORDER: DungeonBiomeId[] = [
@@ -128,11 +168,13 @@ export const DUNGEON_BIOME_ORDER: DungeonBiomeId[] = [
   'ruins',
   'volcano',
   'abyss',
+  'glacier',
+  'sanctum',
 ];
 
 export function getBiomeForFloor(floor: number): DungeonBiomeId {
   if (floor <= 0) return 'forest';
-  const index = Math.floor(((floor - 1) % 20) / 5);
+  const index = Math.floor(((floor - 1) % 30) / 5);
   return DUNGEON_BIOME_ORDER[index] ?? 'forest';
 }
 
@@ -145,5 +187,5 @@ export function getBiomeBossId(biome: DungeonBiomeId): string {
 }
 
 export function getFloorCycle(floor: number): number {
-  return Math.floor((Math.max(1, floor) - 1) / 20);
+  return Math.floor((Math.max(1, floor) - 1) / 30);
 }

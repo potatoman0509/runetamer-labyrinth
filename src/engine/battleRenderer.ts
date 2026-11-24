@@ -103,6 +103,45 @@ function drawBattleBackdrop(
       ctx.fillRect(sx, sy, i % 5 === 0 ? 2 : 1, i % 5 === 0 ? 2 : 1);
     }
     ctx.globalAlpha = 1;
+  } else if (biome === 'glacier') {
+    // Shimmering aurora ribbons
+    for (let x = 0; x < w; x += 6) {
+      const wave = Math.round(Math.sin(timeMs / 550 + x * 0.04) * 7);
+      ctx.fillStyle = 'rgba(110, 245, 220, 0.24)';
+      ctx.fillRect(x, 12 + wave, 6, 12);
+      ctx.fillStyle = 'rgba(130, 195, 255, 0.2)';
+      ctx.fillRect(x, 22 + wave, 6, 8);
+    }
+    // Crystalline ice spires
+    for (let x = -4; x < w + 20; x += 38) {
+      ctx.fillStyle = '#3b73a8';
+      ctx.fillRect(x, horizonY - 28, 22, 30);
+      ctx.fillStyle = '#7ad4f5';
+      ctx.fillRect(x + 4, horizonY - 40, 12, 32);
+      ctx.fillStyle = '#dffaff';
+      ctx.fillRect(x + 8, horizonY - 46, 4, 24);
+    }
+  } else if (biome === 'sanctum') {
+    // Radiant golden sun halo
+    const cx = Math.round(w * 0.5);
+    const cy = Math.round(horizonY * 0.48);
+    ctx.strokeStyle = 'rgba(255, 232, 120, 0.45)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 26 + Math.sin(timeMs / 400) * 3, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255, 248, 200, 0.32)';
+    ctx.fillRect(cx - 10, cy - 10, 20, 20);
+    // Marbled golden temple pillars
+    for (let x = 16; x < w; x += 72) {
+      ctx.fillStyle = '#d4b46a';
+      ctx.fillRect(x, 4, 16, horizonY - 2);
+      ctx.fillStyle = '#fff3c4';
+      ctx.fillRect(x + 2, 4, 4, horizonY - 2);
+      ctx.fillStyle = '#ffe566';
+      ctx.fillRect(x - 2, 6, 20, 4);
+      ctx.fillRect(x - 2, horizonY - 6, 20, 4);
+    }
   }
 
   // Fine perspective pixel ground with subtle dither tiles
@@ -245,7 +284,23 @@ function drawVfxEffect(
     ctx.beginPath();
     ctx.arc(x, y, 10 + progress * 14, 0, Math.PI * 2);
     ctx.stroke();
-  } else if (element === 'fire') {
+  } else if (element === 'freeze') {
+    // Cyan crystal shatter burst
+    ctx.strokeStyle = '#7ce8ff';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(
+      Math.round(x - 12 - progress * 8),
+      Math.round(y - 12 - progress * 8),
+      Math.round(24 + progress * 16),
+      Math.round(24 + progress * 16),
+    );
+    for (let i = 0; i < 8; i += 1) {
+      const ang = (i / 8) * Math.PI * 2 + 0.3;
+      const dist = 6 + progress * 26;
+      ctx.fillStyle = i % 2 === 0 ? '#7ce8ff' : '#ffffff';
+      ctx.fillRect(Math.round(x + Math.cos(ang) * dist) - 2, Math.round(y + Math.sin(ang) * dist) - 2, 4, 4);
+    }
+  } else if (element === 'burn' || element === 'fire') {
     // Rising pixel fire pillar + embers
     for (let i = 0; i < 10; i += 1) {
       const spread = (i - 4.5) * 4;
@@ -326,9 +381,10 @@ export function renderBattleScene(
     // Silky DQ6 8-frame pixel animation (~11fps idle, faster when enraged or charging!)
     const frameInterval = unit.charging ? 60 : unit.enraged ? 75 : 92;
     const frameSeed = Math.abs(unit.uid.charCodeAt(unit.uid.length - 1) ?? 0);
-    const frameIdx = isDead
-      ? 0
-      : (Math.floor(timeMs / frameInterval) + frameSeed) % ANIM_FRAME_COUNT;
+    const frameIdx =
+      isDead || unit.freezeTurns > 0
+        ? 0
+        : (Math.floor(timeMs / frameInterval) + frameSeed) % ANIM_FRAME_COUNT;
 
     // Smooth parabolic attack lunge curve!
     let lungeOffset = 0;
@@ -350,7 +406,7 @@ export function renderBattleScene(
     const cx = pos.x + lungeOffset + hurtShakeX;
     const cy = pos.y;
 
-    // Ground shadow (stretches subtly with animation!)
+    // Ground shadow
     ctx.fillStyle = 'rgba(0, 0, 0, 0.36)';
     ctx.fillRect(
       Math.round(cx - sw * 0.3),
@@ -359,8 +415,20 @@ export function renderBattleScene(
       5,
     );
 
-    // Evolved golden halo aura!
-    if (!isDead && unit.evolved) {
+    // True Evolution prism double halo OR Extreme Evolution golden halo
+    if (!isDead && unit.trueEvolved) {
+      const r = sw * 0.43 + Math.sin(timeMs / 180 + frameSeed) * 2;
+      ctx.strokeStyle = 'rgba(130, 238, 255, 0.88)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy + 2, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255, 160, 240, 0.78)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy + 2, r - 4, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (!isDead && unit.evolved) {
       const r = sw * 0.4 + Math.sin(timeMs / 210 + frameSeed) * 2;
       ctx.strokeStyle = 'rgba(255, 224, 96, 0.78)';
       ctx.lineWidth = 2;
@@ -441,13 +509,19 @@ export function renderBattleScene(
     }
     ctx.drawImage(sprite, Math.round(cx - sw / 2), Math.round(cy - sh / 2));
 
-    // Evolved rising golden sparkles
-    if (!isDead && unit.evolved) {
-      for (let s = 0; s < 5; s += 1) {
-        const phase = ((timeMs / 860) + s * 0.2 + frameSeed * 0.13) % 1;
+    // Evolved / True Evolved rising sparkles
+    if (!isDead && (unit.evolved || unit.trueEvolved)) {
+      const prism = ['#7ce8ff', '#ff9ce6', '#ffe86b', '#ffffff'];
+      const count = unit.trueEvolved ? 7 : 5;
+      for (let s = 0; s < count; s += 1) {
+        const phase = ((timeMs / 860) + s * (1 / count) + frameSeed * 0.13) % 1;
         const sx = cx + Math.sin(timeMs / 240 + s * 1.7 + frameSeed) * (sw * 0.36);
         const sy = cy + sh * 0.3 - phase * (sh * 0.9);
-        ctx.fillStyle = s % 2 === 0 ? '#ffe86b' : '#fff9d6';
+        ctx.fillStyle = unit.trueEvolved
+          ? prism[s % prism.length]!
+          : s % 2 === 0
+            ? '#ffe86b'
+            : '#fff9d6';
         ctx.globalAlpha = Math.max(0.15, 1 - phase * 0.8);
         ctx.fillRect(Math.round(sx) - 1, Math.round(sy) - 1, 2, 2);
       }
@@ -461,6 +535,31 @@ export function renderBattleScene(
       ctx.beginPath();
       ctx.arc(cx, cy, sw * 0.44, 0, Math.PI * 2);
       ctx.stroke();
+    }
+
+    // Freeze crystalline ice encasement
+    if (!isDead && unit.freezeTurns > 0) {
+      ctx.fillStyle = 'rgba(124, 232, 255, 0.28)';
+      ctx.fillRect(Math.round(cx - sw * 0.38), Math.round(cy - sh * 0.38), Math.round(sw * 0.76), Math.round(sh * 0.76));
+      ctx.strokeStyle = '#a8f4ff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(Math.round(cx - sw * 0.38), Math.round(cy - sh * 0.38), Math.round(sw * 0.76), Math.round(sh * 0.76));
+    }
+
+    // Burn flickering ember pixels
+    if (!isDead && unit.burnTurns > 0) {
+      const fy = cy + 6 - ((timeMs / 18) % 20);
+      ctx.fillStyle = '#ff7b24';
+      ctx.fillRect(Math.round(cx - 10), Math.round(fy), 3, 4);
+      ctx.fillStyle = '#ffe566';
+      ctx.fillRect(Math.round(cx + 8), Math.round(fy + 5), 3, 3);
+    }
+
+    // Def Break cracked violet mark
+    if (!isDead && unit.defBreakTurns > 0) {
+      ctx.fillStyle = '#d48aff';
+      ctx.fillRect(Math.round(cx - 3), Math.round(cy + sh * 0.28), 6, 2);
+      ctx.fillRect(Math.round(cx - 1), Math.round(cy + sh * 0.28 - 2), 2, 6);
     }
 
     // Poison floating violet droplets

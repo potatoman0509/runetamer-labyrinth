@@ -3,6 +3,7 @@ import {
   getSkillMpCost,
   type PlayerActionCommand,
 } from '../game/battle';
+import { BOSS_RUSH_MAX_WAVE } from '../game/bossRush';
 import { RARITY_META } from '../game/data/equipment';
 import { getSpecies } from '../game/data/monsters';
 import type {
@@ -18,6 +19,7 @@ interface BattlePanelProps {
   battle: BattleState;
   settings: GameSettings;
   selectedEnemyUid: string | null;
+  onSelectEnemy: (uid: string) => void;
   onCommand: (cmd: PlayerActionCommand) => void;
   onToggleAuto: () => void;
   onCycleSpeed: () => void;
@@ -43,6 +45,7 @@ export function BattlePanel({
   battle,
   settings,
   selectedEnemyUid,
+  onSelectEnemy,
   onCommand,
   onToggleAuto,
   onCycleSpeed,
@@ -58,21 +61,24 @@ export function BattlePanel({
     !settings.autoBattle;
   const canSwiftAct =
     battle.phase === 'player_input' && Boolean(activeUnit?.isAlly);
+  const potionsBlocked = battle.activeTrials.includes('no_potions');
 
   const lastLogs = battle.logs.slice(-2);
 
   if (battle.phase === 'victory' && battle.reward) {
     const r = battle.reward;
     const isBossRush = Boolean(battle.bossRushWave);
-    const hasNextWave = Boolean(battle.bossRushWave && battle.bossRushWave < 5);
-    const isBossRushClear = battle.bossRushWave === 5;
+    const hasNextWave = Boolean(
+      battle.bossRushWave && battle.bossRushWave < BOSS_RUSH_MAX_WAVE,
+    );
+    const isBossRushClear = battle.bossRushWave === BOSS_RUSH_MAX_WAVE;
 
     return (
       <div className="panel-body">
         <div className="rpg-card-gold" style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <span style={{ fontFamily: 'var(--font-pixel)', fontSize: 14, color: '#ffe570' }}>
-              {isBossRush ? `★ Wave ${battle.bossRushWave}/5 突破` : '★ 戦闘勝利'}
+              {isBossRush ? `★ Wave ${battle.bossRushWave}/${BOSS_RUSH_MAX_WAVE} 突破` : '★ 戦闘勝利'}
             </span>
             <span className="muted-text">
               EXP+{r.exp.toLocaleString()} / {r.gold.toLocaleString()}G / 💎+{r.forgeStones}
@@ -92,7 +98,7 @@ export function BattlePanel({
                 textAlign: 'center',
               }}
             >
-              🏆 ボスラッシュ全5Wave制覇・ミシック装備獲得
+              🏆 闘技場 全{BOSS_RUSH_MAX_WAVE}Wave制覇・ミシック×2獲得
             </div>
           )}
 
@@ -211,7 +217,7 @@ export function BattlePanel({
                 style={{ padding: '9px 6px' }}
                 onClick={onNextBossRushWave}
               >
-                🏟 Wave {(battle.bossRushWave ?? 1) + 1}/5 へ
+                🏟 Wave {(battle.bossRushWave ?? 1) + 1}/{BOSS_RUSH_MAX_WAVE} へ
               </button>
               <button
                 id="btn-battle-continue"
@@ -244,14 +250,14 @@ export function BattlePanel({
       <div className="panel-body">
         <div className="rpg-card-gold" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 14, color: '#ff8a8a' }}>
-            {battle.phase === 'defeat' ? '☠ 全滅した' : '戦闘から撤退した'}
+            {battle.phase === 'defeat' ? '☠ 全滅' : '撤退'}
           </div>
           <div className="muted-text">
             {battle.phase === 'defeat'
               ? battle.bossRushWave
-                ? `Wave ${battle.bossRushWave} で力尽きた。獲得報酬を持って村へ戻る。`
-                : '所持金の15%を失い、始まりの村へ戻る。'
-              : '安全に距離を取った。'}
+                ? `Wave ${battle.bossRushWave} 敗北`
+                : '所持金-15%・村へ帰還'
+              : '戦闘離脱'}
           </div>
           <button
             id="btn-battle-retreat-ok"
@@ -272,12 +278,63 @@ export function BattlePanel({
 
   return (
     <div className="panel-body" style={{ gap: 4 }}>
+      {/* Clickable Enemy Target & Status Strip */}
+      <div className="battle-enemy-strip">
+        {battle.enemies.map((enemy) => {
+          const isTargeted = selectedEnemyUid === enemy.uid && enemy.hp > 0;
+          const hpPct = Math.max(0, Math.min(100, (enemy.hp / enemy.maxHp) * 100));
+          const statusIcons =
+            (enemy.charging ? '⚠' : '') +
+            (enemy.freezeTurns > 0 ? '❄' : '') +
+            (enemy.burnTurns > 0 ? '🔥' : '') +
+            (enemy.defBreakTurns > 0 ? '💔' : '') +
+            (enemy.poisonTurns > 0 ? '☠' : '');
+          return (
+            <button
+              key={enemy.uid}
+              type="button"
+              className={`battle-enemy-chip ${isTargeted ? 'targeted' : ''} ${enemy.hp <= 0 ? 'dead' : ''}`}
+              disabled={enemy.hp <= 0}
+              onClick={() => onSelectEnemy(enemy.uid)}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 3, minWidth: 0 }}>
+                <span
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 700,
+                    color: isTargeted ? '#ffe570' : '#ffccd2',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {isTargeted ? '◎' : ''}
+                  {enemy.name}
+                </span>
+                {statusIcons && (
+                  <span style={{ fontSize: 8.5, flexShrink: 0 }}>{statusIcons}</span>
+                )}
+              </div>
+              <div className="bar-track" style={{ height: 3 }}>
+                <div className="bar-fill-enemy" style={{ width: `${hpPct}%` }} />
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
       {/* 4 Ally Status Strip */}
       <div className="battle-ally-strip">
         {battle.allies.map((ally) => {
           const isTurn = battle.activeUid === ally.uid;
           const hpPct = Math.max(0, Math.min(100, (ally.hp / ally.maxHp) * 100));
           const mpPct = Math.max(0, Math.min(100, (ally.mp / ally.maxMp) * 100));
+          const allyStatus =
+            (ally.freezeTurns > 0 ? '❄' : '') +
+            (ally.burnTurns > 0 ? '🔥' : '') +
+            (ally.defBreakTurns > 0 ? '💔' : '') +
+            (ally.poisonTurns > 0 ? '☠' : '') +
+            (ally.defending ? '🛡' : '');
           return (
             <div
               key={ally.uid}
@@ -293,11 +350,19 @@ export function BattlePanel({
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
-                      color: ally.poisonTurns > 0 ? '#e3a6ff' : ally.evolved ? '#ffe878' : undefined,
+                      color:
+                        ally.freezeTurns > 0
+                          ? '#7ce8ff'
+                          : ally.poisonTurns > 0
+                            ? '#e3a6ff'
+                            : ally.trueEvolved
+                              ? '#8ae8ff'
+                              : ally.evolved
+                                ? '#ffe878'
+                                : undefined,
                     }}
                   >
-                    {ally.poisonTurns > 0 ? '☠' : ''}
-                    {ally.defending ? '🛡' : ''}
+                    {allyStatus}
                     {ally.name}
                   </div>
                   <div
@@ -339,7 +404,7 @@ export function BattlePanel({
             textAlign: 'center',
           }}
         >
-          ⚠ {chargingEnemy.name}が大技を溜めている
+          ⚠ {chargingEnemy.name}・大技待機
         </div>
       )}
 
@@ -404,20 +469,20 @@ export function BattlePanel({
           type="button"
           className="rpg-btn sm emerald"
           style={{ padding: '3px 6px', fontSize: 9.5, flexShrink: 0 }}
-          disabled={!canSwiftAct || battle.hpPotions <= 0}
+          disabled={!canSwiftAct || potionsBlocked || battle.hpPotions <= 0}
           onClick={() => onCommand({ type: 'use_hp_potion' })}
         >
-          🧪HP薬×{battle.hpPotions}
+          {potionsBlocked ? '禁薬' : `🧪HP×${battle.hpPotions}`}
         </button>
         <button
           id="btn-cmd-mp-potion"
           type="button"
           className="rpg-btn sm"
           style={{ padding: '3px 6px', fontSize: 9.5, flexShrink: 0 }}
-          disabled={!canSwiftAct || battle.mpPotions <= 0}
+          disabled={!canSwiftAct || potionsBlocked || battle.mpPotions <= 0}
           onClick={() => onCommand({ type: 'use_mp_potion' })}
         >
-          💧MP薬×{battle.mpPotions}
+          {potionsBlocked ? '禁薬' : `💧MP×${battle.mpPotions}`}
         </button>
       </div>
 

@@ -6,7 +6,7 @@ import { generateShopInventory } from './worldTier';
 
 export const SAVE_STORAGE_KEY = 'runetamer_labyrinth_save_v1';
 export const ACTIVE_SLOT_STORAGE_KEY = 'runetamer_labyrinth_active_slot_v1';
-export const CURRENT_SAVE_VERSION = 3;
+export const CURRENT_SAVE_VERSION = 10;
 
 export type SaveSlotId = 1 | 2 | 3;
 export const SAVE_SLOT_IDS: SaveSlotId[] = [1, 2, 3];
@@ -59,6 +59,7 @@ export function createUnitInstance(speciesId: string, level = 1): UnitInstance {
     exp: 0,
     awakening: 0,
     evolved: false,
+    trueEvolved: false,
     hp,
     mp,
     equipped: {
@@ -99,6 +100,7 @@ export function createInitialSave(): GameSave {
     heroEquippedSkillIds: [HERO_SPECIES.skills[0].id, HERO_SPECIES.skills[1].id],
     claimedAchievements: [],
     bossRushBestWave: 0,
+    activeTrials: [],
     settings: {
       autoBattle: false,
       battleSpeed: 1,
@@ -116,7 +118,9 @@ export function createInitialSave(): GameSave {
       totalForgeUpgrades: 0,
       totalRerolls: 0,
       totalEvolutions: 0,
+      totalTrueEvolutions: 0,
       bossRushClears: 0,
+      trialClears: 0,
       maxEnhanceReached: 0,
     },
   };
@@ -380,7 +384,8 @@ export function validateSave(data: unknown): GameSave | null {
       level: typeof u.level === 'number' && u.level >= 1 ? u.level : 1,
       exp: typeof u.exp === 'number' && u.exp >= 0 ? u.exp : 0,
       awakening: typeof u.awakening === 'number' && u.awakening >= 0 ? u.awakening : 0,
-      evolved: Boolean(u.evolved),
+      evolved: Boolean(u.evolved) || Boolean(u.trueEvolved),
+      trueEvolved: Boolean(u.trueEvolved),
       hp: typeof u.hp === 'number' && u.hp >= 0 ? u.hp : 100,
       mp: typeof u.mp === 'number' && u.mp >= 0 ? u.mp : 20,
       equipped: {
@@ -400,6 +405,11 @@ export function validateSave(data: unknown): GameSave | null {
     Array.isArray(s.heroEquippedSkillIds) && s.heroEquippedSkillIds.length === 2
       ? [String(s.heroEquippedSkillIds[0]), String(s.heroEquippedSkillIds[1])]
       : fallback.heroEquippedSkillIds;
+
+  const validTrialIds = new Set(['iron_foes', 'drought', 'no_potions', 'swift_foes', 'blood_boss']);
+  const safeTrials = Array.isArray(s.activeTrials)
+    ? s.activeTrials.filter((id): id is GameSave['activeTrials'][number] => validTrialIds.has(String(id)))
+    : [];
 
   return {
     ...fallback,
@@ -425,6 +435,7 @@ export function validateSave(data: unknown): GameSave | null {
       typeof s.bossRushBestWave === 'number' && s.bossRushBestWave >= 0
         ? s.bossRushBestWave
         : 0,
+    activeTrials: safeTrials,
     settings: {
       ...fallback.settings,
       ...(s.settings ?? {}),
@@ -438,8 +449,12 @@ export function validateSave(data: unknown): GameSave | null {
       totalRerolls: typeof s.stats?.totalRerolls === 'number' ? s.stats.totalRerolls : 0,
       totalEvolutions:
         typeof s.stats?.totalEvolutions === 'number' ? s.stats.totalEvolutions : 0,
+      totalTrueEvolutions:
+        typeof s.stats?.totalTrueEvolutions === 'number' ? s.stats.totalTrueEvolutions : 0,
       bossRushClears:
         typeof s.stats?.bossRushClears === 'number' ? s.stats.bossRushClears : 0,
+      trialClears:
+        typeof s.stats?.trialClears === 'number' ? s.stats.trialClears : 0,
       maxEnhanceReached:
         typeof s.stats?.maxEnhanceReached === 'number' ? s.stats.maxEnhanceReached : 0,
     },

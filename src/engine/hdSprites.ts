@@ -1188,6 +1188,233 @@ function paintSprite(key: string, frameIndex: number): PixelGrid {
     case 'star_devourer':
       drawCosmic(g, phase, 'devourer');
       break;
+    // ===== v10 NEW MONSTERS (12) =====
+    case 'frost_slime':
+      drawSlime(
+        g,
+        phase,
+        {
+          base: '#5cd6ff',
+          shade: '#277bb8',
+          light: '#b8f4ff',
+          spec: '#ffffff',
+          accent: '#8cf0ff',
+          accentLight: '#eefcff',
+          outline: '#102238',
+        },
+        true,
+      );
+      break;
+    case 'ice_wolf':
+      drawQuadruped(
+        g,
+        phase,
+        {
+          body: '#8ad8f5',
+          shade: '#3e7ca6',
+          light: '#d6f6ff',
+          belly: '#f2fcff',
+          accent: '#4ec6ff',
+          accentLight: '#ffffff',
+          eye: '#4cf0ff',
+          outline: '#102033',
+        },
+        'wolf',
+      );
+      break;
+    case 'glacier_golem':
+      drawArmoredOrGolem(
+        g,
+        phase,
+        {
+          armor: '#6ec6e8',
+          shade: '#2f658f',
+          light: '#c9f4ff',
+          trim: '#ffffff',
+          glow: '#7cf4ff',
+          accent: '#3e92c9',
+          outline: '#101d30',
+        },
+        'golem',
+      );
+      break;
+    case 'snow_valkyrie':
+      drawArmoredOrGolem(
+        g,
+        phase,
+        {
+          armor: '#cde9ff',
+          shade: '#5a8bbd',
+          light: '#ffffff',
+          trim: '#7ce8ff',
+          glow: '#e6fcff',
+          accent: '#3970b5',
+          outline: '#122036',
+        },
+        'astral',
+      );
+      break;
+    case 'fenrir_lord': {
+      drawQuadruped(
+        g,
+        phase,
+        {
+          body: '#589ce0',
+          shade: '#21457d',
+          light: '#b8e8ff',
+          belly: '#e8f9ff',
+          accent: '#7ce8ff',
+          accentLight: '#ffffff',
+          eye: '#ffe559',
+          outline: '#0d182e',
+        },
+        'wolf',
+      );
+      // Bespoke Frost Crown + Crystal Mane Spikes
+      const bob = Math.round(Math.sin(phase) * 1);
+      g.rect(11, 5 + bob, 9, 2, '#7ce8ff');
+      g.px(12, 3 + bob, '#ffffff');
+      g.px(15, 2 + bob, '#ffe559');
+      g.px(18, 3 + bob, '#ffffff');
+      g.outline('#0d182e');
+      break;
+    }
+    case 'cherub_spark': {
+      drawWinged(
+        g,
+        phase,
+        {
+          body: '#fff0c2',
+          shade: '#d4a657',
+          light: '#ffffff',
+          belly: '#fff9e6',
+          wing: '#ffe680',
+          wingLight: '#ffffff',
+          accent: '#7ce8ff',
+          eye: '#3b6cc9',
+          outline: '#2b1e10',
+        },
+        'sprite',
+      );
+      // Floating golden halo
+      const hb = Math.round(Math.sin(phase) * 1.2);
+      g.rect(12, 3 + hb, 8, 2, '#ffe559');
+      g.px(15, 3 + hb, '#ffffff');
+      break;
+    }
+    case 'golden_paladin':
+      drawArmoredOrGolem(
+        g,
+        phase,
+        {
+          armor: '#f2c74b',
+          shade: '#a67417',
+          light: '#fff5b8',
+          trim: '#ffffff',
+          glow: '#7ce8ff',
+          accent: '#d9534f',
+          outline: '#261a0c',
+        },
+        'knight',
+      );
+      break;
+    case 'prism_sphinx': {
+      drawQuadruped(
+        g,
+        phase,
+        {
+          body: '#ebb74d',
+          shade: '#9c6b1c',
+          light: '#ffe896',
+          belly: '#fff7d6',
+          accent: '#6beeff',
+          accentLight: '#ffffff',
+          eye: '#7ce8ff',
+          outline: '#24180c',
+        },
+        'fox',
+      );
+      const sb = Math.round(Math.sin(phase) * 1);
+      g.rect(12, 5 + sb, 7, 2, '#ffe559');
+      g.px(15, 4 + sb, '#6beeff');
+      break;
+    }
+    case 'solar_phoenix':
+      drawWinged(
+        g,
+        phase,
+        {
+          body: '#ffb830',
+          shade: '#c94318',
+          light: '#fff5a6',
+          belly: '#ffffff',
+          wing: '#ff7b24',
+          wingLight: '#ffe86b',
+          accent: '#ffe86b',
+          eye: '#ffffff',
+          outline: '#29130b',
+        },
+        'phoenix',
+      );
+      break;
+    case 'seraph_omega': {
+      // Bespoke 6-Winged Radiant Sanctum Boss!
+      const cy = 16 + Math.round(Math.sin(phase) * 1.8);
+      const flap = Math.round(Math.sin(phase) * 3);
+      // 3 pairs of animated golden-white seraph wings
+      g.line(15, cy - 2, 3, cy - 10 + flap, '#ffe675', 3);
+      g.line(16, cy - 2, 28, cy - 10 + flap, '#ffe675', 3);
+      g.line(15, cy + 1, 2, cy + 1 - flap, '#fff8cc', 3);
+      g.line(16, cy + 1, 29, cy + 1 - flap, '#fff8cc', 3);
+      g.line(15, cy + 4, 5, cy + 10 + flap, '#7ce8ff', 2);
+      g.line(16, cy + 4, 26, cy + 10 + flap, '#7ce8ff', 2);
+      // Radiant white-gold celestial robe
+      g.ellipse(15.5, cy + 4, 6.2, 7.5, '#fff5d1', '#c7972e', '#ffffff');
+      g.rect(14, cy - 1, 3, 11, '#f5c749');
+      // Glowing angelic core & twin cyan eyes
+      g.ellipse(15.5, cy - 5, 4.5, 4.2, '#ffffff', '#e8c45a', '#ffffff');
+      g.rect(13, cy - 6, 2, 2, '#4ce8ff');
+      g.rect(17, cy - 6, 2, 2, '#4ce8ff');
+      // Double floating golden halo
+      g.rect(10, cy - 12, 11, 2, '#ffe559');
+      g.px(15, cy - 13, '#ffffff');
+      g.outline('#261a0c');
+      break;
+    }
+    case 'crystal_dragon': {
+      drawWinged(
+        g,
+        phase,
+        {
+          body: '#8ae8ff',
+          shade: '#3b7fc4',
+          light: '#ebfcff',
+          belly: '#ffffff',
+          wing: '#b89eff',
+          wingLight: '#f0e8ff',
+          accent: '#ffe875',
+          eye: '#ff66b2',
+          outline: '#161b33',
+        },
+        'dragon',
+      );
+      // Prismatic sparkle pixels
+      if (Math.sin(phase) > 0) {
+        g.px(15, 4, '#ffffff');
+        g.px(25, 9, '#ffe875');
+      }
+      break;
+    }
+    case 'eclipse_reaper': {
+      drawCosmic(g, phase, 'herald');
+      // Gleaming Crimson-Violet Eclipse Scythe!
+      const sway = Math.round(Math.sin(phase) * 2);
+      g.line(23, 25, 25, 6 + sway, '#9c59d1', 2);
+      g.line(25, 6 + sway, 17, 4 + sway, '#ff4d6d', 2);
+      g.line(17, 4 + sway, 14, 7 + sway, '#ffa3b5', 2);
+      g.outline('#120c1c');
+      break;
+    }
     default:
       drawPropOrEvent(g, key, phase);
       break;

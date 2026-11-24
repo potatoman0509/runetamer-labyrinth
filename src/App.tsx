@@ -16,9 +16,10 @@ import {
   stepEnemyOrAutoTurn,
   type PlayerActionCommand,
 } from './game/battle';
-import { createBossRushEntity, getBossRushWave } from './game/bossRush';
+import { BOSS_RUSH_MAX_WAVE, createBossRushEntity, getBossRushWave } from './game/bossRush';
 import { BIOMES, getBiomeForFloor } from './game/data/biomes';
 import {
+  calculateItemScore,
   enhanceEquipment,
   generateEquipment,
   getEnhanceCost,
@@ -60,9 +61,11 @@ import {
 } from './game/skillTree';
 import {
   canEvolveMonster,
+  canTrueEvolveMonster,
   computeUnitStats,
   getEvolutionRequirement,
   getPartyAggregatedLootBonuses,
+  getTrueEvolutionRequirement,
 } from './game/stats';
 import type {
   ActiveShrineBuffs,
@@ -75,6 +78,7 @@ import type {
   EquipSlot,
   GameSave,
   MapEntity,
+  TrialModId,
 } from './game/types';
 import { generateShopInventory, getShopPrice, toRoman } from './game/worldTier';
 
@@ -86,7 +90,7 @@ const EMPTY_SHRINE_BUFFS: ActiveShrineBuffs = {
   curseEnemyBonus: 0,
 };
 
-const INITIAL_RUN_POTIONS = { hp: 3, mp: 2 };
+const INITIAL_RUN_POTIONS = { hp: 2, mp: 2 };
 
 export function App() {
   const [activeSlot, setActiveSlot] = useState<SaveSlotId>(() => getActiveSaveSlot());
@@ -299,7 +303,7 @@ export function App() {
       }
 
       if (choice.kind === 'rest') {
-        healAllParty(0.5, false);
+        healAllParty(0.4, false);
         advanceExpeditionStep(save.worldTier, false, true, false);
         return;
       }
@@ -652,8 +656,8 @@ export function App() {
         returnToVillage(`闘技場 Wave ${battle.bossRushWave} で力尽きた`);
       } else {
         returnToVillage(
-          battle.bossRushWave === 5 && battle.phase === 'victory'
-            ? '🏆 ボスラッシュ全5Wave制覇'
+          battle.bossRushWave === BOSS_RUSH_MAX_WAVE && battle.phase === 'victory'
+            ? `🏆 闘技場 全${BOSS_RUSH_MAX_WAVE}Wave制覇`
             : '始まりの村へ帰還した',
         );
       }
@@ -747,6 +751,40 @@ export function App() {
     });
   }, []);
 
+  const handleAutoEquipUnit = useCallback(
+    (unitId: string) => {
+      setSave((prev) => {
+        const target = prev.roster[unitId];
+        if (!target) return prev;
+        const equippedByOther = new Set<string>();
+        for (const [uid, u] of Object.entries(prev.roster)) {
+          if (uid === unitId) continue;
+          for (const eid of Object.values(u.equipped)) {
+            if (eid) equippedByOther.add(eid);
+          }
+        }
+        const nextEquipped = { ...target.equipped };
+        for (const slot of ['weapon', 'armor', 'relic', 'rune'] as const) {
+          const candidates = prev.inventory
+            .filter((it) => it.slot === slot && !equippedByOther.has(it.id))
+            .sort((a, b) => calculateItemScore(b) - calculateItemScore(a));
+          if (candidates[0]) {
+            nextEquipped[slot] = candidates[0].id;
+          }
+        }
+        return {
+          ...prev,
+          roster: {
+            ...prev.roster,
+            [unitId]: { ...target, equipped: nextEquipped },
+          },
+        };
+      });
+      showToast('★最適装備を適用した');
+    },
+    [showToast],
+  );
+
   const handleToggleLock = useCallback((itemId: string) => {
     setSave((prev) => ({
       ...prev,
@@ -816,7 +854,7 @@ export function App() {
       }));
       showToast(
         isBreakthrough
-          ? `★突破・${upgraded.name} +${upgraded.enhanceLevel}・全OP+25%`
+          ? `★突破・${upgraded.name} +${upgraded.enhanceLevel}・全OP+18%`
           : `🔨 ${upgraded.name} +${upgraded.enhanceLevel}`,
       );
     },
@@ -1003,6 +1041,35 @@ export function App() {
     [save.forgeStones, save.roster, showToast],
   );
 
+  const handleTrueEvolveMonster = useCallback(
+    (unitId: string) => {
+      const unit = save.roster[unitId];
+      if (!unit || !canTrueEvolveMonster(unit, save.forgeStones)) return;
+      const req = getTrueEvolutionRequirement(unit);
+      const sp = getSpecies(unit.speciesId);
+
+      setSave((prev) => {
+        const target = prev.roster[unitId];
+        if (!target || !canTrueEvolveMonster(target, prev.forgeStones)) return prev;
+        const trueUnit = { ...target, evolved: true, trueEvolved: true };
+        const nextSaveDraft: GameSave = {
+          ...prev,
+          forgeStones: prev.forgeStones - req.stoneCost,
+          roster: { ...prev.roster, [unitId]: trueUnit },
+          stats: {
+            ...prev.stats,
+            totalTrueEvolutions: prev.stats.totalTrueEvolutions + 1,
+          },
+        };
+        const st = computeUnitStats(trueUnit, nextSaveDraft);
+        nextSaveDraft.roster[unitId] = { ...trueUnit, hp: st.maxHp, mp: st.maxMp };
+        return nextSaveDraft;
+      });
+      showToast(`✦ ${sp.name}が真極進化した`);
+    },
+    [save.forgeStones, save.roster, showToast],
+  );
+
   const handleClaimAchievement = useCallback(
     (achId: string) => {
       const def = ACHIEVEMENT_MAP[achId];
@@ -1055,7 +1122,7 @@ export function App() {
   }, [battle, expedition.inVillage, save, showToast]);
 
   const handleNextBossRushWave = useCallback(() => {
-    if (!battle || !battle.bossRushWave || battle.bossRushWave >= 5) return;
+    if (!battle || !battle.bossRushWave || battle.bossRushWave >= BOSS_RUSH_MAX_WAVE) return;
     const nextWave = battle.bossRushWave + 1;
     const waveDef = getBossRushWave(nextWave);
     const entity = createBossRushEntity(nextWave);
@@ -1088,6 +1155,21 @@ export function App() {
       showToast(`世界ランク Tier ${toRoman(tier)}`);
     },
     [showToast],
+  );
+
+  const handleToggleTrialMod = useCallback(
+    (id: TrialModId) => {
+      if (!expedition.inVillage) return;
+      setSave((prev) => {
+        const cur = prev.activeTrials ?? [];
+        const has = cur.includes(id);
+        return {
+          ...prev,
+          activeTrials: has ? cur.filter((t) => t !== id) : [...cur, id],
+        };
+      });
+    },
+    [expedition.inVillage],
   );
 
   const handleBuyShopItem = useCallback(
@@ -1337,7 +1419,7 @@ export function App() {
           <div className="hud-location">
             <h1 className="hud-title">
               {battle?.bossRushWave
-                ? `闘技場 W${battle.bossRushWave}/5`
+                ? `闘技場 W${battle.bossRushWave}/${BOSS_RUSH_MAX_WAVE}`
                 : inVillage
                   ? biomeDef.shortName
                   : `${biomeDef.shortName} ${expedition.floor}F`}
@@ -1351,7 +1433,7 @@ export function App() {
                 color: '#ffd6dd',
               }}
             >
-              ☠超高難度
+              v10
             </span>
           </div>
           <div className="hud-right">
@@ -1391,26 +1473,32 @@ export function App() {
             onEnemyTap={(uid) => setSelectedEnemyUid(uid)}
           />
 
-          {(shrineBuffs.powerBonus > 0 ||
+          {((shrineBuffs.powerBonus > 0 ||
             shrineBuffs.fortuneBonus > 0 ||
             shrineBuffs.curseEnemyBonus > 0) &&
-            !inVillage && (
-              <div className="stage-buff-strip">
-                {shrineBuffs.powerBonus > 0 && (
-                  <span className="buff-tag">
-                    剛力 +{Math.round(shrineBuffs.powerBonus * 100)}%
-                  </span>
-                )}
-                {shrineBuffs.fortuneBonus > 0 && (
-                  <span className="buff-tag">幸運 MF+{shrineBuffs.fortuneBonus}%</span>
-                )}
-                {shrineBuffs.curseEnemyBonus > 0 && (
-                  <span className="buff-tag" style={{ borderColor: '#ff7084', color: '#ff9cab' }}>
-                    呪い 敵+{Math.round(shrineBuffs.curseEnemyBonus * 100)}%
-                  </span>
-                )}
-              </div>
-            )}
+            !inVillage) ||
+          (save.activeTrials?.length ?? 0) > 0 ? (
+            <div className="stage-buff-strip">
+              {(save.activeTrials?.length ?? 0) > 0 && (
+                <span className="buff-tag" style={{ borderColor: '#ff7084', color: '#ffd1d8' }}>
+                  ☠刻印×{save.activeTrials.length}
+                </span>
+              )}
+              {!inVillage && shrineBuffs.powerBonus > 0 && (
+                <span className="buff-tag">
+                  剛力 +{Math.round(shrineBuffs.powerBonus * 100)}%
+                </span>
+              )}
+              {!inVillage && shrineBuffs.fortuneBonus > 0 && (
+                <span className="buff-tag">幸運 MF+{shrineBuffs.fortuneBonus}%</span>
+              )}
+              {!inVillage && shrineBuffs.curseEnemyBonus > 0 && (
+                <span className="buff-tag" style={{ borderColor: '#ff7084', color: '#ff9cab' }}>
+                  呪い 敵+{Math.round(shrineBuffs.curseEnemyBonus * 100)}%
+                </span>
+              )}
+            </div>
+          ) : null}
 
           {toast && <div className="stage-toast">{toast}</div>}
         </section>
@@ -1425,6 +1513,7 @@ export function App() {
                 autoBattle: save.settings.autoBattle || autoAdvance,
               }}
               selectedEnemyUid={effectiveSelectedEnemyUid}
+              onSelectEnemy={(uid) => setSelectedEnemyUid(uid)}
               onCommand={handleBattleCommand}
               onToggleAuto={() => {
                 if (autoAdvance) setAutoAdvance(false);
@@ -1482,10 +1571,14 @@ export function App() {
                                   whiteSpace: 'nowrap',
                                   overflow: 'hidden',
                                   textOverflow: 'ellipsis',
-                                  color: u.evolved ? '#ffe878' : undefined,
+                                  color: u.trueEvolved
+                                    ? '#8ae8ff'
+                                    : u.evolved
+                                      ? '#ffe878'
+                                      : undefined,
                                 }}
                               >
-                                {u.evolved ? '極' : ''}
+                                {u.trueEvolved ? '真' : u.evolved ? '極' : ''}
                                 {sp.name}
                               </div>
                               <div style={{ fontSize: 8.5, color: 'var(--accent-amber)' }}>
@@ -1518,7 +1611,12 @@ export function App() {
                             ⚔ 迷宮へ出撃・{defaultEntryFloor}F〜
                           </div>
                           <div className="muted-text">
-                            秘薬×3・霊薬×2を携帯
+                            {(save.activeTrials ?? []).includes('no_potions')
+                              ? '禁薬中'
+                              : `HP薬×${INITIAL_RUN_POTIONS.hp} / MP薬×${INITIAL_RUN_POTIONS.mp}`}
+                            {(save.activeTrials?.length ?? 0) > 0
+                              ? `・☠刻印×${save.activeTrials.length}`
+                              : ''}
                           </div>
                         </div>
                         <span className="choice-tag" style={{ background: '#2e8a4e' }}>
@@ -1532,17 +1630,17 @@ export function App() {
                         className="choice-card gold-choice"
                         onClick={handleStartBossRush}
                       >
-                        <PixelIcon spriteKey="void_herald" size={26} />
+                        <PixelIcon spriteKey="seraph_omega" size={26} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 12, color: '#fff3bd' }}>
                             🏟 ボスラッシュ闘技場
                           </div>
                           <div className="muted-text">
-                            最高 W{save.bossRushBestWave}/5・全制覇でミシック確定
+                            W{save.bossRushBestWave}/{BOSS_RUSH_MAX_WAVE}・W5/W8ミシック確定
                           </div>
                         </div>
                         <span className="choice-tag" style={{ background: '#b8701a' }}>
-                          5連戦
+                          {BOSS_RUSH_MAX_WAVE}連戦
                         </span>
                       </button>
 
@@ -1578,7 +1676,7 @@ export function App() {
                           style={{ padding: '8px 6px' }}
                           onClick={() => setActiveTab('party')}
                         >
-                          🌳 スキル・極進化{availableSp > 0 ? ` SP${availableSp}` : ''}
+                          🌳 スキル・進化{availableSp > 0 ? ` SP${availableSp}` : ''}
                         </button>
                         <button
                           type="button"
@@ -1594,7 +1692,7 @@ export function App() {
                           style={{ padding: '8px 6px' }}
                           onClick={() => setActiveTab('world')}
                         >
-                          ✦ 世界・商店・闘技場
+                          ✦ 刻印・商店・闘技場
                         </button>
                       </div>
                     </div>
@@ -1704,6 +1802,7 @@ export function App() {
                   inVillage={inVillage}
                   onTogglePartyMember={handleTogglePartyMember}
                   onEvolveMonster={handleEvolveMonster}
+                  onTrueEvolveMonster={handleTrueEvolveMonster}
                   onUpgradeSkillNode={handleUpgradeSkillNode}
                   onResetSkillTree={handleResetSkillTree}
                   onEquipHeroSkill={handleEquipHeroSkill}
@@ -1718,6 +1817,7 @@ export function App() {
                   initialItemId={focusItemId}
                   onEquip={handleEquip}
                   onUnequip={handleUnequip}
+                  onAutoEquipUnit={handleAutoEquipUnit}
                   onToggleLock={handleToggleLock}
                   onSellItem={handleSellItem}
                   onSalvageItem={handleSalvageItem}
@@ -1765,6 +1865,7 @@ export function App() {
                   onExportSaveFile={handleExportSaveFile}
                   onImportSaveFile={handleImportSaveFile}
                   onSelectWorldTier={handleSelectWorldTier}
+                  onToggleTrialMod={handleToggleTrialMod}
                   onEnterDungeonFloor={enterDungeonFloor}
                   onStartBossRush={handleStartBossRush}
                   onBuyShopItem={handleBuyShopItem}

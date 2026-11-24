@@ -2,6 +2,7 @@ import { getClaimedAchievementBonuses } from './achievements';
 import { getSpecies } from './data/monsters';
 import { computeSkillTreeBonuses } from './skillTree';
 import { computePartySynergies } from './synergy';
+import { computeTrialModifiers } from './trials';
 import type {
   ActiveSetCount,
   ActiveShrineBuffs,
@@ -16,7 +17,7 @@ import type {
 import { getWorldTierBlessing } from './worldTier';
 
 export function expForNextLevel(level: number): number {
-  return Math.round(32 + level * 22 + Math.pow(level, 1.72) * 8);
+  return Math.round(34 + level * 24 + Math.pow(level, 1.75) * 8.5);
 }
 
 export function getCompendiumBonusPct(
@@ -24,15 +25,11 @@ export function getCompendiumBonusPct(
   discoveredUniquesCount: number,
 ): { statPct: number; mfBonus: number } {
   return {
-    statPct: discoveredMonstersCount * 2 + discoveredUniquesCount * 3,
-    mfBonus: discoveredMonstersCount * 2 + discoveredUniquesCount * 5,
+    statPct: Math.round(discoveredMonstersCount * 1.2 + discoveredUniquesCount * 1.8),
+    mfBonus: Math.round(discoveredMonstersCount * 1.5 + discoveredUniquesCount * 3.5),
   };
 }
 
-/**
- * Monster Extreme Evolution (極進化):
- * Requires Level 10+, and costs 15 Forge Stones if Awakening ★2+, or 35 Forge Stones otherwise!
- */
 export function getEvolutionRequirement(unit: UnitInstance): {
   minLevel: number;
   stoneCost: number;
@@ -49,6 +46,25 @@ export function getEvolutionRequirement(unit: UnitInstance): {
 export function canEvolveMonster(unit: UnitInstance, forgeStones: number): boolean {
   if (unit.id === 'hero' || unit.evolved) return false;
   const req = getEvolutionRequirement(unit);
+  return unit.level >= req.minLevel && forgeStones >= req.stoneCost;
+}
+
+export function getTrueEvolutionRequirement(unit: UnitInstance): {
+  minLevel: number;
+  stoneCost: number;
+  discounted: boolean;
+} {
+  const discounted = unit.awakening >= 4;
+  return {
+    minLevel: 25,
+    stoneCost: discounted ? 30 : 60,
+    discounted,
+  };
+}
+
+export function canTrueEvolveMonster(unit: UnitInstance, forgeStones: number): boolean {
+  if (unit.id === 'hero' || !unit.evolved || unit.trueEvolved) return false;
+  const req = getTrueEvolutionRequirement(unit);
   return unit.level >= req.minLevel && forgeStones >= req.stoneCost;
 }
 
@@ -80,7 +96,7 @@ export function computeUnitStats(
     | 'roster'
     | 'heroSkillTree'
     | 'claimedAchievements'
-  >,
+  > & { activeTrials?: GameSave['activeTrials'] },
   shrineBuffs?: ActiveShrineBuffs,
   inventoryMapOverride?: Map<string, EquipmentItem>,
 ): ComputedUnitStats {
@@ -91,8 +107,8 @@ export function computeUnitStats(
   const equipped = getEquippedItemsForUnit(unit, invMap);
 
   const isHero = unit.speciesId === 'hero';
-  const evolveMult = !isHero && unit.evolved ? 1.35 : 1.0;
-  const awakenMult = (1 + unit.awakening * 0.08) * evolveMult;
+  const evolveMult = !isHero && unit.evolved ? (unit.trueEvolved ? 1.48 : 1.24) : 1.0;
+  const awakenMult = (1 + unit.awakening * 0.06) * evolveMult;
   const blessing = getWorldTierBlessing(save.maxUnlockedTier);
   const comp = getCompendiumBonusPct(
     save.discoveredMonsters.length,
@@ -111,8 +127,8 @@ export function computeUnitStats(
   let flatDef = (sp.baseStats.def + sp.growth.def * (lvl - 1)) * awakenMult;
   let flatSpd =
     (sp.baseStats.spd + sp.growth.spd * (lvl - 1)) *
-    (1 + unit.awakening * 0.03) *
-    (unit.evolved ? 1.15 : 1);
+    (1 + unit.awakening * 0.025) *
+    (unit.trueEvolved ? 1.2 : unit.evolved ? 1.1 : 1);
 
   let atkPct =
     (sp.passiveBonus.atkPct ?? 0) +
@@ -143,10 +159,10 @@ export function computeUnitStats(
     allyBondPct +
     (isHero ? tree.heroHpPct : 0);
 
-  let spdFlat = (sp.passiveBonus.spdFlat ?? 0) + syn.spdFlat;
+  let spdFlat = (sp.passiveBonus.spdFlat ?? 0) + syn.spdFlat + (isHero ? tree.heroSpdFlat : 0);
   let critRate =
-    6 + (sp.passiveBonus.critRate ?? 0) + syn.critRate + (isHero ? tree.heroCritRate : 0);
-  let critDmg = 155 + (isHero ? tree.heroCritDmg : 0);
+    5 + (sp.passiveBonus.critRate ?? 0) + syn.critRate + (isHero ? tree.heroCritRate : 0);
+  let critDmg = 150 + (isHero ? tree.heroCritDmg : 0);
   let lifesteal = (sp.passiveBonus.lifesteal ?? 0) + (isHero ? tree.heroLifesteal : 0);
   let doubleHit = (sp.passiveBonus.doubleHit ?? 0) + (isHero ? tree.heroDoubleHit : 0);
   let regenPct = (sp.passiveBonus.regenPct ?? 0) + syn.regenPct;
@@ -163,9 +179,14 @@ export function computeUnitStats(
   let stoneFind = isHero ? tree.heroStoneFind : 0;
   let damageTakenMult = 1.0;
 
-  const skillPowerBonusPct = (isHero ? tree.heroSkillPowerBonusPct : 0) + (unit.evolved ? 25 : 0);
-  const weaknessBonusPct = isHero ? tree.heroWeaknessBonusPct : 0;
-  const mpRegenBonus = isHero ? tree.heroMpRegenBonus : 0;
+  let skillPowerBonusPct =
+    (isHero ? tree.heroSkillPowerBonusPct : 0) +
+    (unit.evolved ? 16 : 0) +
+    (unit.trueEvolved ? 14 : 0);
+  let weaknessBonusPct = isHero ? tree.heroWeaknessBonusPct : 0;
+  let mpRegenBonus = isHero ? tree.heroMpRegenBonus : 0;
+  let armorPenPct = isHero ? tree.heroArmorPenPct : 0;
+  let statusDmgBonusPct = isHero ? tree.heroStatusDmgBonusPct : 0;
 
   const uniqueEffects: UniqueEffectId[] = [];
   const setCounts = new Map<SetId, number>();
@@ -234,49 +255,86 @@ export function computeUnitStats(
   for (const [setId, count] of setCounts.entries()) {
     activeSets.push({ setId, count });
     if (count >= 2) {
-      if (setId === 'forest_guard') hpPct += 18;
-      else if (setId === 'ancient_rune') defPct += 22;
-      else if (setId === 'crimson_fury') atkPct += 20;
-      else if (setId === 'astral_mage') magPct += 22;
-      else if (setId === 'golden_greed') magicFind += 35;
+      if (setId === 'forest_guard') hpPct += 14;
+      else if (setId === 'ancient_rune') defPct += 16;
+      else if (setId === 'crimson_fury') atkPct += 15;
+      else if (setId === 'astral_mage') magPct += 16;
+      else if (setId === 'golden_greed') magicFind += 28;
       else if (setId === 'lunar_blade') {
-        spdFlat += 10;
-        critRate += 10;
+        spdFlat += 8;
+        critRate += 7;
+      } else if (setId === 'frost_monarch') {
+        defPct += 14;
+        magPct += 10;
+      } else if (setId === 'seraph_radiance') {
+        hpPct += 14;
+        magPct += 12;
+      } else if (setId === 'blood_pact') {
+        lifesteal += 10;
+        atkPct += 10;
+      } else if (setId === 'void_walker') {
+        armorPenPct += 14;
       }
     }
     if (count >= 4) {
       if (setId === 'forest_guard') {
-        regenPct += 8;
-        damageTakenMult *= 0.88;
+        regenPct += 6;
+        damageTakenMult *= 0.91;
       } else if (setId === 'crimson_fury') {
-        critDmg += 50;
-        lifesteal += 10;
+        critDmg += 36;
+        lifesteal += 7;
       } else if (setId === 'golden_greed') {
-        goldFind += 45;
-        expFind += 35;
-        stoneFind += 40;
+        goldFind += 35;
+        expFind += 28;
+        stoneFind += 30;
       } else if (setId === 'lunar_blade') {
-        doubleHit += 22;
+        doubleHit += 16;
+      } else if (setId === 'frost_monarch') {
+        statusDmgBonusPct += 22;
+      } else if (setId === 'seraph_radiance') {
+        regenPct += 5;
+      } else if (setId === 'void_walker') {
+        armorPenPct += 18;
+        skillPowerBonusPct += 18;
       }
     }
   }
   activeSets.sort((a, b) => b.count - a.count);
 
-  if (uniqueEffects.includes('clover_luck')) goldFind += 40;
-  if (uniqueEffects.includes('astral_compass')) critDmg += 45;
-  if (uniqueEffects.includes('starlight_mantle')) damageTakenMult *= 0.85;
-  if (uniqueEffects.includes('mithril_fortress')) damageTakenMult *= 0.9;
-  if (uniqueEffects.includes('blazing_cloak')) regenPct += 6;
+  // Tightened unique bonuses + 14 new v10 uniques
+  if (uniqueEffects.includes('clover_luck')) goldFind += 30;
+  if (uniqueEffects.includes('astral_compass')) critDmg += 34;
+  if (uniqueEffects.includes('starlight_mantle')) damageTakenMult *= 0.89;
+  if (uniqueEffects.includes('mithril_fortress')) damageTakenMult *= 0.92;
+  if (uniqueEffects.includes('blazing_cloak')) regenPct += 5;
   if (uniqueEffects.includes('forge_heart_amulet')) {
-    stoneFind += 60;
-    atkPct += 15;
-    magPct += 15;
+    stoneFind += 45;
+    atkPct += 11;
+    magPct += 11;
   }
   if (uniqueEffects.includes('mimic_crown')) {
-    magicFind += 35;
-    damageTakenMult *= 1.1;
+    magicFind += 28;
+    damageTakenMult *= 1.12;
   }
-  if (uniqueEffects.includes('titan_gauntlet_relic')) hpPct += 15;
+  if (uniqueEffects.includes('titan_gauntlet_relic')) hpPct += 12;
+  if (uniqueEffects.includes('seraph_lance')) armorPenPct += 18;
+  if (uniqueEffects.includes('prism_wand')) weaknessBonusPct += 25;
+  if (uniqueEffects.includes('glacier_plate')) damageTakenMult *= 0.88;
+  if (uniqueEffects.includes('seraph_robe')) {
+    regenPct += 7;
+    mpRegenBonus += 8;
+  }
+  if (uniqueEffects.includes('fenrir_fang_relic')) spdFlat += 12;
+  if (uniqueEffects.includes('halo_diadem')) skillPowerBonusPct += 18;
+  if (uniqueEffects.includes('void_heart_relic')) armorPenPct += 22;
+  if (uniqueEffects.includes('crystal_scale_relic')) stoneFind += 35;
+  if (uniqueEffects.includes('judgment_rune')) statusDmgBonusPct += 28;
+  if (uniqueEffects.includes('eternal_tamer_rune')) {
+    atkPct += 10;
+    magPct += 10;
+    defPct += 10;
+    hpPct += 10;
+  }
 
   const powerMult = 1 + (shrineBuffs?.powerBonus ?? 0);
   magicFind += shrineBuffs?.fortuneBonus ?? 0;
@@ -285,7 +343,7 @@ export function computeUnitStats(
     40,
     Math.round(flatHp * (1 + hpPct / 100) * blessing.statMult),
   );
-  const maxMp = Math.max(20, Math.round(flatMp * (1 + (blessing.statMult - 1) * 0.5)));
+  const maxMp = Math.max(20, Math.round(flatMp * (1 + (blessing.statMult - 1) * 0.45)));
   const def = Math.max(
     5,
     Math.round(flatDef * (1 + defPct / 100) * blessing.statMult),
@@ -302,19 +360,20 @@ export function computeUnitStats(
   );
 
   if (uniqueEffects.includes('storm_bowblade')) {
-    atk += Math.round(spd * 1.2);
+    atk += Math.round(spd * 0.9);
   }
   if (uniqueEffects.includes('mithril_fortress')) {
-    atk += Math.round(def * 0.35);
+    atk += Math.round(def * 0.28);
   }
   if (activeSets.some((s) => s.setId === 'ancient_rune' && s.count >= 4)) {
-    atk += Math.round(def * 0.3);
-    mag += Math.round(def * 0.3);
+    atk += Math.round(def * 0.22);
+    mag += Math.round(def * 0.22);
   }
 
-  const clampedCritRate = Math.min(95, critRate);
-  const clampedDoubleHit = Math.min(85, doubleHit);
-  const clampedLifesteal = Math.min(65, lifesteal);
+  const clampedCritRate = Math.min(92, critRate);
+  const clampedDoubleHit = Math.min(80, doubleHit);
+  const clampedLifesteal = Math.min(55, lifesteal);
+  const clampedArmorPen = Math.min(65, armorPenPct);
 
   const powerScore = Math.round(
     maxHp * 0.35 +
@@ -323,7 +382,8 @@ export function computeUnitStats(
       def * 2.5 +
       spd * 2 +
       clampedCritRate * 3 +
-      clampedDoubleHit * 3,
+      clampedDoubleHit * 3 +
+      clampedArmorPen * 2,
   );
 
   return {
@@ -346,6 +406,8 @@ export function computeUnitStats(
     skillPowerBonusPct,
     weaknessBonusPct,
     mpRegenBonus,
+    armorPenPct: clampedArmorPen,
+    statusDmgBonusPct,
     uniqueEffects,
     activeSets,
     powerScore,
@@ -357,6 +419,7 @@ export function getPartyAggregatedLootBonuses(
   shrineBuffs?: ActiveShrineBuffs,
 ): { magicFind: number; goldFind: number; expFind: number; stoneFind: number } {
   const invMap = new Map(save.inventory.map((it) => [it.id, it]));
+  const trials = computeTrialModifiers(save.activeTrials);
   let mf = 0;
   let gf = 0;
   let ef = 0;
@@ -372,12 +435,19 @@ export function getPartyAggregatedLootBonuses(
     sf += st.stoneFind;
     count += 1;
   }
-  if (count === 0) return { magicFind: 0, goldFind: 0, expFind: 0, stoneFind: 0 };
+  if (count === 0) {
+    return {
+      magicFind: trials.mfBonus,
+      goldFind: 0,
+      expFind: trials.expBonusPct,
+      stoneFind: trials.stoneBonusPct,
+    };
+  }
   const scale = 1 / Math.max(1, Math.pow(count, 0.55));
   return {
-    magicFind: Math.round(mf * scale),
+    magicFind: Math.round(mf * scale) + trials.mfBonus,
     goldFind: Math.round(gf * scale),
-    expFind: Math.round(ef * scale),
-    stoneFind: Math.round(sf * scale),
+    expFind: Math.round(ef * scale) + trials.expBonusPct,
+    stoneFind: Math.round(sf * scale) + trials.stoneBonusPct,
   };
 }

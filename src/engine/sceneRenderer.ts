@@ -164,6 +164,38 @@ function drawDungeonParallax(
       ctx.fillRect(sx, sy, i % 4 === 0 ? 2 : 1, i % 4 === 0 ? 2 : 1);
     }
     ctx.globalAlpha = 1;
+  } else if (exp.biome === 'glacier') {
+    for (let x = 0; x < w; x += 8) {
+      const wave = Math.round(Math.sin(timeMs / 550 + x * 0.04) * 6);
+      ctx.fillStyle = 'rgba(110, 245, 220, 0.24)';
+      ctx.fillRect(x, 10 + wave, 8, 10);
+    }
+    for (let i = -1; i < Math.ceil(w / 44) + 2; i += 1) {
+      const gx = i * 44 - (farShift % 44);
+      ctx.fillStyle = '#3b73a8';
+      ctx.fillRect(gx, horizonY - 28, 24, 30);
+      ctx.fillStyle = '#7ad4f5';
+      ctx.fillRect(gx + 5, horizonY - 40, 12, 30);
+      ctx.fillStyle = '#dffaff';
+      ctx.fillRect(gx + 9, horizonY - 46, 4, 22);
+    }
+  } else if (exp.biome === 'sanctum') {
+    const cx = Math.round(w * 0.5);
+    const cy = Math.round(horizonY * 0.45);
+    ctx.strokeStyle = 'rgba(255, 232, 120, 0.42)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 22 + Math.sin(timeMs / 420) * 3, 0, Math.PI * 2);
+    ctx.stroke();
+    for (let i = -1; i < Math.ceil(w / 68) + 2; i += 1) {
+      const px = i * 68 - (midShift % 68);
+      ctx.fillStyle = '#d4b46a';
+      ctx.fillRect(px, 6, 16, horizonY - 4);
+      ctx.fillStyle = '#fff3c4';
+      ctx.fillRect(px + 2, 6, 4, horizonY - 4);
+      ctx.fillStyle = '#ffe566';
+      ctx.fillRect(px - 2, 8, 20, 4);
+    }
   }
 
   ctx.fillStyle = pal.groundPrimary;
@@ -234,7 +266,21 @@ export function renderExpeditionScene(
       5,
     );
 
-    if (unit.evolved && unit.speciesId !== 'hero') {
+    if (unit.trueEvolved && unit.speciesId !== 'hero') {
+      const haloR = sprite.width * 0.42 + Math.sin(timeMs / 190 + idx) * 2;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(130, 238, 255, 0.85)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy + 2, haloR, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255, 160, 240, 0.72)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy + 2, haloR - 4, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    } else if (unit.evolved && unit.speciesId !== 'hero') {
       const haloR = sprite.width * 0.38 + Math.sin(timeMs / 220 + idx) * 2;
       ctx.save();
       ctx.strokeStyle = 'rgba(255, 224, 96, 0.72)';
@@ -247,12 +293,18 @@ export function renderExpeditionScene(
 
     ctx.drawImage(sprite, Math.round(cx - sprite.width / 2), Math.round(cy - sprite.height / 2));
 
-    if (unit.evolved && unit.speciesId !== 'hero') {
-      for (let s = 0; s < 4; s += 1) {
-        const phase = ((timeMs / 900) + s * 0.25 + idx * 0.17) % 1;
+    if ((unit.evolved || unit.trueEvolved) && unit.speciesId !== 'hero') {
+      const prismPalette = ['#7ce8ff', '#ff9ce6', '#ffe86b', '#ffffff'];
+      const count = unit.trueEvolved ? 6 : 4;
+      for (let s = 0; s < count; s += 1) {
+        const phase = ((timeMs / 900) + s * (1 / count) + idx * 0.17) % 1;
         const sx = cx + Math.sin(timeMs / 260 + s * 1.9 + idx) * (sprite.width * 0.34);
         const sy = cy + sprite.height * 0.28 - phase * (sprite.height * 0.85);
-        ctx.fillStyle = s % 2 === 0 ? '#ffe86b' : '#fff9d6';
+        ctx.fillStyle = unit.trueEvolved
+          ? prismPalette[s % prismPalette.length]!
+          : s % 2 === 0
+            ? '#ffe86b'
+            : '#fff9d6';
         ctx.globalAlpha = 1 - phase * 0.75;
         ctx.fillRect(Math.round(sx) - 1, Math.round(sy) - 1, 2, 2);
       }

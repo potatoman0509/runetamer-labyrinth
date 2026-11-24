@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { BOSS_RUSH_WAVES } from '../game/bossRush';
+import { BOSS_RUSH_MAX_WAVE, BOSS_RUSH_WAVES } from '../game/bossRush';
 import { RARITY_META, SLOT_LABELS } from '../game/data/equipment';
 import {
   exportSaveCode,
@@ -7,7 +7,8 @@ import {
   type SaveSlotId,
   type SaveSlotSummary,
 } from '../game/save';
-import type { GameSave } from '../game/types';
+import { computeTrialModifiers, TRIAL_MODS } from '../game/trials';
+import type { GameSave, TrialModId } from '../game/types';
 import {
   getActiveTierModifiers,
   getShopPrice,
@@ -33,6 +34,7 @@ interface WorldPanelProps {
   onExportSaveFile: () => void;
   onImportSaveFile: (rawText: string) => { ok: boolean; error?: string };
   onSelectWorldTier: (tier: number) => void;
+  onToggleTrialMod: (id: TrialModId) => void;
   onEnterDungeonFloor: (floor: number) => void;
   onStartBossRush: () => void;
   onBuyShopItem: (itemId: string) => void;
@@ -56,6 +58,7 @@ export function WorldPanel({
   onExportSaveFile,
   onImportSaveFile,
   onSelectWorldTier,
+  onToggleTrialMod,
   onEnterDungeonFloor,
   onStartBossRush,
   onBuyShopItem,
@@ -72,9 +75,9 @@ export function WorldPanel({
 
   const blessing = getWorldTierBlessing(save.maxUnlockedTier);
   const activeMods = getActiveTierModifiers(save.worldTier);
+  const trials = computeTrialModifiers(save.activeTrials);
   const highestInActiveTier = save.highestFloorByTier[save.worldTier] ?? 1;
 
-  // Checkpoint floors unlocked in the active World Tier (1F, 6F, 11F, 16F, 21F...)
   const checkpoints: number[] = [1];
   for (let f = 6; f <= highestInActiveTier; f += 5) {
     checkpoints.push(f);
@@ -93,7 +96,7 @@ export function WorldPanel({
       setExportMsg('セーブコードをコピーした');
     } catch {
       setImportText(code);
-      setExportMsg('下の欄へ出力した。コピーして保存してください。');
+      setExportMsg('下の欄へ出力した');
     }
   };
 
@@ -166,16 +169,14 @@ export function WorldPanel({
         <>
           <div className="rpg-card-gold" style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             <div className="section-heading">
-              <span>世界ランクの祭壇</span>
+              <span>世界ランク</span>
               <span>最大 Tier {toRoman(save.maxUnlockedTier)}</span>
             </div>
             <div style={{ fontSize: 10.5, color: '#fff2bd', lineHeight: 1.35 }}>
-              恒久加護：全能力 <strong>+{Math.round((blessing.statMult - 1) * 100)}%</strong> / MF{' '}
+              加護：全能力 <strong>+{Math.round((blessing.statMult - 1) * 100)}%</strong> / MF{' '}
               <strong>+{blessing.magicFindBonus}%</strong> / EXP <strong>+{blessing.expBonusPct}%</strong>
             </div>
-            <div className="muted-text">
-              最大Tierの20Fボス撃破で次ランク解放
-            </div>
+            <div className="muted-text">30Fボスで次Tier解放</div>
 
             {/* Tier Selector */}
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 2 }}>
@@ -195,9 +196,6 @@ export function WorldPanel({
                 );
               })}
             </div>
-            {!inVillage && (
-              <div className="muted-text">変更とワープは村でのみ可能</div>
-            )}
           </div>
 
           <div className="rpg-card" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -210,6 +208,58 @@ export function WorldPanel({
               <span>EXP x{activeMods.expMult.toFixed(1)}</span>
               <span>金貨 x{activeMods.goldMult.toFixed(1)}</span>
               <span style={{ color: '#ff8a98' }}>強敵 {Math.round(activeMods.eliteChance * 100)}%</span>
+            </div>
+          </div>
+
+          {/* Trial Modifiers (☠ 試練の刻印) */}
+          <div className="rpg-card" style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <div className="section-heading">
+              <span>☠ 試練の刻印 {trials.count}/{TRIAL_MODS.length}</span>
+              {trials.count > 0 && (
+                <span style={{ fontSize: 9.5, color: '#82ff9e' }}>
+                  MF+{trials.mfBonus}% 💎+{trials.stoneBonusPct}%
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {TRIAL_MODS.map((mod) => {
+                const active = (save.activeTrials ?? []).includes(mod.id);
+                return (
+                  <button
+                    key={mod.id}
+                    id={`btn-trial-${mod.id}`}
+                    type="button"
+                    className="item-row"
+                    style={{
+                      borderColor: active ? '#ff7084' : 'var(--border-subtle)',
+                      background: active ? 'rgba(138, 28, 48, 0.35)' : undefined,
+                      padding: '4px 6px',
+                    }}
+                    disabled={!inVillage}
+                    onClick={() => onToggleTrialMod(mod.id)}
+                  >
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 10.5, fontWeight: 700, color: active ? '#ffd1d8' : undefined }}>
+                        {active ? '✓ ' : ''}
+                        {mod.name} <span className="muted-text">{mod.effectText}</span>
+                      </div>
+                      <div style={{ fontSize: 9, color: '#82ff9e' }}>
+                        MF+{mod.mfBonus}% / 💎+{mod.stoneBonusPct}% / EXP+{mod.expBonusPct}%
+                      </div>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: 9,
+                        fontFamily: 'var(--font-pixel)',
+                        color: active ? '#ff8a98' : 'var(--text-dim)',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {active ? 'ON' : 'OFF'}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -230,7 +280,11 @@ export function WorldPanel({
                         ? '溶岩'
                         : fl <= 20
                           ? '深淵'
-                          : '無限';
+                          : fl <= 25
+                            ? '氷結'
+                            : fl <= 30
+                              ? '聖域'
+                              : '無限';
                 return (
                   <button
                     key={fl}
@@ -253,10 +307,10 @@ export function WorldPanel({
           <div className="rpg-card-gold" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div className="section-heading">
               <span>🏟 ボスラッシュ闘技場</span>
-              <span style={{ color: '#82ff9e' }}>最高 W{save.bossRushBestWave}/5</span>
+              <span style={{ color: '#82ff9e' }}>最高 W{save.bossRushBestWave}/{BOSS_RUSH_MAX_WAVE}</span>
             </div>
-            <div className="muted-text" style={{ lineHeight: 1.35 }}>
-              歴代ボス5連戦。HP・MP・秘薬・連携ゲージを引き継ぐ。全制覇でミシック確定。
+            <div className="muted-text">
+              全{BOSS_RUSH_MAX_WAVE}連戦・W5ミシック×1 / W8ミシック×2
             </div>
             <button
               id="btn-start-boss-rush"
@@ -268,11 +322,6 @@ export function WorldPanel({
             >
               ⚔ 闘技場へ挑む
             </button>
-            {!inVillage && (
-              <div className="muted-text" style={{ textAlign: 'center' }}>
-                村でのみ挑戦可能
-              </div>
-            )}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -286,7 +335,12 @@ export function WorldPanel({
                     display: 'flex',
                     alignItems: 'center',
                     gap: 6,
-                    borderColor: cleared ? '#6be088' : w.wave === 5 ? 'var(--border-gold)' : undefined,
+                    borderColor:
+                      cleared
+                        ? '#6be088'
+                        : w.wave === BOSS_RUSH_MAX_WAVE || w.wave === 5
+                          ? 'var(--border-gold)'
+                          : undefined,
                     minWidth: 0,
                   }}
                 >
@@ -296,7 +350,7 @@ export function WorldPanel({
                       style={{
                         fontSize: 11,
                         fontWeight: 700,
-                        color: w.wave === 5 ? '#ffe570' : undefined,
+                        color: w.wave === BOSS_RUSH_MAX_WAVE ? '#ffe570' : undefined,
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
@@ -332,7 +386,7 @@ export function WorldPanel({
               <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 11.5, color: '#ffe570' }}>
                 秘宝ミステリー箱
               </div>
-              <div className="muted-text">到達階層に応じたレア以上装備を1点生成</div>
+              <div className="muted-text">レア以上1点</div>
             </div>
             <button
               type="button"
@@ -603,7 +657,7 @@ export function WorldPanel({
 
             <textarea
               className="save-textarea"
-              placeholder="RTL1:... のセーブコードを貼り付け"
+              placeholder="RTL1:..."
               value={importText}
               onChange={(e) => setImportText(e.target.value)}
             />
@@ -628,8 +682,9 @@ export function WorldPanel({
             <div>最高階層：<strong>{save.stats.highestFloorReached}F</strong></div>
             <div>鍛冶強化：<strong>{save.stats.totalForgeUpgrades}回・最大+{save.stats.maxEnhanceReached}</strong></div>
             <div>OP再鍛造：<strong>{save.stats.totalRerolls}回</strong></div>
-            <div>極進化：<strong>{save.stats.totalEvolutions}体</strong></div>
-            <div>闘技場制覇：<strong>{save.stats.bossRushClears}回・最高W{save.bossRushBestWave}</strong></div>
+            <div>極進化：<strong>{save.stats.totalEvolutions}体・真{save.stats.totalTrueEvolutions}体</strong></div>
+            <div>闘技場制覇：<strong>{save.stats.bossRushClears}回・W{save.bossRushBestWave}/{BOSS_RUSH_MAX_WAVE}</strong></div>
+            <div>刻印撃破：<strong>{save.stats.trialClears}回</strong></div>
           </div>
         </>
       )}

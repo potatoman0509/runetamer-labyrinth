@@ -1,4 +1,4 @@
-const CACHE_NAME = 'runetamer-labyrinth-v5-save';
+const CACHE_NAME = 'runetamer-labyrinth-v10';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

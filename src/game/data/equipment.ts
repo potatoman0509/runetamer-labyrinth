@@ -119,7 +119,7 @@ export const SLOT_LABELS: Record<EquipSlot, string> = {
   rune: 'ルーン',
 };
 
-// ===== 6 EQUIPMENT SETS (2pc & 4pc bonuses) =====
+// ===== 10 EQUIPMENT SETS (2pc & 4pc bonuses) =====
 export interface SetDef {
   id: SetId;
   name: string;
@@ -133,43 +133,71 @@ export const SET_LIST: SetDef[] = [
     id: 'forest_guard',
     name: '森の守護',
     color: '#63d471',
-    bonus2Desc: '最大HP+18%',
-    bonus4Desc: '毎T再生+8%＆被ダメージ-12%',
+    bonus2Desc: 'HP+14%',
+    bonus4Desc: '再生+6%・被ダメ-9%',
   },
   {
     id: 'ancient_rune',
     name: '古代ルーン',
     color: '#69c9e8',
-    bonus2Desc: '防御+22%',
-    bonus4Desc: '開幕バリア+25%＆防御の30%を攻魔へ加算',
+    bonus2Desc: '防御+16%',
+    bonus4Desc: '開幕盾+18%・防御22%を攻魔加算',
   },
   {
     id: 'crimson_fury',
     name: '紅蓮の狂戦',
     color: '#ff785a',
-    bonus2Desc: '攻撃+20%',
-    bonus4Desc: '会心倍率+50%＆吸血+10%',
+    bonus2Desc: '攻撃+15%',
+    bonus4Desc: '会心倍率+36%・吸血+7%',
   },
   {
     id: 'astral_mage',
     name: '星屑の魔導',
     color: '#7da8ff',
-    bonus2Desc: '魔力+22%',
-    bonus4Desc: 'スキル威力+28%＆毎T MP+8',
+    bonus2Desc: '魔力+16%',
+    bonus4Desc: 'スキル+20%・毎T MP+6',
   },
   {
     id: 'golden_greed',
     name: '黄金トレハン',
     color: '#ffd65c',
-    bonus2Desc: 'トレハン+35%',
-    bonus4Desc: '金貨+45%・EXP+35%・鍛冶石獲得+40%',
+    bonus2Desc: 'MF+28%',
+    bonus4Desc: '金貨+35%・EXP+28%・石+30%',
   },
   {
     id: 'lunar_blade',
     name: '銀月の連撃',
     color: '#d4b8ff',
-    bonus2Desc: '素早さ+10＆会心率+10%',
-    bonus4Desc: '追撃率+22%＆物理攻撃+20%',
+    bonus2Desc: '素早さ+8・会心+7%',
+    bonus4Desc: '追撃+16%・物理+15%',
+  },
+  {
+    id: 'frost_monarch',
+    name: '氷皇の威光',
+    color: '#7ce8ff',
+    bonus2Desc: '防御+14%・魔力+10%',
+    bonus4Desc: '攻撃時22%凍結・状態異常敵へ与ダメ+22%',
+  },
+  {
+    id: 'seraph_radiance',
+    name: '熾天使の聖光',
+    color: '#ffe875',
+    bonus2Desc: 'HP+14%・魔力+12%',
+    bonus4Desc: '毎T再生+5%・回復/盾効果+20%',
+  },
+  {
+    id: 'blood_pact',
+    name: '紅血の契約',
+    color: '#ff5c77',
+    bonus2Desc: '吸血+10%・攻撃+10%',
+    bonus4Desc: 'HP50%以下で与ダメ+26%・会心+12%',
+  },
+  {
+    id: 'void_walker',
+    name: '虚無の歩み',
+    color: '#c48aff',
+    bonus2Desc: '防御貫通+14%',
+    bonus4Desc: '防御貫通+18%・スキル威力+18%',
   },
 ];
 
@@ -518,9 +546,150 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'rune',
     iconKey: 'rune_green',
     minTier: 1,
-    desc: '戦闘開始時に味方全体へ最大HP12%分のバリア',
+    desc: '開幕に味方全体へHP9%バリア',
     weights: { def: 1.1, hp: 2.5 },
-    guaranteedAffix: { stat: 'defPct', label: '防御', value: 20, isPercent: true },
+    guaranteedAffix: { stat: 'defPct', label: '防御', value: 16, isPercent: true },
+  },
+  // ===== v10 NEW UNIQUES (14 -> TOTAL 40) =====
+  {
+    id: 'frostbite_blade',
+    name: '凍牙の魔氷剣',
+    slot: 'weapon',
+    iconKey: 'sword',
+    minTier: 1,
+    desc: '攻撃時25%で凍結付与・凍結敵へ与ダメ+25%',
+    weights: { atk: 1.35, mag: 0.5 },
+    guaranteedAffix: { stat: 'atkPct', label: '攻撃', value: 16, isPercent: true },
+  },
+  {
+    id: 'seraph_lance',
+    name: '熾天使の黄金槍',
+    slot: 'weapon',
+    iconKey: 'sword',
+    minTier: 2,
+    desc: '聖属性攻撃+24%・防御貫通+18%',
+    weights: { atk: 1.4, mag: 0.7 },
+    guaranteedAffix: { stat: 'critRate', label: '会心率', value: 12, isPercent: true },
+  },
+  {
+    id: 'eclipse_reaper_scythe',
+    name: '黒蝕の死神鎌',
+    slot: 'weapon',
+    iconKey: 'axe',
+    minTier: 2,
+    desc: '攻撃時35%で防御低下・吸血+12%',
+    weights: { atk: 1.5, spd: 0.45 },
+    guaranteedAffix: { stat: 'lifesteal', label: '吸血', value: 12, isPercent: true },
+  },
+  {
+    id: 'prism_wand',
+    name: '虹晶の真理杖',
+    slot: 'weapon',
+    iconKey: 'staff',
+    minTier: 1,
+    desc: '弱点倍率+25%・スキル消費MP-20%',
+    weights: { mag: 1.45, spd: 0.4 },
+    guaranteedAffix: { stat: 'magPct', label: '魔力', value: 18, isPercent: true },
+  },
+  {
+    id: 'glacier_plate',
+    name: '氷皇の白銀重鎧',
+    slot: 'armor',
+    iconKey: 'plate',
+    minTier: 1,
+    desc: '被ダメ-12%・被弾時25%で敵を凍結',
+    weights: { def: 1.6, hp: 3.1 },
+    guaranteedAffix: { stat: 'defPct', label: '防御', value: 22, isPercent: true },
+  },
+  {
+    id: 'seraph_robe',
+    name: '終焉聖域の法衣',
+    slot: 'armor',
+    iconKey: 'robe',
+    minTier: 2,
+    desc: '毎T再生+7%・毎T MP+8回復',
+    weights: { def: 1.15, mag: 1.0, hp: 2.6 },
+    guaranteedAffix: { stat: 'hpPct', label: '最大HP', value: 20, isPercent: true },
+  },
+  {
+    id: 'abyssal_carapace',
+    name: '深淵の外殻鎧',
+    slot: 'armor',
+    iconKey: 'armor',
+    minTier: 1,
+    desc: '状態異常の敵からの被ダメ-18%',
+    weights: { def: 1.4, hp: 2.9 },
+    guaranteedAffix: { stat: 'hpPct', label: '最大HP', value: 18, isPercent: true },
+  },
+  {
+    id: 'fenrir_fang_relic',
+    name: '氷皇の牙首飾り',
+    slot: 'relic',
+    iconKey: 'amulet',
+    minTier: 1,
+    desc: '追撃率+15%・素早さ+12',
+    weights: { atk: 0.85, spd: 0.85 },
+    guaranteedAffix: { stat: 'doubleHit', label: '追撃率', value: 15, isPercent: true },
+  },
+  {
+    id: 'halo_diadem',
+    name: '聖天使の光輪冠',
+    slot: 'relic',
+    iconKey: 'chalice',
+    minTier: 2,
+    desc: 'スキル威力+18%・全回復効果+18%',
+    weights: { mag: 0.95, hp: 2.5 },
+    guaranteedAffix: { stat: 'magPct', label: '魔力', value: 18, isPercent: true },
+  },
+  {
+    id: 'void_heart_relic',
+    name: '虚無の心臓遺物',
+    slot: 'relic',
+    iconKey: 'compass',
+    minTier: 2,
+    desc: '防御貫通+22%・会心倍率+35%',
+    weights: { atk: 0.9, mag: 0.9 },
+    guaranteedAffix: { stat: 'critDmg', label: '会心倍率', value: 35, isPercent: true },
+  },
+  {
+    id: 'crystal_scale_relic',
+    name: '晶竜の白銀鱗',
+    slot: 'relic',
+    iconKey: 'amulet',
+    minTier: 1,
+    desc: 'トレハン+35%・鍛冶石+35%',
+    weights: { def: 0.8, hp: 2.4, spd: 0.5 },
+    guaranteedAffix: { stat: 'magicFind', label: 'トレハン', value: 35, isPercent: true },
+  },
+  {
+    id: 'blizzard_rune',
+    name: '絶対零度の蒼ルーン',
+    slot: 'rune',
+    iconKey: 'rune_blue',
+    minTier: 1,
+    desc: 'スキル時25%で凍結付与・魔力+15%',
+    weights: { mag: 1.05, spd: 0.45 },
+    guaranteedAffix: { stat: 'magPct', label: '魔力', value: 15, isPercent: true },
+  },
+  {
+    id: 'judgment_rune',
+    name: '終焉断罪の紅ルーン',
+    slot: 'rune',
+    iconKey: 'rune_red',
+    minTier: 2,
+    desc: '状態異常の敵へ与ダメ+28%',
+    weights: { atk: 1.05, mag: 1.05 },
+    guaranteedAffix: { stat: 'critRate', label: '会心率', value: 12, isPercent: true },
+  },
+  {
+    id: 'eternal_tamer_rune',
+    name: '万魔統率の翠ルーン',
+    slot: 'rune',
+    iconKey: 'rune_green',
+    minTier: 2,
+    desc: '全能力+10%・連携ゲージ獲得+30%',
+    weights: { atk: 0.7, mag: 0.7, def: 0.7, hp: 2.2 },
+    guaranteedAffix: { stat: 'expFind', label: '経験値増', value: 30, isPercent: true },
   },
 ];
 
@@ -558,37 +727,37 @@ export function rollRarity(
     weights = {
       common: 0,
       uncommon: 0,
-      rare: 18,
-      epic: 38 * Math.pow(luck, 0.25),
-      legendary: 31 * Math.pow(luck, 0.55),
-      mythic: 13 * Math.pow(luck, 0.85),
+      rare: 20,
+      epic: 39 * Math.pow(luck, 0.25),
+      legendary: 29 * Math.pow(luck, 0.52),
+      mythic: 12 * Math.pow(luck, 0.8),
     };
   } else if (source === 'gold_chest' || source === 'elite') {
     weights = {
       common: 0,
-      uncommon: 12,
-      rare: 34,
-      epic: 32 * Math.pow(luck, 0.35),
-      legendary: 16 * Math.pow(luck, 0.65),
-      mythic: 4.5 * Math.pow(luck, 0.9),
+      uncommon: 14,
+      rare: 35,
+      epic: 31 * Math.pow(luck, 0.35),
+      legendary: 15 * Math.pow(luck, 0.62),
+      mythic: 4 * Math.pow(luck, 0.85),
     };
   } else if (source === 'chest' || source === 'shop') {
     weights = {
-      common: 10,
-      uncommon: 26,
-      rare: 34,
-      epic: 20 * Math.pow(luck, 0.4),
-      legendary: 8 * Math.pow(luck, 0.7),
-      mythic: 2 * Math.pow(luck, 0.95),
+      common: 12,
+      uncommon: 28,
+      rare: 33,
+      epic: 18 * Math.pow(luck, 0.38),
+      legendary: 7 * Math.pow(luck, 0.68),
+      mythic: 1.8 * Math.pow(luck, 0.9),
     };
   } else {
     weights = {
-      common: 36,
+      common: 38,
       uncommon: 32,
-      rare: 20 * Math.pow(luck, 0.3),
-      epic: 9 * Math.pow(luck, 0.55),
-      legendary: 2.5 * Math.pow(luck, 0.8),
-      mythic: 0.5 * Math.pow(luck, 1.05),
+      rare: 19 * Math.pow(luck, 0.3),
+      epic: 8 * Math.pow(luck, 0.52),
+      legendary: 2.2 * Math.pow(luck, 0.78),
+      mythic: 0.45 * Math.pow(luck, 1.0),
     };
   }
 
@@ -611,9 +780,9 @@ function rollSingleAffix(
   if (pool.length === 0) return null;
   const def = pick(pool);
   const raw =
-    randRange(def.min, def.max) +
-    itemLevel * def.scalePerLevel * (0.7 + rarityRank * 0.15);
-  const val = Math.max(1, Math.round(raw * (1 + (worldTier - 1) * 0.12)));
+    randRange(def.min * 0.85, def.max * 0.88) +
+    itemLevel * def.scalePerLevel * (0.62 + rarityRank * 0.12);
+  const val = Math.max(1, Math.round(raw * (1 + (worldTier - 1) * 0.1)));
   return {
     stat: def.stat,
     label: def.label,
@@ -637,7 +806,7 @@ export function generateEquipment(
 
   const itemLevel = Math.max(
     1,
-    Math.round(safeFloor + (safeTier - 1) * 22 + randRange(-1, 2)),
+    Math.round(safeFloor + (safeTier - 1) * 24 + randRange(-1, 2)),
   );
 
   let uniqueTemplate: UniqueTemplate | undefined;
@@ -666,35 +835,34 @@ export function generateEquipment(
       }
     : pick(BASE_TEMPLATES[slot]);
 
-  // Roll Equipment Set on Rare+ items! (Even uniques can occasionally belong to a set on Epic+/Mythic!)
   let setId: SetId | undefined;
   const setChance =
-    meta.rank >= 4 ? 0.7 : meta.rank === 3 ? 0.6 : meta.rank === 2 ? 0.45 : 0;
+    meta.rank >= 4 ? 0.72 : meta.rank === 3 ? 0.6 : meta.rank === 2 ? 0.45 : 0;
   if (setChance > 0 && Math.random() < setChance) {
     setId = pick(SET_LIST).id;
   }
 
-  const tierPower = Math.pow(1.42, safeTier - 1);
-  const floorPower = (10 + itemLevel * 2.4 + Math.pow(itemLevel, 1.24) * 0.52) * tierPower;
-  const rollMult = meta.powerMult * randRange(0.92, 1.12);
+  const tierPower = Math.pow(1.36, safeTier - 1);
+  const floorPower = (9 + itemLevel * 2.1 + Math.pow(itemLevel, 1.2) * 0.44) * tierPower;
+  const rollMult = meta.powerMult * randRange(0.9, 1.08);
 
   const baseStats: EquipmentItem['baseStats'] = {};
   if (baseTemplate.weights.atk) {
-    baseStats.atk = Math.max(2, Math.round(floorPower * 0.42 * baseTemplate.weights.atk * rollMult));
+    baseStats.atk = Math.max(2, Math.round(floorPower * 0.38 * baseTemplate.weights.atk * rollMult));
   }
   if (baseTemplate.weights.mag) {
-    baseStats.mag = Math.max(2, Math.round(floorPower * 0.42 * baseTemplate.weights.mag * rollMult));
+    baseStats.mag = Math.max(2, Math.round(floorPower * 0.38 * baseTemplate.weights.mag * rollMult));
   }
   if (baseTemplate.weights.def) {
-    baseStats.def = Math.max(2, Math.round(floorPower * 0.34 * baseTemplate.weights.def * rollMult));
+    baseStats.def = Math.max(2, Math.round(floorPower * 0.31 * baseTemplate.weights.def * rollMult));
   }
   if (baseTemplate.weights.hp) {
-    baseStats.hp = Math.max(10, Math.round(floorPower * 1.15 * baseTemplate.weights.hp * rollMult));
+    baseStats.hp = Math.max(10, Math.round(floorPower * 1.02 * baseTemplate.weights.hp * rollMult));
   }
   if (baseTemplate.weights.spd) {
     baseStats.spd = Math.max(
       1,
-      Math.round((2 + itemLevel * 0.16 + safeTier * 1.8) * baseTemplate.weights.spd * Math.sqrt(meta.powerMult)),
+      Math.round((2 + itemLevel * 0.14 + safeTier * 1.5) * baseTemplate.weights.spd * Math.sqrt(meta.powerMult)),
     );
   }
 
@@ -702,7 +870,7 @@ export function generateEquipment(
   const usedStats = new Set<AffixStat>();
   if (uniqueTemplate) {
     const g = uniqueTemplate.guaranteedAffix;
-    const scaled = Math.round(g.value * (1 + (safeTier - 1) * 0.18));
+    const scaled = Math.round(g.value * (1 + (safeTier - 1) * 0.14));
     affixes.push({ ...g, value: scaled });
     usedStats.add(g.stat);
   }
@@ -744,8 +912,8 @@ export function generateEquipment(
   };
 }
 
-// ===== BLACKSMITHING: SALVAGE / ENHANCE (+15 w/ BREAKTHROUGHS) / 1-SLOT REROLL =====
-export const MAX_ENHANCE_LEVEL = 15;
+// ===== BLACKSMITHING: SALVAGE / ENHANCE (+20 w/ BREAKTHROUGHS) / 1-SLOT REROLL =====
+export const MAX_ENHANCE_LEVEL = 20;
 
 export function getSalvageValue(item: EquipmentItem): number {
   const base = RARITY_META[item.rarity].salvageBase;
@@ -756,24 +924,19 @@ export function getSalvageValue(item: EquipmentItem): number {
 
 export function getEnhanceCost(item: EquipmentItem): { stones: number; gold: number; isBreakthrough: boolean } {
   const nextLv = item.enhanceLevel + 1;
-  const isBreakthrough = nextLv === 5 || nextLv === 10 || nextLv === 15;
+  const isBreakthrough = nextLv === 5 || nextLv === 10 || nextLv === 15 || nextLv === 20;
   const rarityFactor = 1 + RARITY_META[item.rarity].rank * 0.25;
   const stones = Math.max(
     1,
-    Math.round((2 + nextLv * 1.4 + (isBreakthrough ? 4 : 0)) * rarityFactor),
+    Math.round((2 + nextLv * 1.5 + (isBreakthrough ? 5 : 0)) * rarityFactor),
   );
   const gold = Math.max(
     25,
-    Math.round((30 + item.itemLevel * 8 + nextLv * 25) * rarityFactor * (isBreakthrough ? 1.5 : 1)),
+    Math.round((30 + item.itemLevel * 8 + nextLv * 28) * rarityFactor * (isBreakthrough ? 1.55 : 1)),
   );
   return { stones, gold, isBreakthrough };
 }
 
-/**
- * Deterministic enhancement (+1 up to +15).
- * Increases base stats every level, and triggers a Masterwork Breakthrough at +5, +10, +15
- * that boosts EVERY affix on the item by +25%!
- */
 export function enhanceEquipment(item: EquipmentItem): {
   upgraded: EquipmentItem;
   isBreakthrough: boolean;
@@ -782,23 +945,23 @@ export function enhanceEquipment(item: EquipmentItem): {
     return { upgraded: item, isBreakthrough: false };
   }
   const nextLv = item.enhanceLevel + 1;
-  const isBreakthrough = nextLv === 5 || nextLv === 10 || nextLv === 15;
+  const isBreakthrough = nextLv === 5 || nextLv === 10 || nextLv === 15 || nextLv === 20;
 
-  const bump = (v?: number, minAdd = 2) =>
-    v !== undefined ? v + Math.max(minAdd, Math.round(v * 0.085)) : undefined;
+  const bump = (v?: number, minAdd = 1) =>
+    v !== undefined ? v + Math.max(minAdd, Math.round(v * 0.068)) : undefined;
 
   const nextBase: EquipmentItem['baseStats'] = {
-    ...(item.baseStats.atk !== undefined ? { atk: bump(item.baseStats.atk, 2) } : {}),
-    ...(item.baseStats.mag !== undefined ? { mag: bump(item.baseStats.mag, 2) } : {}),
-    ...(item.baseStats.def !== undefined ? { def: bump(item.baseStats.def, 2) } : {}),
-    ...(item.baseStats.hp !== undefined ? { hp: bump(item.baseStats.hp, 6) } : {}),
+    ...(item.baseStats.atk !== undefined ? { atk: bump(item.baseStats.atk, 1) } : {}),
+    ...(item.baseStats.mag !== undefined ? { mag: bump(item.baseStats.mag, 1) } : {}),
+    ...(item.baseStats.def !== undefined ? { def: bump(item.baseStats.def, 1) } : {}),
+    ...(item.baseStats.hp !== undefined ? { hp: bump(item.baseStats.hp, 4) } : {}),
     ...(item.baseStats.spd !== undefined ? { spd: bump(item.baseStats.spd, 1) } : {}),
   };
 
   const nextAffixes = isBreakthrough
     ? item.affixes.map((af) => ({
         ...af,
-        value: Math.max(af.value + 1, Math.round(af.value * 1.25)),
+        value: Math.max(af.value + 1, Math.round(af.value * 1.18)),
         masterworked: true,
       }))
     : item.affixes;
@@ -810,7 +973,7 @@ export function enhanceEquipment(item: EquipmentItem): {
       enhanceLevel: nextLv,
       baseStats: nextBase,
       affixes: nextAffixes,
-      sellValue: Math.round(item.sellValue * 1.12),
+      sellValue: Math.round(item.sellValue * 1.1),
     },
   };
 }
@@ -823,10 +986,6 @@ export function getRerollCost(item: EquipmentItem): { stones: number; gold: numb
   return { stones, gold };
 }
 
-/**
- * Rerolls a single chosen affix slot into a fresh non-duplicate affix.
- * Preserves Breakthrough scaling bonuses already earned on the item!
- */
 export function rerollAffixSlot(item: EquipmentItem, affixIndex: number): EquipmentItem {
   if (affixIndex < 0 || affixIndex >= item.affixes.length) return item;
   const used = new Set<AffixStat>(item.affixes.map((a) => a.stat));
@@ -838,10 +997,9 @@ export function rerollAffixSlot(item: EquipmentItem, affixIndex: number): Equipm
   );
   if (!fresh) return item;
 
-  // Apply existing breakthrough multiplier if item is already +5 / +10 / +15
   const breakthroughs = Math.floor(item.enhanceLevel / 5);
   if (breakthroughs > 0) {
-    fresh.value = Math.max(fresh.value + 1, Math.round(fresh.value * Math.pow(1.25, breakthroughs)));
+    fresh.value = Math.max(fresh.value + 1, Math.round(fresh.value * Math.pow(1.18, breakthroughs)));
     fresh.masterworked = true;
   }
 
@@ -880,8 +1038,8 @@ export function createStarterWeapon(): EquipmentItem {
     worldTier: 1,
     enhanceLevel: 0,
     rerollCount: 0,
-    baseStats: { atk: 12, mag: 6 },
-    affixes: [{ stat: 'magicFind', label: 'トレハン', value: 12, isPercent: true }],
+    baseStats: { atk: 10, mag: 5 },
+    affixes: [{ stat: 'magicFind', label: 'トレハン', value: 10, isPercent: true }],
     locked: false,
     sellValue: 25,
   };

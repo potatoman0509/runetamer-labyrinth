@@ -510,6 +510,44 @@ body,
 }
 
 /* ===== BATTLE PANEL ===== */
+.battle-enemy-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 4px;
+  width: 100%;
+}
+
+.battle-enemy-chip {
+  min-width: 0;
+  background: rgba(34, 22, 34, 0.86);
+  border: 1px solid rgba(168, 92, 108, 0.45);
+  border-radius: 5px;
+  padding: 2px 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-main);
+  overflow: hidden;
+}
+
+.battle-enemy-chip.targeted {
+  border-color: var(--border-gold-bright);
+  background: rgba(66, 36, 44, 0.92);
+}
+
+.battle-enemy-chip.dead {
+  opacity: 0.36;
+  cursor: default;
+}
+
+.bar-fill-enemy {
+  height: 100%;
+  background: linear-gradient(90deg, #c93848, #ff6b7a);
+  transition: width 0.2s ease;
+}
+
 .battle-ally-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

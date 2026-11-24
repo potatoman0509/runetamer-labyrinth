@@ -2,7 +2,7 @@ import { getClaimedAchievementBonuses } from './achievements';
 import { HERO_SPECIES } from './data/monsters';
 import type { GameSave, SkillDef } from './types';
 
-export type SkillBranch = 'sword' | 'magic' | 'command';
+export type SkillBranch = 'sword' | 'magic' | 'command' | 'void';
 
 export interface SkillTreeNodeDef {
   id: string;
@@ -16,83 +16,111 @@ export interface SkillTreeNodeDef {
 }
 
 export const BRANCH_META: Record<SkillBranch, { label: string; color: string }> = {
-  sword: { label: '⚔ 剣聖', color: '#e6634c' },
-  magic: { label: '✦ 魔導', color: '#58b8f5' },
-  command: { label: '🛡 統率', color: '#5cc478' },
+  sword: { label: '⚔剣聖', color: '#e6634c' },
+  magic: { label: '✦魔導', color: '#58b8f5' },
+  command: { label: '🛡統率', color: '#5cc478' },
+  void: { label: '🌑禁忌', color: '#a864f5' },
 };
 
 export const HERO_EXTRA_SKILLS: Record<string, SkillDef> = {
   meteor_flurry: {
     id: 'meteor_flurry',
     name: '流星乱舞',
-    mpCost: 14,
+    mpCost: 15,
     target: 'single_enemy',
     element: 'physical',
-    power: 0.92,
+    power: 0.78,
     hits: 3,
     statScale: 'atk',
     kind: 'damage',
-    critBonus: 18,
-    description: '剣聖スキル：高会心の物理3連撃',
+    critBonus: 14,
+    description: '高会心の物理3連撃',
   },
   star_shatter: {
     id: 'star_shatter',
     name: '神速・星砕き',
-    mpCost: 20,
+    mpCost: 22,
     target: 'single_enemy',
     element: 'holy',
-    power: 2.7,
+    power: 2.25,
     statScale: 'atk',
     kind: 'damage',
-    critBonus: 25,
-    bossBonus: 1.35,
-    description: '剣聖奥義：ボス/強敵へ特効の渾身一閃',
+    critBonus: 18,
+    bossBonus: 1.25,
+    statusEffect: { type: 'def_break', chance: 0.75, turns: 3 },
+    description: 'ボス特効・防御低下付与',
   },
   thunder_storm: {
     id: 'thunder_storm',
     name: 'サンダーストーム',
-    mpCost: 16,
+    mpCost: 18,
     target: 'all_enemies',
     element: 'holy',
-    power: 1.75,
+    power: 1.45,
     statScale: 'mag',
     kind: 'damage',
-    critBonus: 10,
-    description: '魔導スキル：聖雷で敵全体を薙ぎ払う',
+    critBonus: 8,
+    description: '全体聖雷魔法',
   },
   astral_nova: {
     id: 'astral_nova',
     name: 'アストラル・ノヴァ',
-    mpCost: 24,
+    mpCost: 26,
     target: 'all_enemies',
     element: 'star',
-    power: 2.35,
+    power: 1.95,
     statScale: 'mag',
     kind: 'damage',
-    critBonus: 18,
-    description: '魔導奥義：星光を降らせる究極全体魔法',
+    critBonus: 12,
+    statusEffect: { type: 'freeze', chance: 0.35, turns: 1 },
+    description: '全体星魔法・凍結付与',
   },
   sacred_aegis: {
     id: 'sacred_aegis',
     name: '聖光の守護陣',
-    mpCost: 16,
+    mpCost: 18,
     target: 'all_allies',
     element: 'holy',
-    power: 1.85,
+    power: 1.45,
     statScale: 'def',
     kind: 'shield',
-    description: '統率スキル：味方全員へ鉄壁の聖光バリア',
+    description: '全体バリア展開',
   },
   immortal_order: {
     id: 'immortal_order',
     name: '不滅の号令',
-    mpCost: 20,
+    mpCost: 22,
     target: 'all_allies',
     element: 'holy',
-    power: 1.7,
+    power: 1.35,
     statScale: 'mag',
     kind: 'buff_atk',
-    description: '統率奥義：全体火力強化＋大回復＆毒浄化',
+    description: '全体火力UP・回復',
+  },
+  abyss_flame: {
+    id: 'abyss_flame',
+    name: 'アビスフレイム',
+    mpCost: 18,
+    target: 'all_enemies',
+    element: 'fire',
+    power: 1.35,
+    statScale: 'hybrid',
+    kind: 'damage',
+    statusEffect: { type: 'burn', chance: 0.8, turns: 3 },
+    description: '全体炎撃・火傷付与',
+  },
+  final_judgment: {
+    id: 'final_judgment',
+    name: '終焉の断罪',
+    mpCost: 25,
+    target: 'single_enemy',
+    element: 'star',
+    power: 2.1,
+    statScale: 'hybrid',
+    kind: 'damage',
+    critBonus: 15,
+    statusBonus: 1.45,
+    description: '状態異常特効の単体奥義',
   },
 };
 
@@ -103,14 +131,14 @@ export const ALL_HERO_SKILLS: Record<string, SkillDef> = {
 };
 
 export const SKILL_TREE_NODES: SkillTreeNodeDef[] = [
-  // ===== 剣聖ルート =====
+  // ===== 剣聖 =====
   {
     id: 'sw_atk',
     branch: 'sword',
     tier: 1,
     name: '剛剣の極意',
     maxLevel: 3,
-    desc: '主人公の攻撃+14%/Lv',
+    desc: '攻撃+11%/Lv',
   },
   {
     id: 'sw_crit',
@@ -119,17 +147,17 @@ export const SKILL_TREE_NODES: SkillTreeNodeDef[] = [
     name: '必殺の一閃',
     maxLevel: 3,
     requires: 'sw_atk',
-    desc: '会心率+6%・会心倍率+18%/Lv',
+    desc: '会心+5%・会心倍率+14%/Lv',
   },
   {
     id: 'sw_flurry',
     branch: 'sword',
     tier: 3,
-    name: 'スキル:流星乱舞',
+    name: '流星乱舞',
     maxLevel: 1,
     requires: 'sw_crit',
     unlocksSkillId: 'meteor_flurry',
-    desc: '物理3連撃スキル「流星乱舞」解放',
+    desc: '物理3連撃を解放',
   },
   {
     id: 'sw_double',
@@ -138,46 +166,46 @@ export const SKILL_TREE_NODES: SkillTreeNodeDef[] = [
     name: '追撃と吸血',
     maxLevel: 3,
     requires: 'sw_flurry',
-    desc: '追撃率+10%・吸血+5%/Lv',
+    desc: '追撃+7%・吸血+4%/Lv',
   },
   {
     id: 'sw_shatter',
     branch: 'sword',
     tier: 5,
-    name: '奥義:神速・星砕き',
+    name: '神速・星砕き',
     maxLevel: 1,
     requires: 'sw_double',
     unlocksSkillId: 'star_shatter',
-    desc: 'ボス特効の究極一閃「神速・星砕き」解放',
+    desc: 'ボス特効・防御低下を解放',
   },
 
-  // ===== 魔導ルート =====
+  // ===== 魔導 =====
   {
     id: 'mg_mag',
     branch: 'magic',
     tier: 1,
     name: '星辰の魔力',
     maxLevel: 3,
-    desc: '主人公の魔力+14%/Lv',
+    desc: '魔力+11%/Lv',
   },
   {
     id: 'mg_weak',
     branch: 'magic',
     tier: 2,
-    name: '弱点看破と循環',
+    name: '弱点看破',
     maxLevel: 3,
     requires: 'mg_mag',
-    desc: 'WEAK倍率+20%・毎T MP+4/Lv',
+    desc: 'WEAK+14%・毎T MP+3/Lv',
   },
   {
     id: 'mg_storm',
     branch: 'magic',
     tier: 3,
-    name: 'スキル:サンダーストーム',
+    name: 'サンダーストーム',
     maxLevel: 1,
     requires: 'mg_weak',
     unlocksSkillId: 'thunder_storm',
-    desc: '全体聖雷魔法「サンダーストーム」解放',
+    desc: '全体聖雷魔法を解放',
   },
   {
     id: 'mg_amp',
@@ -186,27 +214,27 @@ export const SKILL_TREE_NODES: SkillTreeNodeDef[] = [
     name: '魔力暴走',
     maxLevel: 3,
     requires: 'mg_storm',
-    desc: '主人公の全スキル威力+15%/Lv',
+    desc: 'スキル威力+11%/Lv',
   },
   {
     id: 'mg_nova',
     branch: 'magic',
     tier: 5,
-    name: '奥義:アストラル・ノヴァ',
+    name: 'アストラル・ノヴァ',
     maxLevel: 1,
     requires: 'mg_amp',
     unlocksSkillId: 'astral_nova',
-    desc: '究極星魔法「アストラル・ノヴァ」解放',
+    desc: '全体星魔法・凍結を解放',
   },
 
-  // ===== 統率・守護ルート =====
+  // ===== 統率 =====
   {
     id: 'cm_def',
     branch: 'command',
     tier: 1,
     name: '鉄壁の心',
     maxLevel: 3,
-    desc: '主人公のHP+16%・防御+14%/Lv',
+    desc: 'HP+12%・防御+11%/Lv',
   },
   {
     id: 'cm_bond',
@@ -215,17 +243,17 @@ export const SKILL_TREE_NODES: SkillTreeNodeDef[] = [
     name: 'テイマーの絆',
     maxLevel: 3,
     requires: 'cm_def',
-    desc: '仲間モンスター全員の全能力+9%/Lv！',
+    desc: '仲間全員の全能力+6%/Lv',
   },
   {
     id: 'cm_aegis',
     branch: 'command',
     tier: 3,
-    name: 'スキル:聖光の守護陣',
+    name: '聖光の守護陣',
     maxLevel: 1,
     requires: 'cm_bond',
     unlocksSkillId: 'sacred_aegis',
-    desc: '全体鉄壁バリア「聖光の守護陣」解放',
+    desc: '全体バリアを解放',
   },
   {
     id: 'cm_loot',
@@ -234,17 +262,65 @@ export const SKILL_TREE_NODES: SkillTreeNodeDef[] = [
     name: '秘宝の嗅覚',
     maxLevel: 3,
     requires: 'cm_aegis',
-    desc: 'トレハン+22%・鍛冶石獲得+18%/Lv',
+    desc: 'MF+16%・鍛冶石+14%/Lv',
   },
   {
     id: 'cm_order',
     branch: 'command',
     tier: 5,
-    name: '奥義:不滅の号令',
+    name: '不滅の号令',
     maxLevel: 1,
     requires: 'cm_loot',
     unlocksSkillId: 'immortal_order',
-    desc: '全体火力UP＋大回復「不滅の号令」解放',
+    desc: '全体火力UP・回復を解放',
+  },
+
+  // ===== 禁忌 =====
+  {
+    id: 'vd_pen',
+    branch: 'void',
+    tier: 1,
+    name: '破甲の刻印',
+    maxLevel: 3,
+    desc: '防御貫通+8%/Lv',
+  },
+  {
+    id: 'vd_status',
+    branch: 'void',
+    tier: 2,
+    name: '呪詛増幅',
+    maxLevel: 3,
+    requires: 'vd_pen',
+    desc: '状態異常の敵へ与ダメ+12%/Lv',
+  },
+  {
+    id: 'vd_flame',
+    branch: 'void',
+    tier: 3,
+    name: 'アビスフレイム',
+    maxLevel: 1,
+    requires: 'vd_status',
+    unlocksSkillId: 'abyss_flame',
+    desc: '全体炎撃・火傷を解放',
+  },
+  {
+    id: 'vd_haste',
+    branch: 'void',
+    tier: 4,
+    name: '虚無の迅速',
+    maxLevel: 3,
+    requires: 'vd_flame',
+    desc: '素早さ+5・攻撃/魔力+7%/Lv',
+  },
+  {
+    id: 'vd_judge',
+    branch: 'void',
+    tier: 5,
+    name: '終焉の断罪',
+    maxLevel: 1,
+    requires: 'vd_haste',
+    unlocksSkillId: 'final_judgment',
+    desc: '状態異常特効奥義を解放',
   },
 ];
 
@@ -255,7 +331,6 @@ export const SKILL_NODE_MAP: Record<string, SkillTreeNodeDef> = Object.fromEntri
 export function getTotalEarnedSp(save: Pick<GameSave, 'roster' | 'maxUnlockedTier' | 'claimedAchievements'>): number {
   const heroLv = save.roster.hero?.level ?? 1;
   const ach = getClaimedAchievementBonuses(save);
-  // 1 SP right at Lv1 + 1 per level + 2 per unlocked World Tier beyond 1 + Achievement bonus SP
   return heroLv + Math.max(0, save.maxUnlockedTier - 1) * 2 + ach.bonusSp;
 }
 
@@ -310,21 +385,22 @@ export function computeSkillTreeBonuses(save: Pick<GameSave, 'heroSkillTree'>) {
   const lv = (id: string) => Math.max(0, t[id] ?? 0);
 
   return {
-    // Hero-only bonuses
-    heroAtkPct: lv('sw_atk') * 14,
-    heroCritRate: lv('sw_crit') * 6,
-    heroCritDmg: lv('sw_crit') * 18,
-    heroDoubleHit: lv('sw_double') * 10,
-    heroLifesteal: lv('sw_double') * 5,
-    heroMagPct: lv('mg_mag') * 14,
-    heroWeaknessBonusPct: lv('mg_weak') * 20,
-    heroMpRegenBonus: lv('mg_weak') * 4,
-    heroSkillPowerBonusPct: lv('mg_amp') * 15,
-    heroHpPct: lv('cm_def') * 16,
-    heroDefPct: lv('cm_def') * 14,
-    heroMagicFind: lv('cm_loot') * 22,
-    heroStoneFind: lv('cm_loot') * 18,
-    // Monster ally-wide bonus!
-    allyMonsterAllStatPct: lv('cm_bond') * 9,
+    heroAtkPct: lv('sw_atk') * 11 + lv('vd_haste') * 7,
+    heroCritRate: lv('sw_crit') * 5,
+    heroCritDmg: lv('sw_crit') * 14,
+    heroDoubleHit: lv('sw_double') * 7,
+    heroLifesteal: lv('sw_double') * 4,
+    heroMagPct: lv('mg_mag') * 11 + lv('vd_haste') * 7,
+    heroWeaknessBonusPct: lv('mg_weak') * 14,
+    heroMpRegenBonus: lv('mg_weak') * 3,
+    heroSkillPowerBonusPct: lv('mg_amp') * 11,
+    heroHpPct: lv('cm_def') * 12,
+    heroDefPct: lv('cm_def') * 11,
+    heroMagicFind: lv('cm_loot') * 16,
+    heroStoneFind: lv('cm_loot') * 14,
+    heroArmorPenPct: lv('vd_pen') * 8,
+    heroStatusDmgBonusPct: lv('vd_status') * 12,
+    heroSpdFlat: lv('vd_haste') * 5,
+    allyMonsterAllStatPct: lv('cm_bond') * 6,
   };
 }

@@ -151,7 +151,7 @@ export function CompendiumPanel({ save, onClaimAchievement }: CompendiumPanelPro
                       }}
                     >
                       {owned
-                        ? `${owned.evolved ? '【極】' : ''}Lv.${owned.level} ★+${owned.awakening}`
+                        ? `${owned.trueEvolved ? '【真】' : owned.evolved ? '【極】' : ''}Lv.${owned.level} ★+${owned.awakening}`
                         : sp.passiveDesc}
                     </div>
                   )}

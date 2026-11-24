@@ -27,6 +27,7 @@ interface EquipmentPanelProps {
   initialItemId?: string | null;
   onEquip: (unitId: string, itemId: string) => void;
   onUnequip: (unitId: string, slot: EquipSlot) => void;
+  onAutoEquipUnit: (unitId: string) => void;
   onToggleLock: (itemId: string) => void;
   onSellItem: (itemId: string) => void;
   onSalvageItem: (itemId: string) => void;
@@ -53,6 +54,7 @@ export function EquipmentPanel({
   initialItemId,
   onEquip,
   onUnequip,
+  onAutoEquipUnit,
   onToggleLock,
   onSellItem,
   onSalvageItem,
@@ -175,15 +177,29 @@ export function EquipmentPanel({
         })}
       </div>
 
-      {/* Selected Unit Stats + Active Set Badges + 4 Equipped Slots */}
+      {/* Selected Unit Stats + 1-Tap Auto-Optimal Equip + Active Set Badges + 4 Equipped Slots */}
       <div className="rpg-card" style={{ padding: '5px 7px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 8px', fontSize: 10 }}>
-          <span>ATK <strong>{unitStats.atk}</strong></span>
-          <span>MAG <strong>{unitStats.mag}</strong></span>
-          <span>DEF <strong>{unitStats.def}</strong></span>
-          <span>HP <strong>{unitStats.maxHp}</strong></span>
-          <span>会心 <strong>{unitStats.critRate}%</strong></span>
-          <span style={{ color: 'var(--accent-amber)' }}>MF <strong>+{unitStats.magicFind}%</strong></span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, minWidth: 0 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 7px', fontSize: 10, minWidth: 0 }}>
+            <span>ATK <strong>{unitStats.atk}</strong></span>
+            <span>MAG <strong>{unitStats.mag}</strong></span>
+            <span>DEF <strong>{unitStats.def}</strong></span>
+            <span>HP <strong>{unitStats.maxHp}</strong></span>
+            <span>会心 <strong>{unitStats.critRate}%</strong></span>
+            {unitStats.armorPenPct > 0 && (
+              <span style={{ color: '#c48aff' }}>貫通 <strong>{unitStats.armorPenPct}%</strong></span>
+            )}
+            <span style={{ color: 'var(--accent-amber)' }}>MF <strong>+{unitStats.magicFind}%</strong></span>
+          </div>
+          <button
+            id="btn-auto-equip"
+            type="button"
+            className="rpg-btn sm primary"
+            style={{ flexShrink: 0, fontSize: 9.5, padding: '3px 6px' }}
+            onClick={() => onAutoEquipUnit(unit.id)}
+          >
+            ★最適装備
+          </button>
         </div>
 
         {/* Active Equipment Sets */}
@@ -262,7 +278,7 @@ export function EquipmentPanel({
         </div>
       </div>
 
-      {/* Selected Item Detail, Blacksmithing (+15 Enhance & 1-Slot Reroll) & Actions */}
+      {/* Selected Item Detail, Blacksmithing (+20 Enhance & 1-Slot Reroll) & Actions */}
       {selectedItem && (
         <div
           className="rpg-card"
@@ -318,7 +334,7 @@ export function EquipmentPanel({
                 lineHeight: 1.3,
               }}
             >
-              <strong>【{SET_MAP[selectedItem.setId].name}セット】</strong> 2部位:{SET_MAP[selectedItem.setId].bonus2Desc} / 4部位:{SET_MAP[selectedItem.setId].bonus4Desc}
+              <strong>【{SET_MAP[selectedItem.setId].name}】</strong> 2:{SET_MAP[selectedItem.setId].bonus2Desc} / 4:{SET_MAP[selectedItem.setId].bonus4Desc}
             </div>
           )}
 
@@ -331,41 +347,36 @@ export function EquipmentPanel({
             {selectedItem.baseStats.spd && <span>素早さ+{selectedItem.baseStats.spd}</span>}
           </div>
 
-          {/* Random Affixes (Tap any affix to select for 1-slot Reroll!) */}
+          {/* Random Affixes */}
           {selectedItem.affixes.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-                {selectedItem.affixes.map((af, idx) => {
-                  const isPicked = validAffixIdx === idx;
-                  return (
-                    <button
-                      key={`${af.stat}_${idx}`}
-                      type="button"
-                      onClick={() => setSelectedAffixIdx(isPicked ? null : idx)}
-                      style={{
-                        fontSize: 9.5,
-                        background: isPicked ? '#543b1e' : 'rgba(15, 13, 22, 0.72)',
-                        border: isPicked
-                          ? '1px solid #ffe570'
-                          : af.masterworked
-                            ? '1px solid rgba(255, 214, 92, 0.55)'
-                            : '1px solid rgba(255,255,255,0.12)',
-                        padding: '2px 5px',
-                        borderRadius: 4,
-                        color: af.masterworked ? '#ffe570' : '#d9f2ff',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {af.masterworked ? '★' : ''}
-                      {af.label}+{af.value}
-                      {af.isPercent ? '%' : ''}
-                    </button>
-                  );
-                })}
-              </div>
-              <div style={{ fontSize: 8.5, color: 'var(--text-dim)' }}>
-                OP選択で1枠再鍛造・+5/+10/+15で全OP強化
-              </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+              {selectedItem.affixes.map((af, idx) => {
+                const isPicked = validAffixIdx === idx;
+                return (
+                  <button
+                    key={`${af.stat}_${idx}`}
+                    type="button"
+                    onClick={() => setSelectedAffixIdx(isPicked ? null : idx)}
+                    style={{
+                      fontSize: 9.5,
+                      background: isPicked ? '#543b1e' : 'rgba(15, 13, 22, 0.72)',
+                      border: isPicked
+                        ? '1px solid #ffe570'
+                        : af.masterworked
+                          ? '1px solid rgba(255, 214, 92, 0.55)'
+                          : '1px solid rgba(255,255,255,0.12)',
+                      padding: '2px 5px',
+                      borderRadius: 4,
+                      color: af.masterworked ? '#ffe570' : '#d9f2ff',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {af.masterworked ? '★' : ''}
+                    {af.label}+{af.value}
+                    {af.isPercent ? '%' : ''}
+                  </button>
+                );
+              })}
             </div>
           )}
 
@@ -385,7 +396,7 @@ export function EquipmentPanel({
             </div>
           )}
 
-          {/* Blacksmithing Row: Enhance (+1..+15) & 1-Slot Reroll */}
+          {/* Blacksmithing Row: Enhance (+1..+20) & 1-Slot Reroll */}
           <div style={{ display: 'flex', gap: 4, minWidth: 0 }}>
             {selectedItem.enhanceLevel < MAX_ENHANCE_LEVEL && enhanceCost ? (
               <button
@@ -403,7 +414,7 @@ export function EquipmentPanel({
               </button>
             ) : (
               <button type="button" className="rpg-btn sm" style={{ flex: 1 }} disabled>
-                ★強化MAX +15
+                ★強化MAX +{MAX_ENHANCE_LEVEL}
               </button>
             )}
 
@@ -426,7 +437,7 @@ export function EquipmentPanel({
               >
                 {validAffixIdx !== null
                   ? `🔄再鍛造 💎${rerollCost.stones} ${rerollCost.gold}G`
-                  : '🔄OP選択で再鍛造'}
+                  : '🔄OP再鍛造'}
               </button>
             )}
           </div>

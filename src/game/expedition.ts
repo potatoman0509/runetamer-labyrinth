@@ -110,7 +110,7 @@ export function generateStepChoices(
           kind: 'boss',
           title: `階層ボス：${bossSp.name}`,
           subtitle:
-            floor >= 20
+            floor >= 30
               ? '撃破で次階層・世界ランク解放'
               : '装備3点・鍛冶石・ボス仲間化',
           tag: 'BOSS',
@@ -126,7 +126,7 @@ export function generateStepChoices(
           id: nextChoiceId(),
           kind: 'rest',
           title: '焚き火で休む',
-          subtitle: '全員のHP・MPを50%回復',
+          subtitle: '全員のHP・MPを40%回復',
           tag: '回復',
           tagColor: '#3a9c5a',
           spriteKey: 'fountain',
@@ -140,7 +140,7 @@ export function generateStepChoices(
         id: nextChoiceId(),
         kind: 'elite',
         title: `強敵：${grindLead.name}ほか`,
-        subtitle: '経験値・装備・鍛冶石を稼ぐ',
+        subtitle: '経験値・装備・鍛冶石',
         tag: '★強敵',
         tagColor: '#c98820',
         spriteKey: grindLead.spriteKey,
@@ -158,7 +158,7 @@ export function generateStepChoices(
         id: nextChoiceId(),
         kind: 'stairs',
         title: `${floor + 1}Fへ降りる`,
-        subtitle: 'さらなる深層へ進む',
+        subtitle: '深層へ進む',
         tag: '次階へ',
         tagColor: '#358f55',
         spriteKey: 'altar',
@@ -167,8 +167,8 @@ export function generateStepChoices(
       {
         id: nextChoiceId(),
         kind: 'elite',
-        title: `${floor}Fの強敵：${farmLead.name}ほか`,
-        subtitle: 'この階層で装備と鍛冶石を稼ぐ',
+        title: `${floor}F強敵：${farmLead.name}ほか`,
+        subtitle: '装備・鍛冶石',
         tag: '★強敵',
         tagColor: '#c98820',
         spriteKey: farmLead.spriteKey,
@@ -179,7 +179,7 @@ export function generateStepChoices(
         id: nextChoiceId(),
         kind: 'return_village',
         title: '始まりの村へ戻る',
-        subtitle: '戦利品を持ち帰り全回復',
+        subtitle: '全回復・秘薬補充',
         tag: '帰還',
         tagColor: '#4c658a',
         spriteKey: 'fountain',
@@ -195,12 +195,15 @@ export function generateStepChoices(
   const elitePack = makeEnemyPack(biome, 2, 3);
   const eliteLead = getSpecies(elitePack[0]!);
 
-  // Slot 1: Standard Battle OR Rare Encounter (Golden Slime / Void Herald!)
+  // Slot 1: Standard Battle OR Rare Encounter (Golden Slime / Void Herald / Crystal Dragon / Eclipse Reaper!)
   const rareRoll = Math.random();
   let choice1: ExpeditionChoice;
   if (rareRoll < 0.14 + (worldTier - 1) * 0.02) {
-    const isHerald = floor >= 8 && Math.random() < 0.45;
-    const rareId = isHerald ? 'void_herald' : 'gold_slime';
+    const rarePool: string[] = ['gold_slime'];
+    if (floor >= 8) rarePool.push('void_herald');
+    if (floor >= 16) rarePool.push('crystal_dragon');
+    if (floor >= 21) rarePool.push('eclipse_reaper');
+    const rareId = pick(rarePool);
     const rareSp = getSpecies(rareId);
     choice1 = {
       id: nextChoiceId(),
