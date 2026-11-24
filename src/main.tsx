@@ -108,7 +108,7 @@ if (!isStandalone) {
     ) {
       window.addEventListener('load', () => {
         try {
-          navigator.serviceWorker?.register('/sw.js').catch(() => {
+          navigator.serviceWorker?.register('./sw.js').catch(() => {
             // Ignore SW registration failures gracefully
           });
         } catch {
