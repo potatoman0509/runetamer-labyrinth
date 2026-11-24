@@ -1,7 +1,9 @@
+import { getBossRushWave } from './bossRush';
 import { getBiomeForFloor } from './data/biomes';
 import { generateEquipment, getSalvageValue, RARITY_META } from './data/equipment';
 import { getSpecies } from './data/monsters';
 import { createUnitInstance } from './save';
+import { getHeroEquippedSkills } from './skillTree';
 import { computeUnitStats, expForNextLevel, getPartyAggregatedLootBonuses } from './stats';
 import { computePartySynergies } from './synergy';
 import type {
@@ -28,10 +30,6 @@ function nextEffectId(): string {
   return `fx_${effectSeq}_${Date.now().toString(36)}`;
 }
 
-/**
- * Elemental Weakness Cycle (WEAK! x1.45 damage):
- * fire > nature > earth > star > holy > fire
- */
 const WEAKNESS_MAP: Partial<Record<ElementType, ElementType>> = {
   fire: 'nature',
   nature: 'earth',
@@ -53,17 +51,35 @@ export function shouldAutoSell(rarity: Rarity, threshold: AutoSellThreshold): bo
   return RARITY_META[rarity].rank <= RARITY_META[threshold].rank;
 }
 
+export interface CreateBattleOptions {
+  shrineBuffs?: ActiveShrineBuffs;
+  hpPotions?: number;
+  mpPotions?: number;
+  initialLimitGauge?: number;
+  bossRushWave?: number;
+}
+
 export function createBattleState(
   save: GameSave,
   entity: MapEntity,
   floor: number,
-  shrineBuffs?: ActiveShrineBuffs,
+  shrineBuffsOrOpts?: ActiveShrineBuffs | CreateBattleOptions,
 ): BattleState {
   battleIdSeq += 1;
-  const biome = getBiomeForFloor(floor);
+  const opts: CreateBattleOptions =
+    shrineBuffsOrOpts && 'powerBonus' in shrineBuffsOrOpts
+      ? { shrineBuffs: shrineBuffsOrOpts }
+      : (shrineBuffsOrOpts ?? {});
+  const shrineBuffs = opts.shrineBuffs;
+  const bossRushWave = opts.bossRushWave;
+
+  const biome = bossRushWave
+    ? getBossRushWave(bossRushWave).biome
+    : getBiomeForFloor(floor);
   const tierMods = getActiveTierModifiers(save.worldTier);
   const invMap = new Map(save.inventory.map((it) => [it.id, it]));
   const syn = computePartySynergies(save);
+  const heroSkills = getHeroEquippedSkills(save);
 
   const allies: BattleUnitState[] = save.partyIds
     .map((id) => save.roster[id])
@@ -85,15 +101,17 @@ export function createBattleState(
         ? Math.round(st.spd * 1.35)
         : st.spd;
 
+      const isEvolved = Boolean(u.evolved) && u.speciesId !== 'hero';
       return {
         uid: `ally_${u.id}`,
         isAlly: true,
         speciesId: u.speciesId,
-        name: sp.name,
+        name: isEvolved ? `【極】${sp.name}` : sp.name,
         spriteKey: sp.spriteKey,
         level: u.level,
         isBoss: false,
         isElite: false,
+        evolved: isEvolved,
         hp,
         maxHp: st.maxHp,
         mp,
@@ -112,6 +130,9 @@ export function createBattleState(
         doubleHit: st.doubleHit,
         regenPct: st.regenPct,
         damageTakenMult: st.damageTakenMult,
+        skillPowerBonusPct: st.skillPowerBonusPct,
+        weaknessBonusPct: st.weaknessBonusPct,
+        mpRegenBonus: st.mpRegenBonus,
         uniqueEffects: st.uniqueEffects,
         activeSetIds4pc,
         defending: false,
@@ -121,7 +142,7 @@ export function createBattleState(
         atkBuffTurns: 0,
         defBuffTurns: 0,
         phoenixUsed: false,
-        skills: sp.skills,
+        skills: u.speciesId === 'hero' ? heroSkills : sp.skills,
         lungeUntilMs: 0,
         hurtUntilMs: 0,
       };
@@ -143,8 +164,6 @@ export function createBattleState(
   const speciesIds =
     entity.speciesIds && entity.speciesIds.length > 0 ? entity.speciesIds : ['leaf_slime'];
 
-  // ===== ULTRA-HARDCORE ENEMY SCALING =====
-  // Demands tactical defending against telegraphed nukes, elemental weakness, forging (+5/+10/+15), sets & synergies!
   const floorLevel = Math.max(1, Math.round(floor * 1.35 + (save.worldTier - 1) * 20));
   const floorHpMult = Math.pow(1.145, Math.max(0, floor - 1));
   const floorAtkMult = Math.pow(1.115, Math.max(0, floor - 1));
@@ -213,6 +232,7 @@ export function createBattleState(
       level: floorLevel,
       isBoss: isBossUnit,
       isElite: isEliteUnit || isRareBattle,
+      evolved: false,
       hp: maxHp,
       maxHp,
       mp: 999,
@@ -228,6 +248,9 @@ export function createBattleState(
       doubleHit: isBossUnit ? 15 : 0,
       regenPct: isBossUnit ? 3 : 0,
       damageTakenMult: 1.0,
+      skillPowerBonusPct: 0,
+      weaknessBonusPct: 0,
+      mpRegenBonus: 0,
       uniqueEffects: [],
       activeSetIds4pc: [],
       defending: false,
@@ -252,20 +275,26 @@ export function createBattleState(
     isBossBattle,
     isEliteBattle,
     isRareBattle,
+    bossRushWave,
     turn: 1,
+    limitGauge: Math.min(100, Math.max(0, opts.initialLimitGauge ?? 25)),
+    hpPotions: opts.hpPotions ?? 3,
+    mpPotions: opts.mpPotions ?? 2,
     allies,
     enemies,
     turnQueue: [],
     activeUid: null,
     phase: 'animating',
     logs: [
-      isBossBattle
-        ? `☠ 凶悪な階層ボス「${enemies.find((e) => e.isBoss)?.name ?? entity.name}」が殺気を放つ！大技予告に防御を合わせろ！`
-        : isRareBattle
-          ? `✦ 希少強敵「${enemies[0]?.name}」と遭遇！全力で仕留めろ！`
-          : isEliteBattle
-            ? `★ 黄金の殺気を纏う強敵の群れが襲いかかる！`
-            : `${enemies[0]?.name ?? '魔物'}の群れが立ち塞がった！`,
+      bossRushWave
+        ? `🏟 ボスラッシュ闘技場 ${getBossRushWave(bossRushWave).title} 開幕！`
+        : isBossBattle
+          ? `☠ 凶悪な階層ボス「${enemies.find((e) => e.isBoss)?.name ?? entity.name}」が殺気を放つ！大技予告に防御・連携奥義を合わせろ！`
+          : isRareBattle
+            ? `✦ 希少強敵「${enemies[0]?.name}」と遭遇！全力で仕留めろ！`
+            : isEliteBattle
+              ? `★ 黄金の殺気を纏う強敵の群れが襲いかかる！`
+              : `${enemies[0]?.name ?? '魔物'}の群れが立ち塞がった！`,
     ],
     floatingTexts: [],
     vfx: [],
@@ -357,7 +386,6 @@ function applyDamage(
   const now = Date.now();
   let dmg = Math.max(1, Math.round(rawDamage * defender.damageTakenMult));
   if (defender.defending) {
-    // Tactical Defend: 65% damage reduction! Essential against telegraphed Boss Ultimates!
     dmg = Math.max(1, Math.round(dmg * 0.35));
   }
 
@@ -372,11 +400,18 @@ function applyDamage(
   defender.hp = Math.max(0, defender.hp - dmg);
   defender.hurtUntilMs = now + 320;
 
-  if (isCrit || isWeak || element === 'ultimate') {
-    state.shakeUntilMs = Math.max(state.shakeUntilMs, now + (element === 'ultimate' ? 420 : 240));
+  // Charge shared Limit Break gauge when allies take hits!
+  if (defender.isAlly && dmg + absorbed > 0) {
+    state.limitGauge = Math.min(100, state.limitGauge + 14);
   }
 
-  // Boss Enrage trigger below 50% HP!
+  if (isCrit || isWeak || element === 'ultimate' || element === 'limit_break') {
+    state.shakeUntilMs = Math.max(
+      state.shakeUntilMs,
+      now + (element === 'ultimate' || element === 'limit_break' ? 420 : 240),
+    );
+  }
+
   if (!defender.isAlly && defender.isBoss && !defender.enraged && defender.hp > 0 && defender.hp / defender.maxHp <= 0.5) {
     defender.enraged = true;
     state.logs.push(`🔥 ${defender.name}が激昂した！（火力+25%＆確率で2回行動！）`);
@@ -472,6 +507,7 @@ function calcDamageNumber(
   isSkill: boolean,
   isAoE: boolean,
   critBonus = 0,
+  bossBonus = 1,
 ): { amount: number; isCrit: boolean; isWeak: boolean } {
   const atkBuff = (attacker.atkBuffTurns > 0 ? 1.3 : 1) * (attacker.enraged ? 1.25 : 1);
   const defBuff = defender.defBuffTurns > 0 ? 1.32 : 1;
@@ -486,9 +522,16 @@ function calcDamageNumber(
   const mitigation = 100 / (100 + defense * 1.15);
   let dmg = offense * power * (0.93 + Math.random() * 0.14) * mitigation;
 
+  if (isSkill && attacker.skillPowerBonusPct > 0) {
+    dmg *= 1 + attacker.skillPowerBonusPct / 100;
+  }
+  if (bossBonus > 1 && (defender.isBoss || defender.isElite)) {
+    dmg *= bossBonus;
+  }
+
   const isWeak = isElementalWeakness(element, defender.speciesId);
   if (isWeak) {
-    dmg *= 1.45;
+    dmg *= 1.45 + attacker.weaknessBonusPct / 100;
   }
 
   if (attacker.uniqueEffects.includes('berserker_axe')) {
@@ -546,7 +589,6 @@ function startUnitTurnPassives(state: BattleState, actor: BattleUnitState): void
   if (actor.atkBuffTurns > 0) actor.atkBuffTurns -= 1;
   if (actor.defBuffTurns > 0) actor.defBuffTurns -= 1;
 
-  // Poison / Burn tick (6% maxHP — non-lethal down to 1HP? No, in ultra-hardcore it can tick down to 1HP so you must heal/defend!)
   if (actor.poisonTurns > 0 && actor.hp > 0) {
     actor.poisonTurns -= 1;
     const dot = Math.max(2, Math.round(actor.maxHp * 0.06));
@@ -561,7 +603,7 @@ function startUnitTurnPassives(state: BattleState, actor: BattleUnitState): void
   }
 
   if (actor.isAlly) {
-    let mpGain = 5;
+    let mpGain = 5 + actor.mpRegenBonus;
     if (actor.uniqueEffects.includes('sage_star_rune')) mpGain += 12;
     if (actor.uniqueEffects.includes('starlight_mantle')) mpGain += 8;
     if (actor.activeSetIds4pc.includes('astral_mage')) mpGain += 8;
@@ -588,6 +630,9 @@ export type PlayerActionCommand =
   | { type: 'skill'; skillIndex: 0 | 1; targetUid?: string }
   | { type: 'defend' }
   | { type: 'flee' }
+  | { type: 'limit_break' }
+  | { type: 'use_hp_potion' }
+  | { type: 'use_mp_potion' }
   | { type: 'enemy_charge' }
   | { type: 'enemy_ultimate' };
 
@@ -601,14 +646,18 @@ export function chooseAutoAction(
   if (livingEnemies.length === 0) return { type: 'attack' };
 
   const anyCharging = livingEnemies.some((e) => e.charging);
+
+  // Auto-fire Limit Break immediately when 100% AND (enemy charging OR boss/elite battle)!
+  if (state.limitGauge >= 100 && (anyCharging || state.isBossBattle || state.isEliteBattle)) {
+    return { type: 'limit_break' };
+  }
+
   const targetEnemy =
     livingEnemies.find((e) => e.charging) ??
     livingEnemies.find((e) => e.isBoss) ??
     [...livingEnemies].sort((a, b) => a.hp - b.hp)[0]!;
 
-  // Smart survival reaction when a Boss/Elite is charging a devastating Ultimate!
   if (anyCharging && tactic !== 'allout') {
-    // Prefer team shield if available
     for (const idx of [0, 1] as const) {
       const sk = actor.skills[idx];
       if ((sk.kind === 'shield' || sk.kind === 'buff_def') && actor.mp >= getSkillMpCost(actor, sk)) {
@@ -698,17 +747,14 @@ function chooseEnemyAction(state: BattleState, actor: BattleUnitState): PlayerAc
   const livingAllies = state.allies.filter((a) => a.hp > 0);
   if (livingAllies.length === 0) return { type: 'attack' };
 
-  // If already charged, UNLEASH THE ULTIMATE NUKE!
   if (actor.charging) {
     return { type: 'enemy_ultimate' };
   }
 
-  // Bosses & Elites periodically telegraph a devastating Ultimate Attack!
   if ((actor.isBoss && state.turn % 3 === 2) || (actor.isElite && state.turn >= 2 && Math.random() < 0.28)) {
     return { type: 'enemy_charge' };
   }
 
-  // Ruthless AI: occasionally targets the lowest-HP ally!
   const target =
     Math.random() < 0.4
       ? [...livingAllies].sort((a, b) => a.hp - b.hp)[0]!
@@ -739,8 +785,96 @@ export function executeTurnAction(
     turnQueue: [...prev.turnQueue],
     logs: [...prev.logs].slice(-12),
     floatingTexts: prev.floatingTexts.filter((f) => now - f.createdAt < 1100),
-    vfx: prev.vfx.filter((v) => now - v.createdAt < 500),
+    vfx: prev.vfx.filter((v) => now - v.createdAt < 550),
   };
+
+  // ===== SWIFT FREE ACTIONS: POTIONS & LIMIT BREAK (Do NOT consume actor's turn!) =====
+  if (action.type === 'use_hp_potion') {
+    if (state.hpPotions <= 0) return prev;
+    state.hpPotions -= 1;
+    for (const a of state.allies) {
+      if (a.hp > 0) {
+        applyHealing(state, a, Math.round(a.maxHp * 0.45), false, true);
+      }
+    }
+    state.logs.push(`🧪 回復の秘薬を使用！味方全体のHP45%回復＆毒浄化！（残り${state.hpPotions}）`);
+    return state;
+  }
+
+  if (action.type === 'use_mp_potion') {
+    if (state.mpPotions <= 0) return prev;
+    state.mpPotions -= 1;
+    for (const a of state.allies) {
+      if (a.hp > 0) {
+        const gain = Math.max(15, Math.round(a.maxMp * 0.5));
+        a.mp = Math.min(a.maxMp, a.mp + gain);
+        state.floatingTexts.push({
+          id: nextEffectId(),
+          targetUid: a.uid,
+          text: `MP+${gain}`,
+          color: '#73d6ff',
+          createdAt: now,
+        });
+        state.vfx.push({
+          id: nextEffectId(),
+          targetUid: a.uid,
+          element: 'buff',
+          createdAt: now,
+        });
+      }
+    }
+    state.logs.push(`💧 魔力の霊薬を使用！味方全体のMP50%回復！（残り${state.mpPotions}）`);
+    return state;
+  }
+
+  if (action.type === 'limit_break') {
+    if (state.limitGauge < 100) return prev;
+    state.limitGauge = 0;
+    state.shakeUntilMs = now + 460;
+    const livingAllies = state.allies.filter((a) => a.hp > 0);
+    const livingEnemies = state.enemies.filter((e) => e.hp > 0);
+    const totalPower = livingAllies.reduce((sum, a) => sum + Math.max(a.atk, a.mag), 0);
+
+    // Allies lunge together, heal 40%, and gain protective barrier!
+    for (const a of livingAllies) {
+      a.lungeUntilMs = now + 380;
+      applyHealing(state, a, Math.round(a.maxHp * 0.4), false, true);
+      a.shield = Math.min(Math.round(a.maxHp * 0.8), a.shield + Math.round(a.maxHp * 0.25));
+    }
+
+    // Massive rainbow starlight AoE nuke + FORCE BREAK all enemy Charge states!
+    let totalDmg = 0;
+    let brokeCount = 0;
+    const leadAlly = livingAllies[0] ?? state.allies[0]!;
+    for (const e of livingEnemies) {
+      if (e.charging) {
+        e.charging = false;
+        brokeCount += 1;
+        state.floatingTexts.push({
+          id: nextEffectId(),
+          targetUid: e.uid,
+          text: 'BREAK!!',
+          color: '#7ce8ff',
+          isCrit: true,
+          createdAt: now,
+        });
+      }
+      const mitigation = 100 / (100 + e.def * 0.7);
+      const raw = totalPower * 2.15 * mitigation;
+      totalDmg += applyDamage(state, leadAlly, e, raw, 'limit_break', true, false);
+    }
+
+    state.logs.push(
+      `⚡ 連携必殺『ルーンユニゾン』発動！計${totalDmg}ダメージ＋全体回復＆盾${brokeCount > 0 ? '＋大技ブレイク!!' : '！'}`,
+    );
+
+    if (state.enemies.every((e) => e.hp <= 0)) {
+      state.phase = 'victory';
+      state.activeUid = null;
+      state.logs.push('連携必殺で魔物の群れを一掃した！');
+    }
+    return state;
+  }
 
   const actor = findBattleUnit(state, state.activeUid);
   if (!actor || actor.hp <= 0) {
@@ -767,9 +901,10 @@ export function executeTurnAction(
 
   if (action.type === 'defend') {
     actor.defending = true;
-    actor.poisonTurns = 0; // Tactical defend cleanses Poison/Burn!
+    actor.poisonTurns = 0;
     actor.mp = Math.min(actor.maxMp, actor.mp + 14);
-    state.logs.push(`${actor.name}は鉄壁の防御を固めた！（被ダメ-65%・MP+14・毒解除）`);
+    if (actor.isAlly) state.limitGauge = Math.min(100, state.limitGauge + 18);
+    state.logs.push(`${actor.name}は鉄壁の防御を固めた！（被ダメ-65%・MP+14・連携+18%）`);
     state.vfx.push({
       id: nextEffectId(),
       targetUid: actor.uid,
@@ -780,10 +915,9 @@ export function executeTurnAction(
     return state;
   }
 
-  // Boss / Elite Telegraph Charge!
   if (action.type === 'enemy_charge' && !actor.isAlly) {
     actor.charging = true;
-    state.logs.push(`⚠ ${actor.name}が凄まじい魔力を収束している！次ターン壊滅大技（防御・バリア推奨！）`);
+    state.logs.push(`⚠ ${actor.name}が凄まじい魔力を収束している！次ターン壊滅大技（防御・連携奥義で対処！）`);
     state.floatingTexts.push({
       id: nextEffectId(),
       targetUid: actor.uid,
@@ -802,7 +936,6 @@ export function executeTurnAction(
     return state;
   }
 
-  // Boss / Elite Unleashed Ultimate Attack!
   if (action.type === 'enemy_ultimate' && !actor.isAlly) {
     actor.charging = false;
     actor.lungeUntilMs = now + 380;
@@ -836,6 +969,9 @@ export function executeTurnAction(
   }
 
   actor.lungeUntilMs = now + 340;
+  if (actor.isAlly) {
+    state.limitGauge = Math.min(100, state.limitGauge + 12);
+  }
 
   if (action.type === 'attack') {
     const target = livingFoes.find((f) => f.uid === action.targetUid) ?? livingFoes[0];
@@ -893,7 +1029,10 @@ export function executeTurnAction(
               [...livingFriends].sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0] ??
                 actor,
             ];
-      const baseHeal = Math.max(18, actor.mag * skill.power * 1.15);
+      const baseHeal = Math.max(
+        18,
+        actor.mag * skill.power * 1.15 * (1 + actor.skillPowerBonusPct / 100),
+      );
       for (const t of targets) {
         applyHealing(
           state,
@@ -906,7 +1045,10 @@ export function executeTurnAction(
       state.logs.push(`${actor.name}の「${skill.name}」！味方のHP回復＆毒を浄化！`);
     } else if (skill.kind === 'shield') {
       const targets = skill.target === 'all_allies' ? livingFriends : [actor];
-      const shieldAmt = Math.max(24, Math.round(actor.def * skill.power * 1.65));
+      const shieldAmt = Math.max(
+        24,
+        Math.round(actor.def * skill.power * 1.65 * (1 + actor.skillPowerBonusPct / 100)),
+      );
       for (const t of targets) {
         t.shield = Math.min(Math.round(t.maxHp * 0.8), t.shield + shieldAmt);
         state.floatingTexts.push({
@@ -930,7 +1072,7 @@ export function executeTurnAction(
         if (skill.kind === 'buff_atk') {
           t.atkBuffTurns = 4;
           if (skill.power >= 0.85) {
-            applyHealing(state, t, Math.round(actor.mag * skill.power * 0.7), false, true);
+            applyHealing(state, t, Math.round(actor.mag * skill.power * 0.78), false, true);
           }
         } else {
           t.defBuffTurns = 4;
@@ -974,13 +1116,13 @@ export function executeTurnAction(
             true,
             isAoE,
             skill.critBonus ?? 0,
+            skill.bossBonus ?? 1,
           );
           if (isCrit) hadCrit = true;
           if (isWeak) hadWeak = true;
           const dealt = applyDamage(state, actor, t, amount, skill.element, isCrit, isWeak);
           totalDmg += dealt;
 
-          // Enemy skills in Ultra-Hardcore have a 25% chance to inflict Poison/Burn!
           if (!actor.isAlly && t.hp > 0 && Math.random() < 0.25) {
             t.poisonTurns = Math.max(t.poisonTurns, 3);
           }
@@ -1048,11 +1190,10 @@ export function executeTurnAction(
   if (state.allies.every((a) => a.hp <= 0)) {
     state.phase = 'defeat';
     state.activeUid = null;
-    state.logs.push('パーティは全滅した…金貨の一部を失い村へ帰還します。');
+    state.logs.push('パーティは全滅した…村へ帰還します。');
     return state;
   }
 
-  // Enraged Boss 35% chance for immediate Double Action (2回行動!)
   if (
     !actor.isAlly &&
     actor.isBoss &&
@@ -1119,13 +1260,15 @@ export function resolveBattleVictory(
   const partyBonuses = getPartyAggregatedLootBonuses(save, shrineBuffs);
 
   const floorScale = 1 + (battle.floor - 1) * 0.36 + Math.pow(battle.floor, 1.32) * 0.09;
-  const battleTypeMult = battle.isBossBattle
-    ? 3.6
-    : battle.isRareBattle
-      ? 3.0
-      : battle.isEliteBattle
-        ? 2.0
-        : 1.15;
+  const battleTypeMult = battle.bossRushWave
+    ? 2.8 + battle.bossRushWave * 0.6
+    : battle.isBossBattle
+      ? 3.6
+      : battle.isRareBattle
+        ? 3.0
+        : battle.isEliteBattle
+          ? 2.0
+          : 1.15;
 
   const exp = Math.max(
     22,
@@ -1151,7 +1294,9 @@ export function resolveBattleVictory(
     ),
   );
 
-  // Generous Forge Stones for hard-fought Ultra-Hardcore victories!
+  const rushBonusStones = battle.bossRushWave
+    ? getBossRushWave(battle.bossRushWave).bonusStones
+    : 0;
   const baseStones = battle.isRareBattle
     ? 16
     : battle.isBossBattle
@@ -1162,7 +1307,7 @@ export function resolveBattleVictory(
   const forgeStones = Math.max(
     1,
     Math.round(
-      (baseStones + Math.floor(battle.floor / 4)) *
+      (baseStones + rushBonusStones + Math.floor(battle.floor / 4)) *
         (1 + (battle.worldTier - 1) * 0.45) *
         (1 + partyBonuses.stoneFind / 100),
     ),
@@ -1195,15 +1340,19 @@ export function resolveBattleVictory(
     roster[unitId] = updated;
   }
 
-  const dropCount = battle.isBossBattle
-    ? 3
-    : battle.isRareBattle
-      ? 2
-      : battle.isEliteBattle
+  const dropCount = battle.bossRushWave
+    ? battle.bossRushWave >= 5
+      ? 3
+      : 2
+    : battle.isBossBattle
+      ? 3
+      : battle.isRareBattle
         ? 2
-        : Math.random() < 0.8
-          ? 1
-          : 0;
+        : battle.isEliteBattle
+          ? 2
+          : Math.random() < 0.8
+            ? 1
+            : 0;
 
   const keptItems: EquipmentItem[] = [];
   let autoProcessedCount = 0;
@@ -1214,6 +1363,8 @@ export function resolveBattleVictory(
   const mode = save.settings.autoLootMode;
 
   for (let i = 0; i < dropCount; i += 1) {
+    const forcedRarity =
+      battle.bossRushWave === 5 && i === 0 ? ('mythic' as const) : undefined;
     const source = battle.isBossBattle
       ? 'boss'
       : battle.isRareBattle
@@ -1224,8 +1375,10 @@ export function resolveBattleVictory(
     const item = generateEquipment(
       battle.floor,
       battle.worldTier,
-      partyBonuses.magicFind + (battle.isRareBattle ? 55 : 10),
+      partyBonuses.magicFind + (battle.bossRushWave ? battle.bossRushWave * 25 : 10),
       source,
+      undefined,
+      forcedRarity,
     );
     if (item.rarity === 'mythic') mythicsFound += 1;
     if (item.uniqueId) discoveredUniques.add(item.uniqueId);
@@ -1275,6 +1428,7 @@ export function resolveBattleVictory(
   let maxUnlockedTier = save.maxUnlockedTier;
   let worldTierUnlocked: number | null = null;
   if (
+    !battle.bossRushWave &&
     battle.isBossBattle &&
     battle.floor >= 20 &&
     battle.worldTier >= save.maxUnlockedTier
@@ -1283,15 +1437,20 @@ export function resolveBattleVictory(
     worldTierUnlocked = maxUnlockedTier;
   }
 
-  const nextHighestByTier = {
-    ...save.highestFloorByTier,
-    [battle.worldTier]: Math.max(
-      save.highestFloorByTier[battle.worldTier] ?? 1,
-      battle.floor + (battle.isBossBattle ? 1 : 0),
-    ),
-  };
+  const nextHighestByTier = battle.bossRushWave
+    ? save.highestFloorByTier
+    : {
+        ...save.highestFloorByTier,
+        [battle.worldTier]: Math.max(
+          save.highestFloorByTier[battle.worldTier] ?? 1,
+          battle.floor + (battle.isBossBattle ? 1 : 0),
+        ),
+      };
 
   const nextInventory = [...keptItems, ...save.inventory].slice(0, 140);
+  const nextBossRushBest = battle.bossRushWave
+    ? Math.max(save.bossRushBestWave, battle.bossRushWave)
+    : save.bossRushBestWave;
 
   const nextSave: GameSave = {
     ...save,
@@ -1299,6 +1458,7 @@ export function resolveBattleVictory(
     forgeStones: save.forgeStones + forgeStones + autoSalvagedStones,
     maxUnlockedTier,
     highestFloorByTier: nextHighestByTier,
+    bossRushBestWave: nextBossRushBest,
     partyIds,
     roster,
     inventory: nextInventory,
@@ -1310,7 +1470,11 @@ export function resolveBattleVictory(
       totalBossKills: save.stats.totalBossKills + (battle.isBossBattle ? 1 : 0),
       totalItemsLooted: save.stats.totalItemsLooted + dropCount,
       totalMythicsFound: save.stats.totalMythicsFound + mythicsFound,
-      highestFloorReached: Math.max(save.stats.highestFloorReached, battle.floor),
+      highestFloorReached: battle.bossRushWave
+        ? save.stats.highestFloorReached
+        : Math.max(save.stats.highestFloorReached, battle.floor),
+      bossRushClears:
+        save.stats.bossRushClears + (battle.bossRushWave === 5 ? 1 : 0),
     },
   };
 
@@ -1340,6 +1504,7 @@ export function resolveBattleVictory(
       recruited,
       leveledUpIds,
       worldTierUnlocked,
+      bossRushWaveCleared: battle.bossRushWave,
     },
   };
 }

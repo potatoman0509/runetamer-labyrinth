@@ -233,7 +233,31 @@ export function renderExpeditionScene(
       Math.round(sprite.width * 0.56),
       5,
     );
+
+    if (unit.evolved && unit.speciesId !== 'hero') {
+      const haloR = sprite.width * 0.38 + Math.sin(timeMs / 220 + idx) * 2;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 224, 96, 0.72)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy + 2, haloR, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.drawImage(sprite, Math.round(cx - sprite.width / 2), Math.round(cy - sprite.height / 2));
+
+    if (unit.evolved && unit.speciesId !== 'hero') {
+      for (let s = 0; s < 4; s += 1) {
+        const phase = ((timeMs / 900) + s * 0.25 + idx * 0.17) % 1;
+        const sx = cx + Math.sin(timeMs / 260 + s * 1.9 + idx) * (sprite.width * 0.34);
+        const sy = cy + sprite.height * 0.28 - phase * (sprite.height * 0.85);
+        ctx.fillStyle = s % 2 === 0 ? '#ffe86b' : '#fff9d6';
+        ctx.globalAlpha = 1 - phase * 0.75;
+        ctx.fillRect(Math.round(sx) - 1, Math.round(sy) - 1, 2, 2);
+      }
+      ctx.globalAlpha = 1;
+    }
   });
 
   // Animated upcoming landmark / Boss ahead on the dungeon corridor!

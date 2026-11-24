@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { BOSS_RUSH_WAVES } from '../game/bossRush';
 import { RARITY_META, SLOT_LABELS } from '../game/data/equipment';
 import { exportSaveCode } from '../game/save';
 import type { GameSave } from '../game/types';
@@ -15,6 +16,7 @@ interface WorldPanelProps {
   inVillage: boolean;
   onSelectWorldTier: (tier: number) => void;
   onEnterDungeonFloor: (floor: number) => void;
+  onStartBossRush: () => void;
   onBuyShopItem: (itemId: string) => void;
   onRefreshShop: () => void;
   onBuyMysteryBox: () => void;
@@ -27,13 +29,14 @@ export function WorldPanel({
   inVillage,
   onSelectWorldTier,
   onEnterDungeonFloor,
+  onStartBossRush,
   onBuyShopItem,
   onRefreshShop,
   onBuyMysteryBox,
   onImportSaveCode,
   onResetSave,
 }: WorldPanelProps) {
-  const [section, setSection] = useState<'altar' | 'shop' | 'save'>('altar');
+  const [section, setSection] = useState<'altar' | 'arena' | 'shop' | 'save'>('altar');
   const [importText, setImportText] = useState('');
   const [exportMsg, setExportMsg] = useState('');
   const [importMsg, setImportMsg] = useState('');
@@ -78,27 +81,39 @@ export function WorldPanel({
 
   return (
     <div className="panel-body">
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 4 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 3 }}>
         <button
           type="button"
           className={`rpg-btn sm ${section === 'altar' ? 'primary' : ''}`}
+          style={{ padding: '4px 2px', fontSize: 10 }}
           onClick={() => setSection('altar')}
         >
           世界ランク
         </button>
         <button
+          id="btn-subtab-arena"
+          type="button"
+          className={`rpg-btn sm ${section === 'arena' ? 'primary' : ''}`}
+          style={{ padding: '4px 2px', fontSize: 10 }}
+          onClick={() => setSection('arena')}
+        >
+          🏟闘技場
+        </button>
+        <button
           type="button"
           className={`rpg-btn sm ${section === 'shop' ? 'primary' : ''}`}
+          style={{ padding: '4px 2px', fontSize: 10 }}
           onClick={() => setSection('shop')}
         >
-          鍛冶・商店
+          鍛冶商店
         </button>
         <button
           type="button"
           className={`rpg-btn sm ${section === 'save' ? 'primary' : ''}`}
+          style={{ padding: '4px 2px', fontSize: 10 }}
           onClick={() => setSection('save')}
         >
-          記録・戦績
+          記録
         </button>
       </div>
 
@@ -184,6 +199,83 @@ export function WorldPanel({
                 );
               })}
             </div>
+          </div>
+        </>
+      )}
+
+      {section === 'arena' && (
+        <>
+          <div className="rpg-card-gold" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div className="section-heading">
+              <span>🏟 ボスラッシュ闘技場 ({activeMods.label})</span>
+              <span style={{ color: '#82ff9e' }}>最高: W{save.bossRushBestWave}/5</span>
+            </div>
+            <div className="muted-text" style={{ lineHeight: 1.35 }}>
+              歴代4大ボス＋EX財宝連合に挑む全5連戦サバイバル！HP・MP・秘薬・⚡連携ゲージを引き継いで戦い抜こう。全制覇でミシック装備確定！
+            </div>
+            <button
+              id="btn-start-boss-rush"
+              type="button"
+              className="rpg-btn primary"
+              style={{ width: '100%', padding: '9px' }}
+              disabled={!inVillage}
+              onClick={onStartBossRush}
+            >
+              ⚔ ボスラッシュ闘技場へ挑戦！
+            </button>
+            {!inVillage && (
+              <div className="muted-text" style={{ textAlign: 'center' }}>
+                ※「始まりの村」にいる時のみ挑戦できます。
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {BOSS_RUSH_WAVES.map((w) => {
+              const cleared = w.wave <= save.bossRushBestWave;
+              return (
+                <div
+                  key={w.wave}
+                  className="rpg-card"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    borderColor: cleared ? '#6be088' : w.wave === 5 ? 'var(--border-gold)' : undefined,
+                    minWidth: 0,
+                  }}
+                >
+                  <PixelIcon spriteKey={w.leadSprite} size={26} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: w.wave === 5 ? '#ffe570' : undefined,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {w.title}
+                    </div>
+                    <div className="muted-text" style={{ fontSize: 9.5 }}>
+                      {w.rewardHint}
+                    </div>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: 9.5,
+                      fontFamily: 'var(--font-pixel)',
+                      color: cleared ? '#82ff9e' : 'var(--text-dim)',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {cleared ? '✓制覇' : `相当${w.equivFloor}F`}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </>
       )}
@@ -281,8 +373,10 @@ export function WorldPanel({
             <div>獲得装備: <strong>{save.stats.totalItemsLooted.toLocaleString()}</strong></div>
             <div>ミシック: <strong style={{ color: '#ff7084' }}>{save.stats.totalMythicsFound}</strong></div>
             <div>最高階層: <strong>{save.stats.highestFloorReached}F</strong></div>
-            <div>鍛冶強化: <strong>{save.stats.totalForgeUpgrades}回</strong></div>
+            <div>鍛冶強化: <strong>{save.stats.totalForgeUpgrades}回 (最大+{save.stats.maxEnhanceReached})</strong></div>
             <div>OP再鍛造: <strong>{save.stats.totalRerolls}回</strong></div>
+            <div>極進化: <strong>{save.stats.totalEvolutions}体</strong></div>
+            <div>闘技場制覇: <strong>{save.stats.bossRushClears}回 (W{save.bossRushBestWave})</strong></div>
           </div>
 
           <div className="rpg-card" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

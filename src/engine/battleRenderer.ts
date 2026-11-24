@@ -167,7 +167,44 @@ function drawVfxEffect(
   ctx.save();
   ctx.globalAlpha = alpha;
 
-  if (element === 'ultimate') {
+  if (element === 'limit_break') {
+    // Dazzling triple rainbow/gold shockwave rings + golden crossbeam + 16 starburst pixels!
+    const rings: Array<[string, number, number]> = [
+      ['#ffe566', 14 + progress * 44, 4],
+      ['#7ce8ff', 10 + progress * 34, 3],
+      ['#ff7ce0', 6 + progress * 24, 2],
+    ];
+    for (const [col, rad, lw] of rings) {
+      ctx.strokeStyle = col;
+      ctx.lineWidth = lw;
+      ctx.beginPath();
+      ctx.arc(x, y, rad, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    // Golden crossbeam
+    const beamLen = 14 + progress * 38;
+    ctx.strokeStyle = '#fff9d6';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x - beamLen, y);
+    ctx.lineTo(x + beamLen, y);
+    ctx.moveTo(x, y - beamLen);
+    ctx.lineTo(x, y + beamLen);
+    ctx.stroke();
+    // 16 starburst pixels
+    const palette = ['#ffe566', '#7ce8ff', '#ff7ce0', '#7aff99'];
+    for (let i = 0; i < 16; i += 1) {
+      const ang = (i / 16) * Math.PI * 2 + progress * 3.2;
+      const d = 6 + progress * (34 + (i % 2) * 10);
+      ctx.fillStyle = palette[i % palette.length]!;
+      ctx.fillRect(
+        Math.round(x + Math.cos(ang) * d) - 2,
+        Math.round(y + Math.sin(ang) * d) - 2,
+        4,
+        4,
+      );
+    }
+  } else if (element === 'ultimate') {
     // Dramatic Boss Ultimate Double Shockwave + Lightning!
     const r1 = 10 + progress * 38;
     const r2 = 6 + progress * 24;
@@ -322,6 +359,16 @@ export function renderBattleScene(
       5,
     );
 
+    // Evolved golden halo aura!
+    if (!isDead && unit.evolved) {
+      const r = sw * 0.4 + Math.sin(timeMs / 210 + frameSeed) * 2;
+      ctx.strokeStyle = 'rgba(255, 224, 96, 0.78)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy + 2, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     // Charging crimson warning aura!
     if (!isDead && unit.charging) {
       const r = sw * 0.45 + Math.sin(timeMs / 90) * 4;
@@ -393,6 +440,19 @@ export function renderBattleScene(
       ctx.globalAlpha = 0.55;
     }
     ctx.drawImage(sprite, Math.round(cx - sw / 2), Math.round(cy - sh / 2));
+
+    // Evolved rising golden sparkles
+    if (!isDead && unit.evolved) {
+      for (let s = 0; s < 5; s += 1) {
+        const phase = ((timeMs / 860) + s * 0.2 + frameSeed * 0.13) % 1;
+        const sx = cx + Math.sin(timeMs / 240 + s * 1.7 + frameSeed) * (sw * 0.36);
+        const sy = cy + sh * 0.3 - phase * (sh * 0.9);
+        ctx.fillStyle = s % 2 === 0 ? '#ffe86b' : '#fff9d6';
+        ctx.globalAlpha = Math.max(0.15, 1 - phase * 0.8);
+        ctx.fillRect(Math.round(sx) - 1, Math.round(sy) - 1, 2, 2);
+      }
+      ctx.globalAlpha = 1;
+    }
 
     // Shield bubble
     if (!isDead && unit.shield > 0) {

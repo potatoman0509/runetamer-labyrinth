@@ -5,4 +5,7 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   base: './',
   plugins: [react()],
+  define: {
+    __STANDALONE_ARTIFACT__: process.env.STANDALONE_ARTIFACT === 'true' ? 'true' : 'false',
+  },
 });

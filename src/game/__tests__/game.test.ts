@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ACHIEVEMENTS, getClaimedAchievementBonuses, getUnclaimedAchievements } from '../achievements';
 import {
   createBattleState,
   executeTurnAction,
@@ -6,6 +7,7 @@ import {
   resolveBattleVictory,
   stepEnemyOrAutoTurn,
 } from '../battle';
+import { BOSS_RUSH_WAVES, createBossRushEntity } from '../bossRush';
 import { getBiomeForFloor, isBossFloor } from '../data/biomes';
 import {
   calculateItemScore,
@@ -27,7 +29,14 @@ import {
   STEPS_PER_FLOOR,
 } from '../expedition';
 import { createInitialSave, createUnitInstance, exportSaveCode, importSaveCode } from '../save';
-import { computeUnitStats } from '../stats';
+import {
+  canUpgradeSkillNode,
+  getAvailableSp,
+  getHeroEquippedSkills,
+  getUnlockedHeroSkillIds,
+  SKILL_TREE_NODES,
+} from '../skillTree';
+import { canEvolveMonster, computeUnitStats, getEvolutionRequirement } from '../stats';
 import { computePartySynergies } from '../synergy';
 import { getWorldTierBlessing, toRoman } from '../worldTier';
 
@@ -237,5 +246,143 @@ describe('RuneTamer Labyrinth Core & v2 Systems', () => {
     const nuked = executeTurnAction({ ...charged, activeUid: enemyUid }, { type: 'enemy_ultimate' });
     expect(nuked.enemies[0]!.charging).toBe(false);
     expect(nuked.shakeUntilMs).toBeGreaterThan(0);
+  });
+
+  it('supports Hero Skill Tree SP, prerequisites, active skill unlocks, and ally-wide Tamer Bond bonus', () => {
+    expect(SKILL_TREE_NODES.length).toBe(15);
+    const save = createInitialSave();
+    save.roster.hero!.level = 10;
+    expect(getAvailableSp(save)).toBe(10);
+
+    // Prerequisite check: sw_crit requires sw_atk
+    expect(canUpgradeSkillNode(save, 'sw_atk')).toBe(true);
+    expect(canUpgradeSkillNode(save, 'sw_crit')).toBe(false);
+
+    const baseHeroAtk = computeUnitStats(save.roster.hero!, save).atk;
+    const baseSlimeAtk = computeUnitStats(save.roster.leaf_slime!, save).atk;
+
+    const treeSave = {
+      ...save,
+      heroSkillTree: {
+        sw_atk: 2,
+        sw_crit: 1,
+        sw_flurry: 1,
+        cm_def: 1,
+        cm_bond: 2,
+      },
+      heroEquippedSkillIds: ['meteor_flurry', 'star_slash'] as [string, string],
+    };
+
+    expect(getUnlockedHeroSkillIds(treeSave)).toContain('meteor_flurry');
+    const [sk0] = getHeroEquippedSkills(treeSave);
+    expect(sk0.id).toBe('meteor_flurry');
+    expect(computeUnitStats(treeSave.roster.hero!, treeSave).atk).toBeGreaterThan(baseHeroAtk);
+    // Tamer Bond boosts monster allies!
+    expect(computeUnitStats(treeSave.roster.leaf_slime!, treeSave).atk).toBeGreaterThan(baseSlimeAtk);
+  });
+
+  it('supports swift free-action HP/MP potions and 100% Limit Break breaking enemy Charge', () => {
+    const save = createInitialSave();
+    const boss = createBossRushEntity(1);
+    const b0 = createBattleState(save, boss, 6, {
+      hpPotions: 3,
+      mpPotions: 2,
+      initialLimitGauge: 100,
+    });
+    const activeBefore = b0.activeUid;
+    // Damage & poison ally, drain MP, set enemy charging
+    const hurtState = {
+      ...b0,
+      allies: b0.allies.map((a) => ({
+        ...a,
+        hp: Math.max(1, Math.floor(a.maxHp * 0.3)),
+        mp: 0,
+        poisonTurns: 2,
+      })),
+      enemies: b0.enemies.map((e, i) => (i === 0 ? { ...e, charging: true } : e)),
+    };
+
+    // Use HP potion -> heals & cleanses poison without consuming turn
+    const afterHpPot = executeTurnAction(hurtState, { type: 'use_hp_potion' });
+    expect(afterHpPot.hpPotions).toBe(2);
+    expect(afterHpPot.activeUid).toBe(activeBefore);
+    expect(afterHpPot.allies[0]!.hp).toBeGreaterThan(hurtState.allies[0]!.hp);
+    expect(afterHpPot.allies[0]!.poisonTurns).toBe(0);
+
+    // Use MP potion -> restores MP without consuming turn
+    const afterMpPot = executeTurnAction(afterHpPot, { type: 'use_mp_potion' });
+    expect(afterMpPot.mpPotions).toBe(1);
+    expect(afterMpPot.activeUid).toBe(activeBefore);
+    expect(afterMpPot.allies[0]!.mp).toBeGreaterThan(0);
+
+    // Trigger Limit Break -> consumes 100% gauge, breaks enemy charging, damages enemies (including boss shield), shields allies!
+    const afterLimit = executeTurnAction(afterMpPot, { type: 'limit_break' });
+    expect(afterLimit.limitGauge).toBe(0);
+    expect(afterLimit.enemies[0]!.charging).toBe(false);
+    expect(afterLimit.enemies[0]!.hp + afterLimit.enemies[0]!.shield).toBeLessThan(
+      afterMpPot.enemies[0]!.hp + afterMpPot.enemies[0]!.shield,
+    );
+    expect(afterLimit.enemies[1]!.hp).toBeLessThan(afterMpPot.enemies[1]!.hp);
+    expect(afterLimit.allies[0]!.shield).toBeGreaterThan(0);
+  });
+
+  it('supports Monster Extreme Evolution requirements, discount, and +35% stat / +25% skill power boost', () => {
+    const save = createInitialSave();
+    const slime = save.roster.leaf_slime!;
+    expect(canEvolveMonster(slime, 50)).toBe(false); // Lv1 < Lv10
+
+    const lv10Slime = { ...slime, level: 10, awakening: 0 };
+    expect(getEvolutionRequirement(lv10Slime).stoneCost).toBe(35);
+    expect(canEvolveMonster(lv10Slime, 34)).toBe(false);
+    expect(canEvolveMonster(lv10Slime, 35)).toBe(true);
+
+    const awakenedSlime = { ...lv10Slime, awakening: 2 };
+    expect(getEvolutionRequirement(awakenedSlime).stoneCost).toBe(15);
+    expect(canEvolveMonster(awakenedSlime, 15)).toBe(true);
+
+    const baseStats = computeUnitStats(lv10Slime, { ...save, roster: { ...save.roster, leaf_slime: lv10Slime } });
+    const evoSlime = { ...lv10Slime, evolved: true };
+    const evoStats = computeUnitStats(evoSlime, { ...save, roster: { ...save.roster, leaf_slime: evoSlime } });
+    expect(evoStats.maxHp).toBeGreaterThan(Math.round(baseStats.maxHp * 1.25));
+    expect(evoStats.skillPowerBonusPct).toBe(baseStats.skillPowerBonusPct + 25);
+  });
+
+  it('guarantees a Mythic drop and records clear stats on Boss Rush Arena Wave 5 victory', () => {
+    expect(BOSS_RUSH_WAVES.length).toBe(5);
+    const save = createInitialSave();
+    const wave5 = createBossRushEntity(5);
+    const b0 = createBattleState(save, wave5, 25, { bossRushWave: 5 });
+    const winState = {
+      ...b0,
+      phase: 'victory' as const,
+      enemies: b0.enemies.map((e) => ({ ...e, hp: 0 })),
+    };
+    const { nextSave, reward } = resolveBattleVictory(save, winState);
+    expect(reward.items.some((i) => i.rarity === 'mythic')).toBe(true);
+    expect(nextSave.bossRushBestWave).toBe(5);
+    expect(nextSave.stats.bossRushClears).toBe(1);
+    expect(reward.forgeStones).toBeGreaterThanOrEqual(60);
+  });
+
+  it('tracks 18 Achievements and applies permanent stat, MF, and bonus SP rewards when claimed', () => {
+    expect(ACHIEVEMENTS.length).toBe(18);
+    const save = createInitialSave();
+    save.stats.totalKills = 20;
+    const unclaimed = getUnclaimedAchievements(save);
+    expect(unclaimed.some((a) => a.id === 'kill_15')).toBe(true);
+
+    const baseSp = getAvailableSp(save);
+    const baseAtk = computeUnitStats(save.roster.hero!, save).atk;
+
+    const claimedSave = {
+      ...save,
+      claimedAchievements: ['kill_15', 'rush_5'],
+    };
+    const bonuses = getClaimedAchievementBonuses(claimedSave);
+    expect(bonuses.statPct).toBe(10); // 2 + 8
+    expect(bonuses.mfBonus).toBe(23); // 3 + 20
+    expect(bonuses.bonusSp).toBe(3); // 1 + 2
+    expect(getAvailableSp(claimedSave)).toBe(baseSp + 3);
+    expect(computeUnitStats(claimedSave.roster.hero!, claimedSave).atk).toBeGreaterThan(baseAtk);
   });
 });

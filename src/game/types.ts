@@ -39,7 +39,6 @@ export type AffixStat =
   | 'regenPct';
 
 export type UniqueEffectId =
-  // Original 14
   | 'sunblade_heal'
   | 'twin_fang_strike'
   | 'sun_king_staff'
@@ -54,7 +53,6 @@ export type UniqueEffectId =
   | 'echo_crit_rune'
   | 'phoenix_ash_rune'
   | 'sage_star_rune'
-  // 12 New v2 Uniques (Total 26!)
   | 'giant_slayer_blade'
   | 'meteor_scepter'
   | 'vampire_scythe'
@@ -84,7 +82,7 @@ export interface EquipmentItem {
   rarity: Rarity;
   itemLevel: number;
   worldTier: number;
-  enhanceLevel: number; // 0..15
+  enhanceLevel: number;
   rerollCount: number;
   setId?: SetId;
   baseStats: {
@@ -115,6 +113,7 @@ export interface SkillDef {
   kind: 'damage' | 'heal' | 'shield' | 'buff_atk' | 'buff_def' | 'drain';
   hits?: number;
   critBonus?: number;
+  bossBonus?: number; // extra mult vs boss/elite
   description: string;
 }
 
@@ -175,6 +174,7 @@ export interface UnitInstance {
   level: number;
   exp: number;
   awakening: number;
+  evolved?: boolean; // Extreme Evolution (【極】)
   hp: number;
   mp: number;
   equipped: EquippedSet;
@@ -200,8 +200,11 @@ export interface ComputedUnitStats {
   magicFind: number;
   goldFind: number;
   expFind: number;
-  stoneFind: number; // +% bonus forge stones
-  damageTakenMult: number; // e.g., 0.88 for -12% dmg taken
+  stoneFind: number;
+  damageTakenMult: number;
+  skillPowerBonusPct: number;
+  weaknessBonusPct: number;
+  mpRegenBonus: number;
   uniqueEffects: UniqueEffectId[];
   activeSets: ActiveSetCount[];
   powerScore: number;
@@ -232,6 +235,7 @@ export interface BattleUnitState {
   level: number;
   isBoss: boolean;
   isElite: boolean;
+  evolved: boolean;
   hp: number;
   maxHp: number;
   mp: number;
@@ -247,6 +251,9 @@ export interface BattleUnitState {
   doubleHit: number;
   regenPct: number;
   damageTakenMult: number;
+  skillPowerBonusPct: number;
+  weaknessBonusPct: number;
+  mpRegenBonus: number;
   uniqueEffects: UniqueEffectId[];
   activeSetIds4pc: SetId[];
   defending: boolean;
@@ -274,7 +281,7 @@ export interface BattleFloatingText {
 export interface BattleVfx {
   id: string;
   targetUid: string;
-  element: ElementType | 'heal' | 'shield' | 'buff' | 'ultimate';
+  element: ElementType | 'heal' | 'shield' | 'buff' | 'ultimate' | 'limit_break';
   createdAt: number;
 }
 
@@ -290,6 +297,7 @@ export interface BattleReward {
   recruited: { speciesId: string; isNew: boolean; newAwakening: number }[];
   leveledUpIds: string[];
   worldTierUnlocked: number | null;
+  bossRushWaveCleared?: number;
 }
 
 export interface BattleState {
@@ -301,7 +309,11 @@ export interface BattleState {
   isBossBattle: boolean;
   isEliteBattle: boolean;
   isRareBattle: boolean;
+  bossRushWave?: number; // 1..5 if in Boss Rush Arena
   turn: number;
+  limitGauge: number; // 0..100 shared party Limit Break gauge!
+  hpPotions: number;
+  mpPotions: number;
   allies: BattleUnitState[];
   enemies: BattleUnitState[];
   turnQueue: string[];
@@ -320,7 +332,7 @@ export type AutoLootMode = 'sell' | 'salvage';
 export interface ActiveShrineBuffs {
   powerBonus: number;
   fortuneBonus: number;
-  curseEnemyBonus: number; // From Curse Altar: stronger enemies, higher MF!
+  curseEnemyBonus: number;
 }
 
 export interface GameSettings {
@@ -340,6 +352,9 @@ export interface GameStats {
   highestFloorReached: number;
   totalForgeUpgrades: number;
   totalRerolls: number;
+  totalEvolutions: number;
+  bossRushClears: number;
+  maxEnhanceReached: number;
 }
 
 export interface GameSave {
@@ -357,6 +372,10 @@ export interface GameSave {
   discoveredUniques: UniqueEffectId[];
   shopItems: EquipmentItem[];
   shopRefreshedAtTier: number;
+  heroSkillTree: Record<string, number>;
+  heroEquippedSkillIds: [string, string];
+  claimedAchievements: string[];
+  bossRushBestWave: number;
   settings: GameSettings;
   stats: GameStats;
 }

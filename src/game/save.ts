@@ -5,7 +5,7 @@ import type { EquipmentItem, GameSave, UnitInstance } from './types';
 import { generateShopInventory } from './worldTier';
 
 export const SAVE_STORAGE_KEY = 'runetamer_labyrinth_save_v1';
-export const CURRENT_SAVE_VERSION = 2;
+export const CURRENT_SAVE_VERSION = 3;
 
 export function createUnitInstance(speciesId: string, level = 1): UnitInstance {
   const sp = SPECIES_MAP[speciesId] ?? HERO_SPECIES;
@@ -17,6 +17,7 @@ export function createUnitInstance(speciesId: string, level = 1): UnitInstance {
     level,
     exp: 0,
     awakening: 0,
+    evolved: false,
     hp,
     mp,
     equipped: {
@@ -39,7 +40,7 @@ export function createInitialSave(): GameSave {
     version: CURRENT_SAVE_VERSION,
     savedAt: Date.now(),
     gold: 120,
-    forgeStones: 12, // Start with enough stones to try Blacksmithing right away!
+    forgeStones: 12,
     worldTier: 1,
     maxUnlockedTier: 1,
     highestFloorByTier: { 1: 1 },
@@ -53,6 +54,10 @@ export function createInitialSave(): GameSave {
     discoveredUniques: [],
     shopItems: [],
     shopRefreshedAtTier: 1,
+    heroSkillTree: {},
+    heroEquippedSkillIds: [HERO_SPECIES.skills[0].id, HERO_SPECIES.skills[1].id],
+    claimedAchievements: [],
+    bossRushBestWave: 0,
     settings: {
       autoBattle: false,
       battleSpeed: 1,
@@ -69,6 +74,9 @@ export function createInitialSave(): GameSave {
       highestFloorReached: 1,
       totalForgeUpgrades: 0,
       totalRerolls: 0,
+      totalEvolutions: 0,
+      bossRushClears: 0,
+      maxEnhanceReached: 0,
     },
   };
 
@@ -203,6 +211,7 @@ export function validateSave(data: unknown): GameSave | null {
       level: typeof u.level === 'number' && u.level >= 1 ? u.level : 1,
       exp: typeof u.exp === 'number' && u.exp >= 0 ? u.exp : 0,
       awakening: typeof u.awakening === 'number' && u.awakening >= 0 ? u.awakening : 0,
+      evolved: Boolean(u.evolved),
       hp: typeof u.hp === 'number' && u.hp >= 0 ? u.hp : 100,
       mp: typeof u.mp === 'number' && u.mp >= 0 ? u.mp : 20,
       equipped: {
@@ -217,6 +226,11 @@ export function validateSave(data: unknown): GameSave | null {
 
   const safeParty = s.partyIds.filter((id) => Boolean(safeRoster[id]));
   if (!safeParty.includes('hero')) safeParty.unshift('hero');
+
+  const safeEquippedSkills: [string, string] =
+    Array.isArray(s.heroEquippedSkillIds) && s.heroEquippedSkillIds.length === 2
+      ? [String(s.heroEquippedSkillIds[0]), String(s.heroEquippedSkillIds[1])]
+      : fallback.heroEquippedSkillIds;
 
   return {
     ...fallback,
@@ -233,6 +247,14 @@ export function validateSave(data: unknown): GameSave | null {
     partyIds: safeParty.slice(0, 4),
     roster: safeRoster,
     inventory: s.inventory.filter((it) => Boolean(it && it.id && it.slot)).map(normalizeItem),
+    heroSkillTree:
+      s.heroSkillTree && typeof s.heroSkillTree === 'object' ? s.heroSkillTree : {},
+    heroEquippedSkillIds: safeEquippedSkills,
+    claimedAchievements: Array.isArray(s.claimedAchievements) ? s.claimedAchievements : [],
+    bossRushBestWave:
+      typeof s.bossRushBestWave === 'number' && s.bossRushBestWave >= 0
+        ? s.bossRushBestWave
+        : 0,
     settings: {
       ...fallback.settings,
       ...(s.settings ?? {}),
@@ -244,6 +266,12 @@ export function validateSave(data: unknown): GameSave | null {
       totalForgeUpgrades:
         typeof s.stats?.totalForgeUpgrades === 'number' ? s.stats.totalForgeUpgrades : 0,
       totalRerolls: typeof s.stats?.totalRerolls === 'number' ? s.stats.totalRerolls : 0,
+      totalEvolutions:
+        typeof s.stats?.totalEvolutions === 'number' ? s.stats.totalEvolutions : 0,
+      bossRushClears:
+        typeof s.stats?.bossRushClears === 'number' ? s.stats.bossRushClears : 0,
+      maxEnhanceReached:
+        typeof s.stats?.maxEnhanceReached === 'number' ? s.stats.maxEnhanceReached : 0,
     },
     highestFloorByTier: { ...fallback.highestFloorByTier, ...(s.highestFloorByTier ?? {}) },
     discoveredMonsters: Array.isArray(s.discoveredMonsters)

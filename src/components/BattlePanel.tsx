@@ -23,6 +23,7 @@ interface BattlePanelProps {
   onCycleSpeed: () => void;
   onCycleTactic: () => void;
   onFinishBattle: () => void;
+  onNextBossRushWave?: () => void;
   onOpenGearFromLoot: (itemId: string) => void;
 }
 
@@ -47,6 +48,7 @@ export function BattlePanel({
   onCycleSpeed,
   onCycleTactic,
   onFinishBattle,
+  onNextBossRushWave,
   onOpenGearFromLoot,
 }: BattlePanelProps) {
   const activeUnit = findBattleUnit(battle, battle.activeUid);
@@ -54,22 +56,45 @@ export function BattlePanel({
     battle.phase === 'player_input' &&
     Boolean(activeUnit?.isAlly) &&
     !settings.autoBattle;
+  const canSwiftAct =
+    battle.phase === 'player_input' && Boolean(activeUnit?.isAlly);
 
   const lastLogs = battle.logs.slice(-2);
 
   if (battle.phase === 'victory' && battle.reward) {
     const r = battle.reward;
+    const isBossRush = Boolean(battle.bossRushWave);
+    const hasNextWave = Boolean(battle.bossRushWave && battle.bossRushWave < 5);
+    const isBossRushClear = battle.bossRushWave === 5;
+
     return (
       <div className="panel-body">
-        <div className="rpg-card-gold" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="rpg-card-gold" style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span style={{ fontFamily: 'var(--font-pixel)', fontSize: 15, color: '#ffe570' }}>
-              ★ 戦闘勝利！
+            <span style={{ fontFamily: 'var(--font-pixel)', fontSize: 14, color: '#ffe570' }}>
+              {isBossRush ? `★ Wave ${battle.bossRushWave}/5 突破！` : '★ 戦闘勝利！'}
             </span>
             <span className="muted-text">
               EXP+{r.exp.toLocaleString()} / {r.gold.toLocaleString()}G / 💎石+{r.forgeStones}
             </span>
           </div>
+
+          {isBossRushClear && (
+            <div
+              style={{
+                background: 'linear-gradient(180deg, rgba(242, 178, 56, 0.35), rgba(168, 72, 24, 0.32))',
+                border: '1px solid #ffe570',
+                borderRadius: 6,
+                padding: '7px 8px',
+                fontFamily: 'var(--font-pixel)',
+                fontSize: 12,
+                color: '#fff6cc',
+                textAlign: 'center',
+              }}
+            >
+              🏆 ボスラッシュ全5Wave完全制覇！ミシック秘宝＆大量鍛冶石を獲得！
+            </div>
+          )}
 
           {r.worldTierUnlocked && (
             <div
@@ -79,7 +104,7 @@ export function BattlePanel({
                 borderRadius: 6,
                 padding: '6px 8px',
                 fontFamily: 'var(--font-pixel)',
-                fontSize: 13,
+                fontSize: 12,
                 color: '#fff2b3',
                 textAlign: 'center',
               }}
@@ -89,7 +114,7 @@ export function BattlePanel({
           )}
 
           {r.leveledUpIds.length > 0 && (
-            <div style={{ fontSize: 12, color: '#82ff9e', fontWeight: 700 }}>
+            <div style={{ fontSize: 11.5, color: '#82ff9e', fontWeight: 700 }}>
               LEVEL UP! {r.leveledUpIds.map((id) => getSpecies(id).name).join(' / ')}
             </div>
           )}
@@ -111,8 +136,8 @@ export function BattlePanel({
                       padding: '4px 8px',
                     }}
                   >
-                    <PixelIcon spriteKey={sp.spriteKey} size={26} />
-                    <div style={{ fontSize: 12 }}>
+                    <PixelIcon spriteKey={sp.spriteKey} size={24} />
+                    <div style={{ fontSize: 11.5 }}>
                       <strong style={{ color: '#99ffad' }}>
                         {sp.name}
                       </strong>{' '}
@@ -140,11 +165,11 @@ export function BattlePanel({
                     onClick={() => onOpenGearFromLoot(item.id)}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                      <PixelIcon spriteKey={item.iconKey} size={26} />
+                      <PixelIcon spriteKey={item.iconKey} size={24} />
                       <div style={{ minWidth: 0 }}>
                         <div
                           style={{
-                            fontSize: 12,
+                            fontSize: 11.5,
                             fontWeight: 700,
                             color: rm.color,
                             whiteSpace: 'nowrap',
@@ -160,7 +185,7 @@ export function BattlePanel({
                         </div>
                       </div>
                     </div>
-                    <span style={{ fontFamily: 'var(--font-pixel)', fontSize: 11, color: '#fff3c7' }}>
+                    <span style={{ fontFamily: 'var(--font-pixel)', fontSize: 10.5, color: '#fff3c7', flexShrink: 0 }}>
                       確認 ›
                     </span>
                   </button>
@@ -177,15 +202,38 @@ export function BattlePanel({
             </div>
           )}
 
-          <button
-            id="btn-battle-continue"
-            type="button"
-            className="rpg-btn primary"
-            style={{ width: '100%', padding: '10px' }}
-            onClick={onFinishBattle}
-          >
-            探索に戻る
-          </button>
+          {hasNextWave && onNextBossRushWave ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.5fr) minmax(0, 1fr)', gap: 5 }}>
+              <button
+                id="btn-boss-rush-next"
+                type="button"
+                className="rpg-btn primary"
+                style={{ padding: '9px 6px' }}
+                onClick={onNextBossRushWave}
+              >
+                🏟 次のWave ({(battle.bossRushWave ?? 1) + 1}/5) へ
+              </button>
+              <button
+                id="btn-battle-continue"
+                type="button"
+                className="rpg-btn"
+                style={{ padding: '9px 6px' }}
+                onClick={onFinishBattle}
+              >
+                撤退して村へ
+              </button>
+            </div>
+          ) : (
+            <button
+              id="btn-battle-continue"
+              type="button"
+              className="rpg-btn primary"
+              style={{ width: '100%', padding: '9px' }}
+              onClick={onFinishBattle}
+            >
+              {isBossRush ? '始まりの村へ凱旋する' : '探索に戻る'}
+            </button>
+          )}
         </div>
       </div>
     );
@@ -195,12 +243,14 @@ export function BattlePanel({
     return (
       <div className="panel-body">
         <div className="rpg-card-gold" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 15, color: '#ff8a8a' }}>
+          <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 14, color: '#ff8a8a' }}>
             {battle.phase === 'defeat' ? '☠ パーティは壊滅した…' : '戦闘から撤退した'}
           </div>
           <div className="muted-text">
             {battle.phase === 'defeat'
-              ? '装備・仲間・鍛冶石はそのまま残りますが、所持金の15%を落として村へ撤退します。装備強化や防御タイミングを見直して再挑戦しよう！'
+              ? battle.bossRushWave
+                ? `ボスラッシュ Wave ${battle.bossRushWave} で力尽きた… 獲得済み報酬はそのまま保持して村へ戻ります！`
+                : '装備・仲間・鍛冶石はそのまま残りますが、所持金の15%を落として村へ撤退します。装備強化・スキルツリー・防御を見直して再挑戦しよう！'
               : '安全に距離を取った。'}
           </div>
           <button
@@ -217,9 +267,11 @@ export function BattlePanel({
   }
 
   const chargingEnemy = battle.enemies.find((e) => e.hp > 0 && e.charging);
+  const limitPct = Math.max(0, Math.min(100, Math.round(battle.limitGauge)));
+  const limitReady = limitPct >= 100;
 
   return (
-    <div className="panel-body" style={{ gap: 5 }}>
+    <div className="panel-body" style={{ gap: 4 }}>
       {/* 4 Ally Status Strip */}
       <div className="battle-ally-strip">
         {battle.allies.map((ally) => {
@@ -241,7 +293,7 @@ export function BattlePanel({
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
-                      color: ally.poisonTurns > 0 ? '#e3a6ff' : undefined,
+                      color: ally.poisonTurns > 0 ? '#e3a6ff' : ally.evolved ? '#ffe878' : undefined,
                     }}
                   >
                     {ally.poisonTurns > 0 ? '☠' : ''}
@@ -280,16 +332,94 @@ export function BattlePanel({
             background: 'rgba(180, 32, 54, 0.35)',
             border: '1px solid #ff667a',
             borderRadius: 5,
-            padding: '3px 7px',
+            padding: '2px 6px',
             fontFamily: 'var(--font-pixel)',
-            fontSize: 10,
+            fontSize: 9.5,
             color: '#ffd1d8',
             textAlign: 'center',
           }}
         >
-          ⚠ {chargingEnemy.name}が大技溜め中！🛡防御(-65%)やバリアで耐えろ！
+          ⚠ {chargingEnemy.name}が大技溜め中！🛡防御(-65%)か⚡連携奥義でブレイク！
         </div>
       )}
+
+      {/* Limit Break Gauge + Free-Action Potions Strip */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1.35fr) auto auto',
+          gap: 4,
+          alignItems: 'center',
+        }}
+      >
+        {limitReady ? (
+          <button
+            id="btn-cmd-limit-break"
+            type="button"
+            className="rpg-btn sm primary"
+            disabled={!canSwiftAct}
+            onClick={() => onCommand({ type: 'limit_break' })}
+            style={{
+              padding: '3px 6px',
+              fontSize: 10,
+              boxShadow: '0 0 8px rgba(255, 224, 96, 0.55)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            ⚡ 連携奥義『ルーンユニゾン』発動！
+          </button>
+        ) : (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              background: 'rgba(18, 16, 28, 0.72)',
+              border: '1px solid rgba(130, 114, 168, 0.45)',
+              borderRadius: 5,
+              padding: '3px 6px',
+              minWidth: 0,
+            }}
+          >
+            <span style={{ fontSize: 9, fontFamily: 'var(--font-pixel)', color: '#ffe570', flexShrink: 0 }}>
+              ⚡連携 {limitPct}%
+            </span>
+            <div className="bar-track" style={{ flex: 1, height: 5 }}>
+              <div
+                style={{
+                  width: `${limitPct}%`,
+                  height: '100%',
+                  background: 'linear-gradient(90deg, #5cc8ff, #ffe566, #ff8ae0)',
+                  transition: 'width 0.18s ease',
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        <button
+          id="btn-cmd-hp-potion"
+          type="button"
+          className="rpg-btn sm emerald"
+          style={{ padding: '3px 6px', fontSize: 9.5, flexShrink: 0 }}
+          disabled={!canSwiftAct || battle.hpPotions <= 0}
+          onClick={() => onCommand({ type: 'use_hp_potion' })}
+        >
+          🧪HP薬({battle.hpPotions})
+        </button>
+        <button
+          id="btn-cmd-mp-potion"
+          type="button"
+          className="rpg-btn sm"
+          style={{ padding: '3px 6px', fontSize: 9.5, flexShrink: 0 }}
+          disabled={!canSwiftAct || battle.mpPotions <= 0}
+          onClick={() => onCommand({ type: 'use_mp_potion' })}
+        >
+          💧MP薬({battle.mpPotions})
+        </button>
+      </div>
 
       {/* Battle Toolbar: Auto / Speed / Tactic */}
       <div className="battle-toolbar">
@@ -325,10 +455,11 @@ export function BattlePanel({
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
-            maxWidth: '40%',
+            maxWidth: '38%',
           }}
         >
-          T{battle.turn} {activeUnit ? `▶${activeUnit.name}` : ''}
+          {battle.bossRushWave ? `W${battle.bossRushWave} ` : ''}T{battle.turn}{' '}
+          {activeUnit ? `▶${activeUnit.name}` : ''}
         </span>
       </div>
 

@@ -1,4 +1,6 @@
+import { getClaimedAchievementBonuses } from './achievements';
 import { getSpecies } from './data/monsters';
+import { computeSkillTreeBonuses } from './skillTree';
 import { computePartySynergies } from './synergy';
 import type {
   ActiveSetCount,
@@ -27,6 +29,29 @@ export function getCompendiumBonusPct(
   };
 }
 
+/**
+ * Monster Extreme Evolution (極進化):
+ * Requires Level 10+, and costs 15 Forge Stones if Awakening ★2+, or 35 Forge Stones otherwise!
+ */
+export function getEvolutionRequirement(unit: UnitInstance): {
+  minLevel: number;
+  stoneCost: number;
+  discounted: boolean;
+} {
+  const discounted = unit.awakening >= 2;
+  return {
+    minLevel: 10,
+    stoneCost: discounted ? 15 : 35,
+    discounted,
+  };
+}
+
+export function canEvolveMonster(unit: UnitInstance, forgeStones: number): boolean {
+  if (unit.id === 'hero' || unit.evolved) return false;
+  const req = getEvolutionRequirement(unit);
+  return unit.level >= req.minLevel && forgeStones >= req.stoneCost;
+}
+
 export function getEquippedItemsForUnit(
   unit: UnitInstance,
   inventoryMap: Map<string, EquipmentItem>,
@@ -53,6 +78,8 @@ export function computeUnitStats(
     | 'discoveredUniques'
     | 'partyIds'
     | 'roster'
+    | 'heroSkillTree'
+    | 'claimedAchievements'
   >,
   shrineBuffs?: ActiveShrineBuffs,
   inventoryMapOverride?: Map<string, EquipmentItem>,
@@ -63,38 +90,82 @@ export function computeUnitStats(
     inventoryMapOverride ?? new Map(save.inventory.map((it) => [it.id, it]));
   const equipped = getEquippedItemsForUnit(unit, invMap);
 
-  const awakenMult = 1 + unit.awakening * 0.08;
+  const isHero = unit.speciesId === 'hero';
+  const evolveMult = !isHero && unit.evolved ? 1.35 : 1.0;
+  const awakenMult = (1 + unit.awakening * 0.08) * evolveMult;
   const blessing = getWorldTierBlessing(save.maxUnlockedTier);
   const comp = getCompendiumBonusPct(
     save.discoveredMonsters.length,
     save.discoveredUniques.length,
   );
+  const ach = getClaimedAchievementBonuses(save);
   const syn = computePartySynergies(save);
+  const tree = computeSkillTreeBonuses(save);
+
+  const allyBondPct = isHero ? 0 : tree.allyMonsterAllStatPct;
 
   let flatHp = (sp.baseStats.hp + sp.growth.hp * (lvl - 1)) * awakenMult;
   let flatMp = (sp.baseStats.mp + sp.growth.mp * (lvl - 1)) * awakenMult;
   let flatAtk = (sp.baseStats.atk + sp.growth.atk * (lvl - 1)) * awakenMult;
   let flatMag = (sp.baseStats.mag + sp.growth.mag * (lvl - 1)) * awakenMult;
   let flatDef = (sp.baseStats.def + sp.growth.def * (lvl - 1)) * awakenMult;
-  let flatSpd = (sp.baseStats.spd + sp.growth.spd * (lvl - 1)) * (1 + unit.awakening * 0.03);
+  let flatSpd =
+    (sp.baseStats.spd + sp.growth.spd * (lvl - 1)) *
+    (1 + unit.awakening * 0.03) *
+    (unit.evolved ? 1.15 : 1);
 
-  let atkPct = (sp.passiveBonus.atkPct ?? 0) + comp.statPct + syn.atkPct;
-  let magPct = (sp.passiveBonus.magPct ?? 0) + comp.statPct + syn.magPct;
-  let defPct = (sp.passiveBonus.defPct ?? 0) + comp.statPct + syn.defPct;
-  let hpPct = (sp.passiveBonus.hpPct ?? 0) + comp.statPct + syn.hpPct;
+  let atkPct =
+    (sp.passiveBonus.atkPct ?? 0) +
+    comp.statPct +
+    ach.statPct +
+    syn.atkPct +
+    allyBondPct +
+    (isHero ? tree.heroAtkPct : 0);
+  let magPct =
+    (sp.passiveBonus.magPct ?? 0) +
+    comp.statPct +
+    ach.statPct +
+    syn.magPct +
+    allyBondPct +
+    (isHero ? tree.heroMagPct : 0);
+  let defPct =
+    (sp.passiveBonus.defPct ?? 0) +
+    comp.statPct +
+    ach.statPct +
+    syn.defPct +
+    allyBondPct +
+    (isHero ? tree.heroDefPct : 0);
+  let hpPct =
+    (sp.passiveBonus.hpPct ?? 0) +
+    comp.statPct +
+    ach.statPct +
+    syn.hpPct +
+    allyBondPct +
+    (isHero ? tree.heroHpPct : 0);
+
   let spdFlat = (sp.passiveBonus.spdFlat ?? 0) + syn.spdFlat;
-  let critRate = 6 + (sp.passiveBonus.critRate ?? 0) + syn.critRate;
-  let critDmg = 155;
-  let lifesteal = sp.passiveBonus.lifesteal ?? 0;
-  let doubleHit = sp.passiveBonus.doubleHit ?? 0;
+  let critRate =
+    6 + (sp.passiveBonus.critRate ?? 0) + syn.critRate + (isHero ? tree.heroCritRate : 0);
+  let critDmg = 155 + (isHero ? tree.heroCritDmg : 0);
+  let lifesteal = (sp.passiveBonus.lifesteal ?? 0) + (isHero ? tree.heroLifesteal : 0);
+  let doubleHit = (sp.passiveBonus.doubleHit ?? 0) + (isHero ? tree.heroDoubleHit : 0);
   let regenPct = (sp.passiveBonus.regenPct ?? 0) + syn.regenPct;
   let magicFind =
-    (sp.passiveBonus.magicFind ?? 0) + blessing.magicFindBonus + comp.mfBonus + syn.magicFind;
+    (sp.passiveBonus.magicFind ?? 0) +
+    blessing.magicFindBonus +
+    comp.mfBonus +
+    ach.mfBonus +
+    syn.magicFind +
+    (isHero ? tree.heroMagicFind : 0);
   let goldFind =
     (sp.passiveBonus.goldFind ?? 0) + blessing.goldBonusPct + syn.goldFind;
   let expFind = blessing.expBonusPct;
-  let stoneFind = 0;
+  let stoneFind = isHero ? tree.heroStoneFind : 0;
   let damageTakenMult = 1.0;
+
+  const skillPowerBonusPct = (isHero ? tree.heroSkillPowerBonusPct : 0) + (unit.evolved ? 25 : 0);
+  const weaknessBonusPct = isHero ? tree.heroWeaknessBonusPct : 0;
+  const mpRegenBonus = isHero ? tree.heroMpRegenBonus : 0;
 
   const uniqueEffects: UniqueEffectId[] = [];
   const setCounts = new Map<SetId, number>();
@@ -159,7 +230,6 @@ export function computeUnitStats(
     }
   }
 
-  // Apply 6 Equipment Set Bonuses (2pc & 4pc)
   const activeSets: ActiveSetCount[] = [];
   for (const [setId, count] of setCounts.entries()) {
     activeSets.push({ setId, count });
@@ -192,7 +262,6 @@ export function computeUnitStats(
   }
   activeSets.sort((a, b) => b.count - a.count);
 
-  // Unique passive stat boosts (all 26 uniques)
   if (uniqueEffects.includes('clover_luck')) goldFind += 40;
   if (uniqueEffects.includes('astral_compass')) critDmg += 45;
   if (uniqueEffects.includes('starlight_mantle')) damageTakenMult *= 0.85;
@@ -232,7 +301,6 @@ export function computeUnitStats(
     Math.round(flatMag * (1 + magPct / 100) * blessing.statMult * powerMult),
   );
 
-  // Stat-conversion uniques & sets
   if (uniqueEffects.includes('storm_bowblade')) {
     atk += Math.round(spd * 1.2);
   }
@@ -275,6 +343,9 @@ export function computeUnitStats(
     expFind,
     stoneFind,
     damageTakenMult,
+    skillPowerBonusPct,
+    weaknessBonusPct,
+    mpRegenBonus,
     uniqueEffects,
     activeSets,
     powerScore,

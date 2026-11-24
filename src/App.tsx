@@ -6,6 +6,7 @@ import { GameCanvas } from './components/GameCanvas';
 import { PartyPanel } from './components/PartyPanel';
 import { PixelIcon } from './components/PixelIcon';
 import { WorldPanel } from './components/WorldPanel';
+import { ACHIEVEMENT_MAP, getUnclaimedAchievements } from './game/achievements';
 import {
   createBattleState,
   executeTurnAction,
@@ -15,6 +16,7 @@ import {
   stepEnemyOrAutoTurn,
   type PlayerActionCommand,
 } from './game/battle';
+import { createBossRushEntity, getBossRushWave } from './game/bossRush';
 import { BIOMES, getBiomeForFloor } from './game/data/biomes';
 import {
   enhanceEquipment,
@@ -26,7 +28,7 @@ import {
   RARITY_META,
   rerollAffixSlot,
 } from './game/data/equipment';
-import { getSpecies } from './game/data/monsters';
+import { getSpecies, HERO_SPECIES } from './game/data/monsters';
 import {
   createDungeonExpedition,
   createVillageExpedition,
@@ -42,7 +44,19 @@ import {
   loadGameFromLocal,
   saveGameToLocal,
 } from './game/save';
-import { computeUnitStats, getPartyAggregatedLootBonuses } from './game/stats';
+import {
+  ALL_HERO_SKILLS,
+  canUpgradeSkillNode,
+  getAvailableSp,
+  getUnlockedHeroSkillIds,
+  SKILL_NODE_MAP,
+} from './game/skillTree';
+import {
+  canEvolveMonster,
+  computeUnitStats,
+  getEvolutionRequirement,
+  getPartyAggregatedLootBonuses,
+} from './game/stats';
 import type {
   ActiveShrineBuffs,
   AutoLootMode,
@@ -65,6 +79,8 @@ const EMPTY_SHRINE_BUFFS: ActiveShrineBuffs = {
   curseEnemyBonus: 0,
 };
 
+const INITIAL_RUN_POTIONS = { hp: 3, mp: 2 };
+
 export function App() {
   const [save, setSave] = useState<GameSave>(() => loadGameFromLocal() ?? createInitialSave());
   const [expedition, setExpedition] = useState<ExpeditionState>(() => createVillageExpedition());
@@ -75,10 +91,11 @@ export function App() {
   const [focusItemId, setFocusItemId] = useState<string | null>(null);
   const [selectedEnemyUid, setSelectedEnemyUid] = useState<string | null>(null);
   const [shrineBuffs, setShrineBuffs] = useState<ActiveShrineBuffs>(EMPTY_SHRINE_BUFFS);
+  const [runPotions, setRunPotions] = useState(INITIAL_RUN_POTIONS);
 
   const [autoAdvance, setAutoAdvance] = useState(false);
   const [toast, setToast] = useState<string | null>(
-    'コマンドを選んで迷宮を進もう！装備強化・OP再鍛造・セット効果も完備！',
+    'v4大型拡張！スキルツリー・⚡連携奥義・秘薬・極進化・ボスラッシュ闘技場が解禁！',
   );
 
   const toastTimerRef = useRef<number | null>(null);
@@ -137,6 +154,7 @@ export function App() {
       setBattle(null);
       setPendingAdvanceOnWin(false);
       setShrineBuffs(EMPTY_SHRINE_BUFFS);
+      setRunPotions(INITIAL_RUN_POTIONS);
       setExpedition(createVillageExpedition());
       setActiveTab('explore');
       setSave((prev) => {
@@ -149,7 +167,7 @@ export function App() {
         }
         return { ...prev, roster: nextRoster };
       });
-      showToast(msg ?? '始まりの村へ帰還し、全員の体力が全回復した！');
+      showToast(msg ?? '始まりの村へ帰還し、体力＆秘薬が全回復した！');
     },
     [showToast],
   );
@@ -341,7 +359,11 @@ export function App() {
             speciesIds: ['mimic'],
             interacted: false,
           };
-          const bState = createBattleState(save, entity, expedition.floor, shrineBuffs);
+          const bState = createBattleState(save, entity, expedition.floor, {
+            shrineBuffs,
+            hpPotions: runPotions.hp,
+            mpPotions: runPotions.mp,
+          });
           setSelectedEnemyUid(bState.enemies[0]?.uid ?? null);
           setPendingAdvanceOnWin(choice.advancesStep);
           setBattle(bState);
@@ -411,7 +433,11 @@ export function App() {
           setSave((prev) => ({
             ...prev,
             inventory: prev.inventory.map((i) => (i.id === targetItemId ? upgraded : i)),
-            stats: { ...prev.stats, totalForgeUpgrades: prev.stats.totalForgeUpgrades + 1 },
+            stats: {
+              ...prev.stats,
+              totalForgeUpgrades: prev.stats.totalForgeUpgrades + 1,
+              maxEnhanceReached: Math.max(prev.stats.maxEnhanceReached, upgraded.enhanceLevel),
+            },
           }));
           showToast(
             isBreakthrough
@@ -487,7 +513,11 @@ export function App() {
           speciesIds: choice.speciesIds,
           interacted: false,
         };
-        const bState = createBattleState(save, entity, expedition.floor, shrineBuffs);
+        const bState = createBattleState(save, entity, expedition.floor, {
+          shrineBuffs,
+          hpPotions: runPotions.hp,
+          mpPotions: runPotions.mp,
+        });
         setSelectedEnemyUid(bState.enemies[0]?.uid ?? null);
         setPendingAdvanceOnWin(choice.advancesStep);
         setBattle(bState);
@@ -503,6 +533,8 @@ export function App() {
       healAllParty,
       invMap,
       returnToVillage,
+      runPotions.hp,
+      runPotions.mp,
       save,
       shrineBuffs,
       showToast,
@@ -538,13 +570,16 @@ export function App() {
       if (next.phase === 'victory' && !next.reward) {
         const { nextSave, reward } = resolveBattleVictory(save, next, shrineBuffs);
         setSave(nextSave);
+        setRunPotions({ hp: next.hpPotions, mp: next.mpPotions });
         setBattle({ ...next, reward });
-        advanceExpeditionStep(
-          nextSave.worldTier,
-          next.isBossBattle,
-          false,
-          pendingAdvanceOnWin,
-        );
+        if (!next.bossRushWave) {
+          advanceExpeditionStep(
+            nextSave.worldTier,
+            next.isBossBattle,
+            false,
+            pendingAdvanceOnWin,
+          );
+        }
         return;
       }
       setBattle(next);
@@ -599,6 +634,21 @@ export function App() {
 
   const handleFinishBattle = useCallback(() => {
     if (!battle) return;
+    if (battle.bossRushWave) {
+      if (battle.phase === 'defeat') {
+        returnToVillage(
+          `🏟 ボスラッシュ Wave ${battle.bossRushWave} で力尽きた… 獲得済み報酬を保持して村へ帰還！`,
+        );
+      } else {
+        returnToVillage(
+          battle.bossRushWave === 5 && battle.phase === 'victory'
+            ? '🏆 ボスラッシュ全5Wave完全制覇！始まりの村へ凱旋した！'
+            : '🏟 ボスラッシュ闘技場から始まりの村へ帰還した！体力＆秘薬が全回復！',
+        );
+      }
+      return;
+    }
+
     if (battle.phase === 'defeat') {
       const lostGold = Math.floor(save.gold * 0.15);
       if (lostGold > 0) {
@@ -611,6 +661,7 @@ export function App() {
       );
       return;
     }
+    setRunPotions({ hp: battle.hpPotions, mp: battle.mpPotions });
     if (battle.phase === 'fled') {
       setSave((prev) => {
         const nextRoster = { ...prev.roster };
@@ -628,7 +679,9 @@ export function App() {
   }, [battle, returnToVillage, save.gold]);
 
   useEffect(() => {
-    if (!autoAdvance || !battle || battle.phase !== 'victory' || !battle.reward) return;
+    if (!autoAdvance || !battle || battle.bossRushWave || battle.phase !== 'victory' || !battle.reward) {
+      return;
+    }
     const delay = save.settings.battleSpeed === 4 ? 700 : 1200;
     const timer = window.setTimeout(() => {
       handleFinishBattle();
@@ -747,6 +800,7 @@ export function App() {
         stats: {
           ...prev.stats,
           totalForgeUpgrades: prev.stats.totalForgeUpgrades + 1,
+          maxEnhanceReached: Math.max(prev.stats.maxEnhanceReached, upgraded.enhanceLevel),
         },
       }));
       showToast(
@@ -848,6 +902,170 @@ export function App() {
     });
   }, []);
 
+  const handleUpgradeSkillNode = useCallback(
+    (nodeId: string) => {
+      if (!canUpgradeSkillNode(save, nodeId)) return;
+      const def = SKILL_NODE_MAP[nodeId];
+      if (!def) return;
+      const nextLv = (save.heroSkillTree[nodeId] ?? 0) + 1;
+      setSave((prev) => ({
+        ...prev,
+        heroSkillTree: {
+          ...prev.heroSkillTree,
+          [nodeId]: (prev.heroSkillTree[nodeId] ?? 0) + 1,
+        },
+      }));
+      if (def.unlocksSkillId) {
+        const sk = ALL_HERO_SKILLS[def.unlocksSkillId];
+        showToast(
+          `🌳 新スキル「${sk?.name ?? def.name}」解放！スキルツリーの装備枠にセットしよう！`,
+        );
+      } else {
+        showToast(`🌳 「${def.name}」Lv.${nextLv} を習得した！`);
+      }
+    },
+    [save, showToast],
+  );
+
+  const handleResetSkillTree = useCallback(() => {
+    if (!expedition.inVillage) return;
+    setSave((prev) => ({
+      ...prev,
+      heroSkillTree: {},
+      heroEquippedSkillIds: [HERO_SPECIES.skills[0].id, HERO_SPECIES.skills[1].id],
+    }));
+    showToast('🌳 スキルツリーを無料リセット！すべてのSPが返還された！');
+  }, [expedition.inVillage, showToast]);
+
+  const handleEquipHeroSkill = useCallback(
+    (slotIndex: 0 | 1, skillId: string) => {
+      const unlocked = getUnlockedHeroSkillIds(save);
+      if (!unlocked.includes(skillId)) return;
+      const sk = ALL_HERO_SKILLS[skillId];
+      setSave((prev) => {
+        const cur: [string, string] = [
+          prev.heroEquippedSkillIds[0] ?? HERO_SPECIES.skills[0].id,
+          prev.heroEquippedSkillIds[1] ?? HERO_SPECIES.skills[1].id,
+        ];
+        const otherIndex: 0 | 1 = slotIndex === 0 ? 1 : 0;
+        if (cur[otherIndex] === skillId) {
+          // Swap the two slots cleanly
+          const prevVal = cur[slotIndex];
+          cur[slotIndex] = skillId;
+          cur[otherIndex] = prevVal;
+        } else {
+          cur[slotIndex] = skillId;
+        }
+        return { ...prev, heroEquippedSkillIds: cur };
+      });
+      if (sk) {
+        showToast(`✦ 主人公のスキル枠${slotIndex + 1}に「${sk.name}」をセットした！`);
+      }
+    },
+    [save, showToast],
+  );
+
+  const handleEvolveMonster = useCallback(
+    (unitId: string) => {
+      const unit = save.roster[unitId];
+      if (!unit || !canEvolveMonster(unit, save.forgeStones)) return;
+      const req = getEvolutionRequirement(unit);
+      const sp = getSpecies(unit.speciesId);
+
+      setSave((prev) => {
+        const target = prev.roster[unitId];
+        if (!target || !canEvolveMonster(target, prev.forgeStones)) return prev;
+        const evolvedUnit = { ...target, evolved: true };
+        const nextSaveDraft: GameSave = {
+          ...prev,
+          forgeStones: prev.forgeStones - req.stoneCost,
+          roster: { ...prev.roster, [unitId]: evolvedUnit },
+          stats: {
+            ...prev.stats,
+            totalEvolutions: prev.stats.totalEvolutions + 1,
+          },
+        };
+        const st = computeUnitStats(evolvedUnit, nextSaveDraft);
+        nextSaveDraft.roster[unitId] = { ...evolvedUnit, hp: st.maxHp, mp: st.maxMp };
+        return nextSaveDraft;
+      });
+      showToast(
+        `✦ 【極進化】${sp.name}が黄金の輝きを纏い覚醒！（基礎能力+35% / スキル威力+25%）`,
+      );
+    },
+    [save.forgeStones, save.roster, showToast],
+  );
+
+  const handleClaimAchievement = useCallback(
+    (achId: string) => {
+      const def = ACHIEVEMENT_MAP[achId];
+      if (!def) return;
+      if (save.claimedAchievements.includes(achId)) return;
+      if (def.getValue(save) < def.target) return;
+
+      setSave((prev) => {
+        if (prev.claimedAchievements.includes(achId)) return prev;
+        return {
+          ...prev,
+          forgeStones: prev.forgeStones + def.rewardStones,
+          claimedAchievements: [...prev.claimedAchievements, achId],
+        };
+      });
+      showToast(
+        `🏆 実績「${def.title}」受取！💎石+${def.rewardStones} / SP+${def.rewardSp} / 恒久バフ解放！`,
+      );
+    },
+    [save, showToast],
+  );
+
+  const handleStartBossRush = useCallback(() => {
+    if (!expedition.inVillage || battle) return;
+    // Full heal party synchronously so Wave 1 starts at 100% HP/MP
+    const healedRoster = { ...save.roster };
+    const mapInv = new Map(save.inventory.map((it) => [it.id, it]));
+    for (const id of Object.keys(healedRoster)) {
+      const u = healedRoster[id]!;
+      const st = computeUnitStats(u, save, undefined, mapInv);
+      healedRoster[id] = { ...u, hp: st.maxHp, mp: st.maxMp };
+    }
+    const healedSave: GameSave = { ...save, roster: healedRoster };
+    setSave(healedSave);
+    setAutoAdvance(false);
+    setShrineBuffs(EMPTY_SHRINE_BUFFS);
+    setRunPotions(INITIAL_RUN_POTIONS);
+    setActiveTab('explore');
+
+    const waveDef = getBossRushWave(1);
+    const entity = createBossRushEntity(1);
+    const bState = createBattleState(healedSave, entity, waveDef.equivFloor, {
+      hpPotions: INITIAL_RUN_POTIONS.hp,
+      mpPotions: INITIAL_RUN_POTIONS.mp,
+      initialLimitGauge: 0,
+      bossRushWave: 1,
+    });
+    setSelectedEnemyUid(bState.enemies[0]?.uid ?? null);
+    setPendingAdvanceOnWin(false);
+    setBattle(bState);
+    showToast(`🏟 ボスラッシュ闘技場 開幕！Wave 1/5：${waveDef.title}`);
+  }, [battle, expedition.inVillage, save, showToast]);
+
+  const handleNextBossRushWave = useCallback(() => {
+    if (!battle || !battle.bossRushWave || battle.bossRushWave >= 5) return;
+    const nextWave = battle.bossRushWave + 1;
+    const waveDef = getBossRushWave(nextWave);
+    const entity = createBossRushEntity(nextWave);
+    const bState = createBattleState(save, entity, waveDef.equivFloor, {
+      hpPotions: battle.hpPotions,
+      mpPotions: battle.mpPotions,
+      initialLimitGauge: battle.limitGauge,
+      bossRushWave: nextWave,
+    });
+    setRunPotions({ hp: battle.hpPotions, mp: battle.mpPotions });
+    setSelectedEnemyUid(bState.enemies[0]?.uid ?? null);
+    setBattle(bState);
+    showToast(`🏟 ボスラッシュ Wave ${nextWave}/5 突入！${waveDef.title}`);
+  }, [battle, save, showToast]);
+
   const handleSelectWorldTier = useCallback(
     (tier: number) => {
       setSave((prev) => {
@@ -937,6 +1155,7 @@ export function App() {
       if (!res.ok) return { ok: false, error: res.error };
       setSave(res.save);
       setBattle(null);
+      setRunPotions(INITIAL_RUN_POTIONS);
       setExpedition(createVillageExpedition());
       setActiveTab('explore');
       showToast('セーブコードを復元しました！');
@@ -952,6 +1171,7 @@ export function App() {
     setBattle(null);
     setAutoAdvance(false);
     setShrineBuffs(EMPTY_SHRINE_BUFFS);
+    setRunPotions(INITIAL_RUN_POTIONS);
     setExpedition(createVillageExpedition());
     setActiveTab('explore');
     showToast('セーブデータを初期化しました。新たな冒険の始まり！');
@@ -962,6 +1182,8 @@ export function App() {
   const highestFloorThisTier = save.highestFloorByTier[save.worldTier] ?? 1;
   const defaultEntryFloor =
     highestFloorThisTier >= 6 ? Math.floor((highestFloorThisTier - 1) / 5) * 5 + 1 : 1;
+  const availableSp = getAvailableSp(save);
+  const unclaimedAchCount = useMemo(() => getUnclaimedAchievements(save).length, [save]);
 
   const quickCheckpoints: number[] = [1];
   for (let f = 6; f <= highestFloorThisTier; f += 5) {
@@ -975,7 +1197,11 @@ export function App() {
         <header className="top-hud">
           <div className="hud-location">
             <h1 className="hud-title">
-              {inVillage ? biomeDef.shortName : `${biomeDef.shortName} ${expedition.floor}F`}
+              {battle?.bossRushWave
+                ? `闘技場 W${battle.bossRushWave}/5`
+                : inVillage
+                  ? biomeDef.shortName
+                  : `${biomeDef.shortName} ${expedition.floor}F`}
             </h1>
             <span className="tier-badge">T{toRoman(save.worldTier)}</span>
             <span
@@ -1065,6 +1291,7 @@ export function App() {
                 })
               }
               onFinishBattle={handleFinishBattle}
+              onNextBossRushWave={handleNextBossRushWave}
               onOpenGearFromLoot={(itemId) => {
                 setAutoAdvance(false);
                 setFocusItemId(itemId);
@@ -1097,8 +1324,10 @@ export function App() {
                                   whiteSpace: 'nowrap',
                                   overflow: 'hidden',
                                   textOverflow: 'ellipsis',
+                                  color: u.evolved ? '#ffe878' : undefined,
                                 }}
                               >
+                                {u.evolved ? '極' : ''}
                                 {sp.name}
                               </div>
                               <div style={{ fontSize: 8.5, color: 'var(--accent-amber)' }}>
@@ -1118,24 +1347,44 @@ export function App() {
                   </div>
 
                   {inVillage ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
                       <button
                         id="btn-enter-labyrinth"
                         type="button"
                         className="choice-card stairs-choice"
                         onClick={() => enterDungeonFloor(defaultEntryFloor)}
                       >
-                        <PixelIcon spriteKey="hero" size={28} />
+                        <PixelIcon spriteKey="hero" size={26} />
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 13, color: '#eafff0' }}>
+                          <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 12.5, color: '#eafff0' }}>
                             ⚔ 迷宮へ出撃する（{defaultEntryFloor}F〜）
                           </div>
                           <div className="muted-text">
-                            コマンド選択でサクサク進行！装備厳選＆仲間集めへ
+                            コマンド選択で進行！秘薬(HP×3/MP×2)携帯済
                           </div>
                         </div>
                         <span className="choice-tag" style={{ background: '#2e8a4e' }}>
                           出撃
+                        </span>
+                      </button>
+
+                      <button
+                        id="btn-village-boss-rush"
+                        type="button"
+                        className="choice-card gold-choice"
+                        onClick={handleStartBossRush}
+                      >
+                        <PixelIcon spriteKey="void_herald" size={26} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 12, color: '#fff3bd' }}>
+                            🏟 ボスラッシュ闘技場（最高W{save.bossRushBestWave}/5）
+                          </div>
+                          <div className="muted-text">
+                            歴代ボス5連戦！全制覇でミシック装備確定
+                          </div>
+                        </div>
+                        <span className="choice-tag" style={{ background: '#b8701a' }}>
+                          5連戦
                         </span>
                       </button>
 
@@ -1160,7 +1409,7 @@ export function App() {
                           id="btn-village-heal"
                           type="button"
                           className="rpg-btn emerald"
-                          style={{ padding: '9px 6px' }}
+                          style={{ padding: '8px 6px' }}
                           onClick={() => healAllParty(1, false)}
                         >
                           💧 回復の泉
@@ -1168,15 +1417,15 @@ export function App() {
                         <button
                           type="button"
                           className="rpg-btn"
-                          style={{ padding: '9px 6px' }}
+                          style={{ padding: '8px 6px' }}
                           onClick={() => setActiveTab('party')}
                         >
-                          🐾 パーティ・牧場
+                          🌳 スキル・極進化{availableSp > 0 ? `(${availableSp})` : ''}
                         </button>
                         <button
                           type="button"
                           className="rpg-btn"
-                          style={{ padding: '9px 6px' }}
+                          style={{ padding: '8px 6px' }}
                           onClick={() => setActiveTab('gear')}
                         >
                           🔨 装備・鍛冶 ({save.inventory.length})
@@ -1184,10 +1433,10 @@ export function App() {
                         <button
                           type="button"
                           className="rpg-btn primary"
-                          style={{ padding: '9px 6px' }}
+                          style={{ padding: '8px 6px' }}
                           onClick={() => setActiveTab('world')}
                         >
-                          ✦ 世界ランク・商店
+                          ✦ 世界・商店・闘技場
                         </button>
                       </div>
                     </div>
@@ -1296,6 +1545,10 @@ export function App() {
                   shrineBuffs={shrineBuffs}
                   inVillage={inVillage}
                   onTogglePartyMember={handleTogglePartyMember}
+                  onEvolveMonster={handleEvolveMonster}
+                  onUpgradeSkillNode={handleUpgradeSkillNode}
+                  onResetSkillTree={handleResetSkillTree}
+                  onEquipHeroSkill={handleEquipHeroSkill}
                   onHealPartyInVillage={() => healAllParty(1, false)}
                 />
               )}
@@ -1331,7 +1584,12 @@ export function App() {
                 />
               )}
 
-              {activeTab === 'compendium' && <CompendiumPanel save={save} />}
+              {activeTab === 'compendium' && (
+                <CompendiumPanel
+                  save={save}
+                  onClaimAchievement={handleClaimAchievement}
+                />
+              )}
 
               {activeTab === 'world' && (
                 <WorldPanel
@@ -1339,6 +1597,7 @@ export function App() {
                   inVillage={inVillage}
                   onSelectWorldTier={handleSelectWorldTier}
                   onEnterDungeonFloor={enterDungeonFloor}
+                  onStartBossRush={handleStartBossRush}
                   onBuyShopItem={handleBuyShopItem}
                   onRefreshShop={handleRefreshShop}
                   onBuyMysteryBox={handleBuyMysteryBox}
@@ -1366,6 +1625,7 @@ export function App() {
                 >
                   <span>🐾</span>
                   <span>パーティ</span>
+                  {availableSp > 0 && <span className="tab-dot" />}
                 </button>
                 <button
                   id="tab-gear"
@@ -1384,7 +1644,8 @@ export function App() {
                   onClick={() => setActiveTab('compendium')}
                 >
                   <span>📖</span>
-                  <span>図鑑</span>
+                  <span>図鑑・実績</span>
+                  {unclaimedAchCount > 0 && <span className="tab-dot" />}
                 </button>
                 <button
                   id="tab-world"
