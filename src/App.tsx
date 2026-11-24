@@ -94,9 +94,7 @@ export function App() {
   const [runPotions, setRunPotions] = useState(INITIAL_RUN_POTIONS);
 
   const [autoAdvance, setAutoAdvance] = useState(false);
-  const [toast, setToast] = useState<string | null>(
-    'v4大型拡張！スキルツリー・⚡連携奥義・秘薬・極進化・ボスラッシュ闘技場が解禁！',
-  );
+  const [toast, setToast] = useState<string | null>(null);
 
   const toastTimerRef = useRef<number | null>(null);
 
@@ -140,8 +138,8 @@ export function App() {
       if (!silent) {
         showToast(
           ratio >= 1
-            ? '回復の泉の清らかな水で、パーティ全員のHP/MPが全回復した！'
-            : `焚き火で休息し、全員のHP/MPが${Math.round(ratio * 100)}%回復した！`,
+            ? '泉で全員のHP・MPが全回復した'
+            : `焚き火で全員のHP・MPが${Math.round(ratio * 100)}%回復した`,
         );
       }
     },
@@ -167,7 +165,7 @@ export function App() {
         }
         return { ...prev, roster: nextRoster };
       });
-      showToast(msg ?? '始まりの村へ帰還し、体力＆秘薬が全回復した！');
+      showToast(msg ?? '始まりの村へ帰還した');
     },
     [showToast],
   );
@@ -191,7 +189,7 @@ export function App() {
         },
       }));
       const b = BIOMES[getBiomeForFloor(targetFloor)];
-      showToast(`${b.name} ${targetFloor}F へ突入！（Tier ${toRoman(save.worldTier)}）`);
+      showToast(`${b.name} ${targetFloor}F・Tier ${toRoman(save.worldTier)}`);
     },
     [save.worldTier, showToast],
   );
@@ -300,13 +298,13 @@ export function App() {
       ) {
         if (choice.kind === 'shrine_heal') {
           healAllParty(1, true);
-          showToast('癒しの祠の祝福！パーティ全員のHP/MPが全回復した！');
+          showToast('癒しの祠・全員HP・MP全回復');
         } else if (choice.kind === 'shrine_power') {
           setShrineBuffs((b) => ({ ...b, powerBonus: Math.min(0.75, b.powerBonus + 0.25) }));
-          showToast('剛力の祠の祝福！この探索中、味方全体の攻撃・魔力+25%！');
+          showToast('剛力の祠・攻撃・魔力+25%');
         } else {
           setShrineBuffs((b) => ({ ...b, fortuneBonus: Math.min(240, b.fortuneBonus + 45) }));
-          showToast('幸運の祠の祝福！この探索中、トレハン（レア率）+45%！');
+          showToast('幸運の祠・トレハン+45%');
         }
         advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
         return;
@@ -339,7 +337,7 @@ export function App() {
         const stones = Math.round((8 + expedition.floor * 0.6) * (1 + (save.worldTier - 1) * 0.45));
         const res = grantLootItems([rewardItem], 0, stones, false);
         showToast(
-          `呪いの契約成立！MF+85%・💎石+${stones}・${res.kept[0] ? `[${RARITY_META[res.kept[0].rarity].label}]${res.kept[0].name}` : '装備'}獲得！`,
+          `呪いの契約・MF+85%・💎+${stones}・${res.kept[0] ? `${res.kept[0].name}` : '装備'}獲得`,
         );
         advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
         return;
@@ -355,7 +353,7 @@ export function App() {
             x: 0,
             y: 0,
             spriteKey: 'mimic',
-            name: '宝箱ミミック強襲！',
+            name: '宝箱ミミック',
             speciesIds: ['mimic'],
             interacted: false,
           };
@@ -367,7 +365,7 @@ export function App() {
           setSelectedEnemyUid(bState.enemies[0]?.uid ?? null);
           setPendingAdvanceOnWin(choice.advancesStep);
           setBattle(bState);
-          showToast('罠だ！宝箱が「宝箱ミミック」に姿を変えた！倒せば高レア確定級！');
+          showToast('宝箱ミミックが現れた');
           return;
         }
         // Jackpot Treasure!
@@ -379,7 +377,7 @@ export function App() {
         const bonusStones = Math.round((7 + expedition.floor * 0.4) * (1 + (save.worldTier - 1) * 0.4));
         const res = grantLootItems(items, bonusGold, bonusStones, true);
         showToast(
-          `大当たり秘宝！${res.kept[0] ? `[${RARITY_META[res.kept[0].rarity].label}]${res.kept[0].name}` : ''} 💎石+${bonusStones} ${bonusGold}G！`,
+          `秘宝獲得・${res.kept[0] ? res.kept[0].name : '装備'}・💎+${bonusStones}・${bonusGold}G`,
         );
         advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
         return;
@@ -399,11 +397,11 @@ export function App() {
           setSave((prev) => ({ ...prev, gold: Math.max(0, prev.gold - cost) }));
           const res = grantLootItems([item], 0, stones, false);
           showToast(
-            `行商人と取引！💎鍛冶石+${stones}＆${res.kept[0] ? `[${RARITY_META[res.kept[0].rarity].label}]${res.kept[0].name}` : '装備'}を購入！`,
+            `行商人から購入・💎+${stones}・${res.kept[0] ? res.kept[0].name : '装備'}`,
           );
         } else {
           healAllParty(0.4, true);
-          showToast('金貨が足りなかったが、行商人が薬草を分けてくれた（HP/MP 40%回復）！');
+          showToast('行商人から薬草を受け取った・HP・MP40%回復');
         }
         advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
         return;
@@ -441,13 +439,13 @@ export function App() {
           }));
           showToast(
             isBreakthrough
-              ? `旅の鍛冶師の妙技！${upgraded.name}が★+${upgraded.enhanceLevel}突破（全OP底上げ）！`
-              : `旅の鍛冶師が ${upgraded.name} を無料で +${upgraded.enhanceLevel} に鍛えてくれた！`,
+              ? `旅の鍛冶師・${upgraded.name}が★+${upgraded.enhanceLevel}突破`
+              : `旅の鍛冶師・${upgraded.name}を+${upgraded.enhanceLevel}へ強化`,
           );
         } else {
           const giftStones = 8 + save.worldTier * 3;
           setSave((prev) => ({ ...prev, forgeStones: prev.forgeStones + giftStones }));
-          showToast(`旅の鍛冶師から💎鍛冶石+${giftStones}をもらった！`);
+          showToast(`旅の鍛冶師から💎+${giftStones}を受け取った`);
         }
         advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
         return;
@@ -480,11 +478,13 @@ export function App() {
         const topItem = res.kept[0];
         if (topItem) {
           showToast(
-            `${isGold ? '黄金の宝箱' : '宝箱'}！[${RARITY_META[topItem.rarity].label}] ${topItem.name}・💎石+${bonusStones}・${bonusGold}G！`,
+            `${isGold ? '黄金箱' : '宝箱'}・${topItem.name}・💎+${bonusStones}・${bonusGold}G`,
           );
         } else {
           showToast(
-            `宝箱開封！（${res.mode === 'salvage' ? `自動分解→💎石+${bonusStones + res.autoStones}` : `自動売却→+${bonusGold + res.autoGold}G`}）`,
+            res.mode === 'salvage'
+              ? `宝箱・自動分解で💎+${bonusStones + res.autoStones}`
+              : `宝箱・自動売却で+${bonusGold + res.autoGold}G`,
           );
         }
         advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
@@ -636,14 +636,12 @@ export function App() {
     if (!battle) return;
     if (battle.bossRushWave) {
       if (battle.phase === 'defeat') {
-        returnToVillage(
-          `🏟 ボスラッシュ Wave ${battle.bossRushWave} で力尽きた… 獲得済み報酬を保持して村へ帰還！`,
-        );
+        returnToVillage(`闘技場 Wave ${battle.bossRushWave} で力尽きた`);
       } else {
         returnToVillage(
           battle.bossRushWave === 5 && battle.phase === 'victory'
-            ? '🏆 ボスラッシュ全5Wave完全制覇！始まりの村へ凱旋した！'
-            : '🏟 ボスラッシュ闘技場から始まりの村へ帰還した！体力＆秘薬が全回復！',
+            ? '🏆 ボスラッシュ全5Wave制覇'
+            : '始まりの村へ帰還した',
         );
       }
       return;
@@ -656,8 +654,8 @@ export function App() {
       }
       returnToVillage(
         lostGold > 0
-          ? `☠ 全滅…${lostGold.toLocaleString()}Gを失い始まりの村へ帰還した。装備を鍛えて再挑戦！`
-          : '☠ 全滅したため始まりの村へ帰還した。装備を鍛えて再挑戦！',
+          ? `全滅・${lostGold.toLocaleString()}Gを失い村へ帰還した`
+          : '全滅・始まりの村へ帰還した',
       );
       return;
     }
@@ -714,7 +712,7 @@ export function App() {
         };
         return { ...prev, roster: nextRoster };
       });
-      showToast('装備を変更した！');
+      showToast('装備を変更した');
     },
     [showToast],
   );
@@ -760,7 +758,7 @@ export function App() {
           inventory: prev.inventory.filter((i) => i.id !== itemId),
         };
       });
-      showToast('装備を売却した！');
+      showToast('装備を売却した');
     },
     [showToast],
   );
@@ -779,7 +777,7 @@ export function App() {
         forgeStones: prev.forgeStones + stones,
         inventory: prev.inventory.filter((i) => i.id !== itemId),
       }));
-      showToast(`装備を分解！💎鍛冶石 +${stones} を獲得！`);
+      showToast(`装備を分解・💎+${stones}`);
     },
     [save.inventory, save.roster, showToast],
   );
@@ -805,8 +803,8 @@ export function App() {
       }));
       showToast(
         isBreakthrough
-          ? `★ブレイクスルー！${upgraded.name} +${upgraded.enhanceLevel}（全OPが+25%底上げ！）`
-          : `🔨 鍛冶強化成功！${upgraded.name} +${upgraded.enhanceLevel}！`,
+          ? `★突破・${upgraded.name} +${upgraded.enhanceLevel}・全OP+25%`
+          : `🔨 ${upgraded.name} +${upgraded.enhanceLevel}`,
       );
     },
     [save.forgeStones, save.gold, save.inventory, showToast],
@@ -833,7 +831,7 @@ export function App() {
       }));
       if (newAffix) {
         showToast(
-          `🔄 OP再鍛造！「${newAffix.label}+${newAffix.value}${newAffix.isPercent ? '%' : ''}」に変化！`,
+          `🔄 再鍛造・${newAffix.label}+${newAffix.value}${newAffix.isPercent ? '%' : ''}`,
         );
       }
     },
@@ -865,7 +863,7 @@ export function App() {
       });
 
       if (count === 0) {
-        showToast('対象の未ロック・未装備アイテムがありません。');
+        showToast('対象の装備がない');
         return;
       }
 
@@ -877,8 +875,8 @@ export function App() {
       }));
       showToast(
         mode === 'salvage'
-          ? `${count}個の装備を一括分解 → 💎鍛冶石+${stoneGain}！`
-          : `${count}個の装備を一括売却 → +${goldGain.toLocaleString()}G！`,
+          ? `${count}点を分解 → 💎+${stoneGain}`
+          : `${count}点を売却 → +${goldGain.toLocaleString()}G`,
       );
     },
     [save.inventory, save.roster, showToast],
@@ -917,11 +915,9 @@ export function App() {
       }));
       if (def.unlocksSkillId) {
         const sk = ALL_HERO_SKILLS[def.unlocksSkillId];
-        showToast(
-          `🌳 新スキル「${sk?.name ?? def.name}」解放！スキルツリーの装備枠にセットしよう！`,
-        );
+        showToast(`🌳 スキル「${sk?.name ?? def.name}」解放`);
       } else {
-        showToast(`🌳 「${def.name}」Lv.${nextLv} を習得した！`);
+        showToast(`🌳 「${def.name}」Lv.${nextLv} 習得`);
       }
     },
     [save, showToast],
@@ -934,7 +930,7 @@ export function App() {
       heroSkillTree: {},
       heroEquippedSkillIds: [HERO_SPECIES.skills[0].id, HERO_SPECIES.skills[1].id],
     }));
-    showToast('🌳 スキルツリーを無料リセット！すべてのSPが返還された！');
+    showToast('🌳 スキルツリーをリセットした');
   }, [expedition.inVillage, showToast]);
 
   const handleEquipHeroSkill = useCallback(
@@ -959,7 +955,7 @@ export function App() {
         return { ...prev, heroEquippedSkillIds: cur };
       });
       if (sk) {
-        showToast(`✦ 主人公のスキル枠${slotIndex + 1}に「${sk.name}」をセットした！`);
+        showToast(`✦ 枠${slotIndex + 1}に「${sk.name}」をセットした`);
       }
     },
     [save, showToast],
@@ -989,9 +985,7 @@ export function App() {
         nextSaveDraft.roster[unitId] = { ...evolvedUnit, hp: st.maxHp, mp: st.maxMp };
         return nextSaveDraft;
       });
-      showToast(
-        `✦ 【極進化】${sp.name}が黄金の輝きを纏い覚醒！（基礎能力+35% / スキル威力+25%）`,
-      );
+      showToast(`✦ ${sp.name}が極進化した`);
     },
     [save.forgeStones, save.roster, showToast],
   );
@@ -1011,9 +1005,7 @@ export function App() {
           claimedAchievements: [...prev.claimedAchievements, achId],
         };
       });
-      showToast(
-        `🏆 実績「${def.title}」受取！💎石+${def.rewardStones} / SP+${def.rewardSp} / 恒久バフ解放！`,
-      );
+      showToast(`🏆 実績「${def.title}」・💎+${def.rewardStones} / SP+${def.rewardSp}`);
     },
     [save, showToast],
   );
@@ -1046,7 +1038,7 @@ export function App() {
     setSelectedEnemyUid(bState.enemies[0]?.uid ?? null);
     setPendingAdvanceOnWin(false);
     setBattle(bState);
-    showToast(`🏟 ボスラッシュ闘技場 開幕！Wave 1/5：${waveDef.title}`);
+    showToast(`🏟 ${waveDef.title}`);
   }, [battle, expedition.inVillage, save, showToast]);
 
   const handleNextBossRushWave = useCallback(() => {
@@ -1063,7 +1055,7 @@ export function App() {
     setRunPotions({ hp: battle.hpPotions, mp: battle.mpPotions });
     setSelectedEnemyUid(bState.enemies[0]?.uid ?? null);
     setBattle(bState);
-    showToast(`🏟 ボスラッシュ Wave ${nextWave}/5 突入！${waveDef.title}`);
+    showToast(`🏟 ${waveDef.title}`);
   }, [battle, save, showToast]);
 
   const handleSelectWorldTier = useCallback(
@@ -1080,7 +1072,7 @@ export function App() {
           shopRefreshedAtTier: tier,
         };
       });
-      showToast(`世界ランクを Tier ${toRoman(tier)} に切り替えた！`);
+      showToast(`世界ランク Tier ${toRoman(tier)}`);
     },
     [showToast],
   );
@@ -1103,7 +1095,7 @@ export function App() {
           discoveredUniques: Array.from(uniques),
         };
       });
-      showToast(`${target.name} を購入した！`);
+      showToast(`${target.name}を購入した`);
     },
     [save.gold, save.shopItems, showToast],
   );
@@ -1120,7 +1112,7 @@ export function App() {
         shopItems: generateShopInventory(highest, prev.worldTier, mf),
       };
     });
-    showToast('商店の品揃えを更新した！');
+    showToast('品揃えを更新した');
   }, [save.gold, save.worldTier, showToast]);
 
   const handleBuyMysteryBox = useCallback(() => {
@@ -1146,7 +1138,7 @@ export function App() {
       };
     });
     setFocusItemId(item.id);
-    showToast(`ミステリー箱から [${RARITY_META[item.rarity].label}] ${item.name} が出現！`);
+    showToast(`ミステリー箱・${item.name}`);
   }, [save, showToast]);
 
   const handleImportSave = useCallback(
@@ -1158,7 +1150,7 @@ export function App() {
       setRunPotions(INITIAL_RUN_POTIONS);
       setExpedition(createVillageExpedition());
       setActiveTab('explore');
-      showToast('セーブコードを復元しました！');
+      showToast('セーブコードを復元した');
       return { ok: true };
     },
     [showToast],
@@ -1174,7 +1166,7 @@ export function App() {
     setRunPotions(INITIAL_RUN_POTIONS);
     setExpedition(createVillageExpedition());
     setActiveTab('explore');
-    showToast('セーブデータを初期化しました。新たな冒険の始まり！');
+    showToast('セーブデータを初期化した');
   }, [showToast]);
 
   const biomeDef = BIOMES[expedition.biome];
@@ -1357,10 +1349,10 @@ export function App() {
                         <PixelIcon spriteKey="hero" size={26} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 12.5, color: '#eafff0' }}>
-                            ⚔ 迷宮へ出撃する（{defaultEntryFloor}F〜）
+                            ⚔ 迷宮へ出撃・{defaultEntryFloor}F〜
                           </div>
                           <div className="muted-text">
-                            コマンド選択で進行！秘薬(HP×3/MP×2)携帯済
+                            秘薬×3・霊薬×2を携帯
                           </div>
                         </div>
                         <span className="choice-tag" style={{ background: '#2e8a4e' }}>
@@ -1377,10 +1369,10 @@ export function App() {
                         <PixelIcon spriteKey="void_herald" size={26} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 12, color: '#fff3bd' }}>
-                            🏟 ボスラッシュ闘技場（最高W{save.bossRushBestWave}/5）
+                            🏟 ボスラッシュ闘技場
                           </div>
                           <div className="muted-text">
-                            歴代ボス5連戦！全制覇でミシック装備確定
+                            最高 W{save.bossRushBestWave}/5・全制覇でミシック確定
                           </div>
                         </div>
                         <span className="choice-tag" style={{ background: '#b8701a' }}>
@@ -1420,7 +1412,7 @@ export function App() {
                           style={{ padding: '8px 6px' }}
                           onClick={() => setActiveTab('party')}
                         >
-                          🌳 スキル・極進化{availableSp > 0 ? `(${availableSp})` : ''}
+                          🌳 スキル・極進化{availableSp > 0 ? ` SP${availableSp}` : ''}
                         </button>
                         <button
                           type="button"
@@ -1428,7 +1420,7 @@ export function App() {
                           style={{ padding: '8px 6px' }}
                           onClick={() => setActiveTab('gear')}
                         >
-                          🔨 装備・鍛冶 ({save.inventory.length})
+                          🔨 装備・鍛冶 {save.inventory.length}
                         </button>
                         <button
                           type="button"
@@ -1454,8 +1446,8 @@ export function App() {
                           }}
                         >
                           {expedition.step >= expedition.maxSteps && !expedition.bossDefeated
-                            ? `${expedition.floor}F 階層ボス出現！`
-                            : `進むルート (${expedition.step}/${expedition.maxSteps})`}
+                            ? `${expedition.floor}F 階層ボス`
+                            : `ルート選択 ${expedition.step}/${expedition.maxSteps}`}
                         </span>
                         <button
                           id="btn-auto-advance"

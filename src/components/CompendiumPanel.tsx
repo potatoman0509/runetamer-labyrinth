@@ -64,14 +64,14 @@ export function CompendiumPanel({ save, onClaimAchievement }: CompendiumPanelPro
           className={`rpg-btn sm ${subTab === 'monsters' ? 'primary' : ''}`}
           onClick={() => setSubTab('monsters')}
         >
-          魔物 ({save.discoveredMonsters.length})
+          魔物 {save.discoveredMonsters.length}
         </button>
         <button
           type="button"
           className={`rpg-btn sm ${subTab === 'uniques' ? 'primary' : ''}`}
           onClick={() => setSubTab('uniques')}
         >
-          固有 ({save.discoveredUniques.length})
+          固有 {save.discoveredUniques.length}
         </button>
         <button
           id="btn-subtab-achievements"
@@ -79,7 +79,7 @@ export function CompendiumPanel({ save, onClaimAchievement }: CompendiumPanelPro
           className={`rpg-btn sm ${subTab === 'achievements' ? 'primary' : unclaimedList.length > 0 ? 'emerald' : ''}`}
           onClick={() => setSubTab('achievements')}
         >
-          🏆実績{unclaimedList.length > 0 ? `(${unclaimedList.length}!)` : `(${claimedSet.size})`}
+          🏆実績 {unclaimedList.length > 0 ? `+${unclaimedList.length}` : claimedSet.size}
         </button>
       </div>
 
@@ -188,10 +188,10 @@ export function CompendiumPanel({ save, onClaimAchievement }: CompendiumPanelPro
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {found ? `★${u.name}` : `？？？ (${SLOT_LABELS[u.slot]} / T${u.minTier}+)`}
+                    {found ? `★${u.name}` : `？？？・${SLOT_LABELS[u.slot]}・T${u.minTier}+`}
                   </div>
                   <div style={{ fontSize: 9.5, color: found ? '#fff2bd' : 'var(--text-dim)', lineHeight: 1.25 }}>
-                    {found ? u.desc : 'レジェンド・ミシック装備ドロップで発見'}
+                    {found ? u.desc : '未発見の固有装備'}
                   </div>
                 </div>
               </div>
@@ -226,11 +226,11 @@ export function CompendiumPanel({ save, onClaimAchievement }: CompendiumPanelPro
                       {ach.title}
                     </strong>
                     <span className="muted-text" style={{ fontSize: 9 }}>
-                      ({Math.min(val, ach.target)}/{ach.target})
+                      {Math.min(val, ach.target)}/{ach.target}
                     </span>
                   </div>
                   <div style={{ fontSize: 9.5, color: 'var(--text-muted)', lineHeight: 1.25 }}>
-                    {ach.desc} ・ 永続:全能力+{ach.permStatPct}%/MF+{ach.permMf}%
+                    {ach.desc}・全能力+{ach.permStatPct}% / MF+{ach.permMf}%
                   </div>
                   <div className="bar-track" style={{ marginTop: 3, height: 4 }}>
                     <div

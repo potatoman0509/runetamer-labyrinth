@@ -62,20 +62,20 @@ export function WorldPanel({
     const code = exportSaveCode(save);
     try {
       await navigator.clipboard.writeText(code);
-      setExportMsg('セーブコードをクリップボードにコピーしました！');
+      setExportMsg('セーブコードをコピーした');
     } catch {
       setImportText(code);
-      setExportMsg('下の欄にセーブコードを出力しました（全選択してコピーしてください）。');
+      setExportMsg('下の欄へ出力した。コピーして保存してください。');
     }
   };
 
   const handleImport = () => {
     const res = onImportSaveCode(importText);
     if (res.ok) {
-      setImportMsg('セーブデータを復元しました！');
+      setImportMsg('セーブデータを復元した');
       setImportText('');
     } else {
-      setImportMsg(res.error ?? '復元に失敗しました');
+      setImportMsg(res.error ?? '復元に失敗した');
     }
   };
 
@@ -122,14 +122,14 @@ export function WorldPanel({
           <div className="rpg-card-gold" style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             <div className="section-heading">
               <span>世界ランクの祭壇</span>
-              <span>最大: Tier {toRoman(save.maxUnlockedTier)}</span>
+              <span>最大 Tier {toRoman(save.maxUnlockedTier)}</span>
             </div>
             <div style={{ fontSize: 10.5, color: '#fff2bd', lineHeight: 1.35 }}>
-              恒久加護: 全能力 <strong>+{Math.round((blessing.statMult - 1) * 100)}%</strong> / MF{' '}
+              恒久加護：全能力 <strong>+{Math.round((blessing.statMult - 1) * 100)}%</strong> / MF{' '}
               <strong>+{blessing.magicFindBonus}%</strong> / EXP <strong>+{blessing.expBonusPct}%</strong>
             </div>
             <div className="muted-text">
-              リセット無し！最大Tier（Tier {toRoman(save.maxUnlockedTier)}）の20Fボス撃破で次ランク解放。
+              最大Tierの20Fボス撃破で次ランク解放
             </div>
 
             {/* Tier Selector */}
@@ -151,13 +151,13 @@ export function WorldPanel({
               })}
             </div>
             {!inVillage && (
-              <div className="muted-text">※世界ランク変更・階層ワープは「始まりの村」で行えます。</div>
+              <div className="muted-text">変更とワープは村でのみ可能</div>
             )}
           </div>
 
           <div className="rpg-card" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div className="section-heading">
-              <span>選択中: {activeMods.label}</span>
+              <span>{activeMods.label}</span>
               <span>iLv +{activeMods.itemLevelBonus}</span>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 8px', fontSize: 10.5 }}>
@@ -171,7 +171,7 @@ export function WorldPanel({
           {/* Checkpoint Fast Entry */}
           <div className="rpg-card" style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             <div className="section-heading">
-              <span>迷宮ワープ ({activeMods.label})</span>
+              <span>迷宮ワープ</span>
               <span>最高 {highestInActiveTier}F</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 4 }}>
@@ -194,7 +194,7 @@ export function WorldPanel({
                     disabled={!inVillage}
                     onClick={() => onEnterDungeonFloor(fl)}
                   >
-                    {fl}F({b})
+                    {fl}F {b}
                   </button>
                 );
               })}
@@ -207,11 +207,11 @@ export function WorldPanel({
         <>
           <div className="rpg-card-gold" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div className="section-heading">
-              <span>🏟 ボスラッシュ闘技場 ({activeMods.label})</span>
-              <span style={{ color: '#82ff9e' }}>最高: W{save.bossRushBestWave}/5</span>
+              <span>🏟 ボスラッシュ闘技場</span>
+              <span style={{ color: '#82ff9e' }}>最高 W{save.bossRushBestWave}/5</span>
             </div>
             <div className="muted-text" style={{ lineHeight: 1.35 }}>
-              歴代4大ボス＋EX財宝連合に挑む全5連戦サバイバル！HP・MP・秘薬・⚡連携ゲージを引き継いで戦い抜こう。全制覇でミシック装備確定！
+              歴代ボス5連戦。HP・MP・秘薬・連携ゲージを引き継ぐ。全制覇でミシック確定。
             </div>
             <button
               id="btn-start-boss-rush"
@@ -221,11 +221,11 @@ export function WorldPanel({
               disabled={!inVillage}
               onClick={onStartBossRush}
             >
-              ⚔ ボスラッシュ闘技場へ挑戦！
+              ⚔ 闘技場へ挑む
             </button>
             {!inVillage && (
               <div className="muted-text" style={{ textAlign: 'center' }}>
-                ※「始まりの村」にいる時のみ挑戦できます。
+                村でのみ挑戦可能
               </div>
             )}
           </div>
@@ -271,7 +271,7 @@ export function WorldPanel({
                       flexShrink: 0,
                     }}
                   >
-                    {cleared ? '✓制覇' : `相当${w.equivFloor}F`}
+                    {cleared ? '✓制覇' : `${w.equivFloor}F相当`}
                   </span>
                 </div>
               );
@@ -285,9 +285,9 @@ export function WorldPanel({
           <div className="rpg-card-gold" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, minWidth: 0 }}>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 11.5, color: '#ffe570' }}>
-                秘宝ミステリー箱 (R〜M)
+                秘宝ミステリー箱
               </div>
-              <div className="muted-text">最高階層＆世界ランク基準で1点生成</div>
+              <div className="muted-text">到達階層に応じたレア以上装備を1点生成</div>
             </div>
             <button
               type="button"
@@ -301,7 +301,7 @@ export function WorldPanel({
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-            <span className="section-heading">本日の掘り出し物</span>
+            <span className="section-heading">掘り出し物</span>
             <button
               type="button"
               className="rpg-btn sm"
@@ -309,7 +309,7 @@ export function WorldPanel({
               disabled={save.gold < refreshCost}
               onClick={onRefreshShop}
             >
-              更新 ({refreshCost}G)
+              更新 {refreshCost}G
             </button>
           </div>
 
@@ -357,7 +357,7 @@ export function WorldPanel({
             })}
             {save.shopItems.length === 0 && (
               <div className="muted-text" style={{ textAlign: 'center', padding: 8 }}>
-                完売しました。「更新」で補充できます。
+                完売
               </div>
             )}
           </div>
@@ -367,33 +367,33 @@ export function WorldPanel({
       {section === 'save' && (
         <>
           <div className="rpg-card" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 5, fontSize: 10 }}>
-            <div>累計討伐: <strong>{save.stats.totalKills.toLocaleString()}</strong></div>
-            <div>ボス撃破: <strong>{save.stats.totalBossKills.toLocaleString()}</strong></div>
-            <div>宝箱開封: <strong>{save.stats.totalChestsOpened.toLocaleString()}</strong></div>
-            <div>獲得装備: <strong>{save.stats.totalItemsLooted.toLocaleString()}</strong></div>
-            <div>ミシック: <strong style={{ color: '#ff7084' }}>{save.stats.totalMythicsFound}</strong></div>
-            <div>最高階層: <strong>{save.stats.highestFloorReached}F</strong></div>
-            <div>鍛冶強化: <strong>{save.stats.totalForgeUpgrades}回 (最大+{save.stats.maxEnhanceReached})</strong></div>
-            <div>OP再鍛造: <strong>{save.stats.totalRerolls}回</strong></div>
-            <div>極進化: <strong>{save.stats.totalEvolutions}体</strong></div>
-            <div>闘技場制覇: <strong>{save.stats.bossRushClears}回 (W{save.bossRushBestWave})</strong></div>
+            <div>累計討伐：<strong>{save.stats.totalKills.toLocaleString()}</strong></div>
+            <div>ボス撃破：<strong>{save.stats.totalBossKills.toLocaleString()}</strong></div>
+            <div>宝箱開封：<strong>{save.stats.totalChestsOpened.toLocaleString()}</strong></div>
+            <div>獲得装備：<strong>{save.stats.totalItemsLooted.toLocaleString()}</strong></div>
+            <div>ミシック：<strong style={{ color: '#ff7084' }}>{save.stats.totalMythicsFound}</strong></div>
+            <div>最高階層：<strong>{save.stats.highestFloorReached}F</strong></div>
+            <div>鍛冶強化：<strong>{save.stats.totalForgeUpgrades}回・最大+{save.stats.maxEnhanceReached}</strong></div>
+            <div>OP再鍛造：<strong>{save.stats.totalRerolls}回</strong></div>
+            <div>極進化：<strong>{save.stats.totalEvolutions}体</strong></div>
+            <div>闘技場制覇：<strong>{save.stats.bossRushClears}回・最高W{save.bossRushBestWave}</strong></div>
           </div>
 
           <div className="rpg-card" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div className="section-heading">
-              <span>セーブデータ引き継ぎ（完全ローカル完結）</span>
+              <span>セーブデータ引継ぎ</span>
             </div>
             <div className="muted-text">
-              進行状況はブラウザへ自動保存されます。別端末への移行やバックアップにはセーブコードを使ってください。
+              自動保存対応。コードで別端末へ移行できます。
             </div>
             <button type="button" className="rpg-btn sm primary" onClick={handleCopyExport}>
-              セーブコードを出力・コピー
+              セーブコードをコピー
             </button>
             {exportMsg && <div style={{ fontSize: 11, color: '#82ff9e' }}>{exportMsg}</div>}
 
             <textarea
               className="save-textarea"
-              placeholder="RTL1:... で始まるセーブコードをここに貼り付け"
+              placeholder="RTL1:... のセーブコードを貼り付け"
               value={importText}
               onChange={(e) => setImportText(e.target.value)}
             />
@@ -403,13 +403,13 @@ export function WorldPanel({
               disabled={!importText.trim()}
               onClick={handleImport}
             >
-              コードからセーブ復元
+              コードから復元
             </button>
             {importMsg && <div style={{ fontSize: 11, color: '#ffe570' }}>{importMsg}</div>}
           </div>
 
           <div className="rpg-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span className="muted-text">最初からやり直す</span>
+            <span className="muted-text">セーブ初期化</span>
             {confirmReset ? (
               <div style={{ display: 'flex', gap: 5 }}>
                 <button
@@ -420,14 +420,14 @@ export function WorldPanel({
                     setConfirmReset(false);
                   }}
                 >
-                  本当に初期化
+                  初期化する
                 </button>
                 <button
                   type="button"
                   className="rpg-btn sm"
                   onClick={() => setConfirmReset(false)}
                 >
-                  キャンセル
+                  戻る
                 </button>
               </div>
             ) : (
@@ -436,7 +436,7 @@ export function WorldPanel({
                 className="rpg-btn sm danger"
                 onClick={() => setConfirmReset(true)}
               >
-                データ初期化
+                初期化
               </button>
             )}
           </div>

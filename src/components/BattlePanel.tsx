@@ -72,10 +72,10 @@ export function BattlePanel({
         <div className="rpg-card-gold" style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <span style={{ fontFamily: 'var(--font-pixel)', fontSize: 14, color: '#ffe570' }}>
-              {isBossRush ? `★ Wave ${battle.bossRushWave}/5 突破！` : '★ 戦闘勝利！'}
+              {isBossRush ? `★ Wave ${battle.bossRushWave}/5 突破` : '★ 戦闘勝利'}
             </span>
             <span className="muted-text">
-              EXP+{r.exp.toLocaleString()} / {r.gold.toLocaleString()}G / 💎石+{r.forgeStones}
+              EXP+{r.exp.toLocaleString()} / {r.gold.toLocaleString()}G / 💎+{r.forgeStones}
             </span>
           </div>
 
@@ -92,7 +92,7 @@ export function BattlePanel({
                 textAlign: 'center',
               }}
             >
-              🏆 ボスラッシュ全5Wave完全制覇！ミシック秘宝＆大量鍛冶石を獲得！
+              🏆 ボスラッシュ全5Wave制覇・ミシック装備獲得
             </div>
           )}
 
@@ -109,13 +109,13 @@ export function BattlePanel({
                 textAlign: 'center',
               }}
             >
-              世界ランク Tier {toRoman(r.worldTierUnlocked)} 解放！村の祭壇で昇格できます！
+              世界ランク Tier {toRoman(r.worldTierUnlocked)} 解放
             </div>
           )}
 
           {r.leveledUpIds.length > 0 && (
             <div style={{ fontSize: 11.5, color: '#82ff9e', fontWeight: 700 }}>
-              LEVEL UP! {r.leveledUpIds.map((id) => getSpecies(id).name).join(' / ')}
+              LEVEL UP {r.leveledUpIds.map((id) => getSpecies(id).name).join(' / ')}
             </div>
           )}
 
@@ -142,8 +142,8 @@ export function BattlePanel({
                         {sp.name}
                       </strong>{' '}
                       {rec.isNew
-                        ? 'が仲間になった！'
-                        : `が覚醒！ (★+${rec.newAwakening} 全能力+8%)`}
+                        ? 'が仲間になった'
+                        : `が覚醒 ★+${rec.newAwakening}`}
                     </div>
                   </div>
                 );
@@ -153,7 +153,7 @@ export function BattlePanel({
 
           {r.items.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div className="muted-text">獲得装備（タップで装備画面へ）</div>
+              <div className="muted-text">獲得装備</div>
               {r.items.map((item) => {
                 const rm = RARITY_META[item.rarity];
                 return (
@@ -181,12 +181,12 @@ export function BattlePanel({
                         </div>
                         <div className="muted-text">
                           iLv.{item.itemLevel} {rm.label}
-                          {item.uniqueDesc ? ` / 固有効果` : ''}
+                          {item.uniqueDesc ? ` / 固有` : ''}
                         </div>
                       </div>
                     </div>
                     <span style={{ fontFamily: 'var(--font-pixel)', fontSize: 10.5, color: '#fff3c7', flexShrink: 0 }}>
-                      確認 ›
+                      装備 ›
                     </span>
                   </button>
                 );
@@ -197,8 +197,8 @@ export function BattlePanel({
           {r.autoProcessedCount > 0 && (
             <div className="muted-text">
               {r.autoProcessedMode === 'salvage'
-                ? `自動分解: ${r.autoProcessedCount}個 → 💎鍛冶石+${r.autoSalvagedStones}`
-                : `自動売却: ${r.autoProcessedCount}個 → +${r.autoSoldGold.toLocaleString()}G`}
+                ? `自動分解 ${r.autoProcessedCount}点 → 💎+${r.autoSalvagedStones}`
+                : `自動売却 ${r.autoProcessedCount}点 → +${r.autoSoldGold.toLocaleString()}G`}
             </div>
           )}
 
@@ -211,7 +211,7 @@ export function BattlePanel({
                 style={{ padding: '9px 6px' }}
                 onClick={onNextBossRushWave}
               >
-                🏟 次のWave ({(battle.bossRushWave ?? 1) + 1}/5) へ
+                🏟 Wave {(battle.bossRushWave ?? 1) + 1}/5 へ
               </button>
               <button
                 id="btn-battle-continue"
@@ -220,7 +220,7 @@ export function BattlePanel({
                 style={{ padding: '9px 6px' }}
                 onClick={onFinishBattle}
               >
-                撤退して村へ
+                村へ撤退
               </button>
             </div>
           ) : (
@@ -231,7 +231,7 @@ export function BattlePanel({
               style={{ width: '100%', padding: '9px' }}
               onClick={onFinishBattle}
             >
-              {isBossRush ? '始まりの村へ凱旋する' : '探索に戻る'}
+              {isBossRush ? '始まりの村へ戻る' : '探索に戻る'}
             </button>
           )}
         </div>
@@ -244,13 +244,13 @@ export function BattlePanel({
       <div className="panel-body">
         <div className="rpg-card-gold" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 14, color: '#ff8a8a' }}>
-            {battle.phase === 'defeat' ? '☠ パーティは壊滅した…' : '戦闘から撤退した'}
+            {battle.phase === 'defeat' ? '☠ 全滅した' : '戦闘から撤退した'}
           </div>
           <div className="muted-text">
             {battle.phase === 'defeat'
               ? battle.bossRushWave
-                ? `ボスラッシュ Wave ${battle.bossRushWave} で力尽きた… 獲得済み報酬はそのまま保持して村へ戻ります！`
-                : '装備・仲間・鍛冶石はそのまま残りますが、所持金の15%を落として村へ撤退します。装備強化・スキルツリー・防御を見直して再挑戦しよう！'
+                ? `Wave ${battle.bossRushWave} で力尽きた。獲得報酬を持って村へ戻る。`
+                : '所持金の15%を失い、始まりの村へ戻る。'
               : '安全に距離を取った。'}
           </div>
           <button
@@ -339,7 +339,7 @@ export function BattlePanel({
             textAlign: 'center',
           }}
         >
-          ⚠ {chargingEnemy.name}が大技溜め中！🛡防御(-65%)か⚡連携奥義でブレイク！
+          ⚠ {chargingEnemy.name}が大技を溜めている
         </div>
       )}
 
@@ -368,7 +368,7 @@ export function BattlePanel({
               textOverflow: 'ellipsis',
             }}
           >
-            ⚡ 連携奥義『ルーンユニゾン』発動！
+            ⚡ 連携奥義『ルーンユニゾン』
           </button>
         ) : (
           <div
@@ -407,7 +407,7 @@ export function BattlePanel({
           disabled={!canSwiftAct || battle.hpPotions <= 0}
           onClick={() => onCommand({ type: 'use_hp_potion' })}
         >
-          🧪HP薬({battle.hpPotions})
+          🧪HP薬×{battle.hpPotions}
         </button>
         <button
           id="btn-cmd-mp-potion"
@@ -417,7 +417,7 @@ export function BattlePanel({
           disabled={!canSwiftAct || battle.mpPotions <= 0}
           onClick={() => onCommand({ type: 'use_mp_potion' })}
         >
-          💧MP薬({battle.mpPotions})
+          💧MP薬×{battle.mpPotions}
         </button>
       </div>
 
@@ -484,7 +484,7 @@ export function BattlePanel({
               <span>⚔ たたかう</span>
               <span style={{ fontSize: 9, color: '#9ee8ad', flexShrink: 0 }}>MP0</span>
             </span>
-            <span className="cmd-desc">選択中の敵を通常攻撃</span>
+            <span className="cmd-desc">通常攻撃</span>
           </button>
 
           {activeUnit.skills.map((sk, idx) => {
@@ -524,7 +524,7 @@ export function BattlePanel({
               disabled={!canPlayerAct}
               onClick={() => onCommand({ type: 'defend' })}
             >
-              🛡防御-65%
+              🛡防御
             </button>
             <button
               id="btn-cmd-flee"
@@ -539,7 +539,7 @@ export function BattlePanel({
         </div>
       ) : (
         <div className="rpg-card" style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-muted)' }}>
-          {settings.autoBattle ? 'オート戦闘進行中…' : '敵の行動中…'}
+          {settings.autoBattle ? 'オート戦闘中' : '敵の行動中'}
         </div>
       )}
     </div>

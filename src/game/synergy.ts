@@ -68,7 +68,7 @@ export function computePartySynergies(
     const tier = elemCounts.nature >= 3 ? 2 : 1;
     active.push({
       id: 'elem_nature',
-      name: `森の共鳴(${elemCounts.nature})`,
+      name: `森の共鳴 ${elemCounts.nature}`,
       desc: `HP+${tier * 12}% / 毎T再生+${tier * 3}%`,
       color: '#4ea854',
       hpPct: tier * 12,
@@ -79,7 +79,7 @@ export function computePartySynergies(
     const tier = elemCounts.earth >= 3 ? 2 : 1;
     active.push({
       id: 'elem_earth',
-      name: `大地の共鳴(${elemCounts.earth})`,
+      name: `大地の共鳴 ${elemCounts.earth}`,
       desc: `防御+${tier * 16}% / 開幕盾+${tier * 8}%`,
       color: '#9e7c52',
       defPct: tier * 16,
@@ -90,7 +90,7 @@ export function computePartySynergies(
     const tier = elemCounts.fire >= 3 ? 2 : 1;
     active.push({
       id: 'elem_fire',
-      name: `紅蓮の共鳴(${elemCounts.fire})`,
+      name: `紅蓮の共鳴 ${elemCounts.fire}`,
       desc: `攻撃+${tier * 12}% / 会心+${tier * 5}%`,
       color: '#d95338',
       atkPct: tier * 12,
@@ -101,7 +101,7 @@ export function computePartySynergies(
     const tier = elemCounts.star >= 3 ? 2 : 1;
     active.push({
       id: 'elem_star',
-      name: `星辰の共鳴(${elemCounts.star})`,
+      name: `星辰の共鳴 ${elemCounts.star}`,
       desc: `魔力+${tier * 14}% / 素早さ+${tier * 4}`,
       color: '#4888d6',
       magPct: tier * 14,
@@ -112,7 +112,7 @@ export function computePartySynergies(
     const tier = elemCounts.holy >= 3 ? 2 : 1;
     active.push({
       id: 'elem_holy',
-      name: `聖光の共鳴(${elemCounts.holy})`,
+      name: `聖光の共鳴 ${elemCounts.holy}`,
       desc: `MF+${tier * 18}% / 金貨+${tier * 20}%`,
       color: '#d9a42b',
       magicFind: tier * 18,

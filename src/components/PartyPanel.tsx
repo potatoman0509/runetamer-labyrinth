@@ -86,7 +86,7 @@ export function PartyPanel({
           className={`rpg-btn sm ${subTab === 'party' ? 'primary' : ''}`}
           onClick={() => setSubTab('party')}
         >
-          🐾 パーティ・極進化
+          🐾 パーティ
         </button>
         <button
           id="btn-subtab-skilltree"
@@ -94,14 +94,14 @@ export function PartyPanel({
           className={`rpg-btn sm ${subTab === 'tree' ? 'primary' : ''}`}
           onClick={() => setSubTab('tree')}
         >
-          🌳 スキルツリー (SP:{availableSp})
+          🌳 スキル SP{availableSp}
         </button>
       </div>
 
       {subTab === 'party' ? (
         <>
           <div className="section-heading">
-            <span>出撃パーティ ({save.partyIds.length}/4)</span>
+            <span>出撃パーティ {save.partyIds.length}/4</span>
             {inVillage && onHealPartyInVillage && (
               <button
                 type="button"
@@ -116,7 +116,7 @@ export function PartyPanel({
           {/* Party Formation Synergies */}
           <div className="rpg-card" style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             <div style={{ fontSize: 10, fontFamily: 'var(--font-pixel)', color: '#ffe570' }}>
-              ✦ パーティ編成シナジー
+              ✦ 編成シナジー
             </div>
             {synergies.active.length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -138,7 +138,7 @@ export function PartyPanel({
               </div>
             ) : (
               <div className="muted-text">
-                同属性2体以上や「前衛＋火力＋支援」バランス編成で強力なパーティバフが発動！
+                同属性や役割の組み合わせでシナジー発動
               </div>
             )}
           </div>
@@ -197,8 +197,8 @@ export function PartyPanel({
                         }}
                       >
                         {isMonster && u.evolved
-                          ? '極進化済(基礎能力+35% / スキル威力+25%)'
-                          : `${sp.passiveName}（${sp.passiveDesc}）`}
+                          ? '極進化：全能力+35%・スキル+25%'
+                          : `${sp.passiveName}：${sp.passiveDesc}`}
                       </div>
                     </div>
                     {isMonster && (
@@ -208,13 +208,13 @@ export function PartyPanel({
                             type="button"
                             className={`rpg-btn sm ${canEvo ? 'primary' : ''}`}
                             disabled={!canEvo}
-                            title={evoReq.discounted ? '★+2以上割引適用' : 'Lv10以上＋鍛冶石で極進化'}
+                            title={evoReq.discounted ? '★+2割引' : 'Lv10以上と鍛冶石で極進化'}
                             onClick={() => onEvolveMonster(pid)}
                             style={{ fontSize: 9.5, padding: '2px 5px' }}
                           >
                             {u.level < evoReq.minLevel
-                              ? `極(Lv${evoReq.minLevel})`
-                              : `✦極(💎${evoReq.stoneCost})`}
+                              ? `Lv${evoReq.minLevel}〜`
+                              : `✦極 💎${evoReq.stoneCost}`}
                           </button>
                         )}
                         <button
@@ -252,8 +252,8 @@ export function PartyPanel({
 
           {/* Monster Ranch Roster */}
           <div className="section-heading" style={{ marginTop: 2 }}>
-            <span>モンスター牧場 ({ownedMonsters.length}体)</span>
-            <span className="muted-text">Lv10+＆💎石で極進化！</span>
+            <span>モンスター牧場 {ownedMonsters.length}体</span>
+            <span className="muted-text">Lv10から極進化</span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -343,7 +343,7 @@ export function PartyPanel({
                   主人公スキルツリー
                 </div>
                 <div style={{ fontSize: 10, color: '#fff2bd' }}>
-                  残りSP: <strong style={{ color: '#82ff9e', fontSize: 12 }}>{availableSp}</strong> / 累計 {totalSp}
+                  残りSP <strong style={{ color: '#82ff9e', fontSize: 12 }}>{availableSp}</strong> / 累計 {totalSp}
                 </div>
               </div>
               <button
@@ -353,19 +353,19 @@ export function PartyPanel({
                 disabled={!inVillage || spentSp === 0}
                 onClick={onResetSkillTree}
               >
-                SP無料リセット
+                SPリセット
               </button>
             </div>
             <div className="muted-text">
-              主人公LvUP・世界ランク解放・実績達成でSP獲得！村でいつでも振り直し可能。
+              LvUP・世界ランク・実績でSP獲得。村で無料リセット可。
             </div>
           </div>
 
           {/* Equipped Hero Skill Slots (2 active slots) */}
           <div className="rpg-card" style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             <div className="section-heading">
-              <span>装備中スキル (2枠)</span>
-              <span className="muted-text">解放済 {unlockedSkillIds.length}/8</span>
+              <span>装備中スキル</span>
+              <span className="muted-text">解放 {unlockedSkillIds.length}/8</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 4 }}>
               {([0, 1] as const).map((slotIdx) => {
@@ -382,7 +382,7 @@ export function PartyPanel({
                     }}
                   >
                     <div style={{ fontSize: 9, color: '#ffe570', fontFamily: 'var(--font-pixel)' }}>
-                      枠{slotIdx + 1} (MP{sk.mpCost})
+                      枠{slotIdx + 1}・MP{sk.mpCost}
                     </div>
                     <div
                       style={{
@@ -480,7 +480,7 @@ export function PartyPanel({
                   onClick={() => setBranch(b)}
                   style={{ fontSize: 10 }}
                 >
-                  {meta.label} ({pts})
+                  {meta.label} {pts}
                 </button>
               );
             })}

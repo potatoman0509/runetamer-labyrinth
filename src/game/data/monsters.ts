@@ -30,7 +30,7 @@ export const HERO_SPECIES: MonsterSpecies = {
       statScale: 'hybrid',
       kind: 'damage',
       critBonus: 10,
-      description: 'ルーンの光を宿した斬撃（攻撃＋魔力依存・会心+10%）',
+      description: '攻撃＋魔力依存・会心+10%の光斬撃',
     },
     {
       id: 'tamer_command',
@@ -770,7 +770,7 @@ export const MONSTER_LIST: MonsterSpecies[] = [
         statScale: 'hybrid',
         kind: 'damage',
         critBonus: 15,
-        description: '星光を纏う一閃（攻撃＋魔力依存）',
+        description: '攻撃＋魔力依存の星光斬撃',
       },
       {
         id: 'astral_guard',

@@ -287,14 +287,14 @@ export function createBattleState(
     phase: 'animating',
     logs: [
       bossRushWave
-        ? `🏟 ボスラッシュ闘技場 ${getBossRushWave(bossRushWave).title} 開幕！`
+        ? `🏟 ${getBossRushWave(bossRushWave).title}`
         : isBossBattle
-          ? `☠ 凶悪な階層ボス「${enemies.find((e) => e.isBoss)?.name ?? entity.name}」が殺気を放つ！大技予告に防御・連携奥義を合わせろ！`
+          ? `☠ 階層ボス「${enemies.find((e) => e.isBoss)?.name ?? entity.name}」が現れた`
           : isRareBattle
-            ? `✦ 希少強敵「${enemies[0]?.name}」と遭遇！全力で仕留めろ！`
+            ? `✦ 希少魔物「${enemies[0]?.name}」が現れた`
             : isEliteBattle
-              ? `★ 黄金の殺気を纏う強敵の群れが襲いかかる！`
-              : `${enemies[0]?.name ?? '魔物'}の群れが立ち塞がった！`,
+              ? `★ 強敵の群れが現れた`
+              : `${enemies[0]?.name ?? '魔物'}の群れが現れた`,
     ],
     floatingTexts: [],
     vfx: [],
@@ -414,7 +414,7 @@ function applyDamage(
 
   if (!defender.isAlly && defender.isBoss && !defender.enraged && defender.hp > 0 && defender.hp / defender.maxHp <= 0.5) {
     defender.enraged = true;
-    state.logs.push(`🔥 ${defender.name}が激昂した！（火力+25%＆確率で2回行動！）`);
+    state.logs.push(`🔥 ${defender.name}が激昂した`);
     state.floatingTexts.push({
       id: nextEffectId(),
       targetUid: defender.uid,
@@ -797,7 +797,7 @@ export function executeTurnAction(
         applyHealing(state, a, Math.round(a.maxHp * 0.45), false, true);
       }
     }
-    state.logs.push(`🧪 回復の秘薬を使用！味方全体のHP45%回復＆毒浄化！（残り${state.hpPotions}）`);
+    state.logs.push(`🧪 回復の秘薬で全員回復・残${state.hpPotions}`);
     return state;
   }
 
@@ -823,7 +823,7 @@ export function executeTurnAction(
         });
       }
     }
-    state.logs.push(`💧 魔力の霊薬を使用！味方全体のMP50%回復！（残り${state.mpPotions}）`);
+    state.logs.push(`💧 魔力の霊薬で全員MP回復・残${state.mpPotions}`);
     return state;
   }
 
@@ -865,13 +865,13 @@ export function executeTurnAction(
     }
 
     state.logs.push(
-      `⚡ 連携必殺『ルーンユニゾン』発動！計${totalDmg}ダメージ＋全体回復＆盾${brokeCount > 0 ? '＋大技ブレイク!!' : '！'}`,
+      `⚡ ルーンユニゾン発動！計${totalDmg}ダメージ${brokeCount > 0 ? '・大技ブレイク' : ''}`,
     );
 
     if (state.enemies.every((e) => e.hp <= 0)) {
       state.phase = 'victory';
       state.activeUid = null;
-      state.logs.push('連携必殺で魔物の群れを一掃した！');
+      state.logs.push('魔物の群れを一掃した');
     }
     return state;
   }
@@ -889,11 +889,11 @@ export function executeTurnAction(
 
   if (action.type === 'flee' && actor.isAlly) {
     if (state.isBossBattle) {
-      state.logs.push('ボス戦からは逃げられない！');
+      state.logs.push('ボス戦からは逃げられない');
       advanceToNextActor(state);
       return state;
     }
-    state.logs.push('パーティは素早く撤退した！');
+    state.logs.push('戦闘から撤退した');
     state.phase = 'fled';
     state.activeUid = null;
     return state;
@@ -904,7 +904,7 @@ export function executeTurnAction(
     actor.poisonTurns = 0;
     actor.mp = Math.min(actor.maxMp, actor.mp + 14);
     if (actor.isAlly) state.limitGauge = Math.min(100, state.limitGauge + 18);
-    state.logs.push(`${actor.name}は鉄壁の防御を固めた！（被ダメ-65%・MP+14・連携+18%）`);
+    state.logs.push(`${actor.name}は身を固めた`);
     state.vfx.push({
       id: nextEffectId(),
       targetUid: actor.uid,
@@ -917,7 +917,7 @@ export function executeTurnAction(
 
   if (action.type === 'enemy_charge' && !actor.isAlly) {
     actor.charging = true;
-    state.logs.push(`⚠ ${actor.name}が凄まじい魔力を収束している！次ターン壊滅大技（防御・連携奥義で対処！）`);
+    state.logs.push(`⚠ ${actor.name}が凄まじい魔力を溜めている`);
     state.floatingTexts.push({
       id: nextEffectId(),
       targetUid: actor.uid,
@@ -957,11 +957,11 @@ export function executeTurnAction(
         t.poisonTurns = Math.max(t.poisonTurns, 3);
       }
     }
-    state.logs.push(`💥 ${actor.name}の壊滅奥義が炸裂！味方全体に計${totalDmg}ダメージ！`);
+    state.logs.push(`💥 ${actor.name}の奥義が炸裂！計${totalDmg}ダメージ`);
     if (state.allies.every((a) => a.hp <= 0)) {
       state.phase = 'defeat';
       state.activeUid = null;
-      state.logs.push('パーティは壊滅した…村へ帰還します。');
+      state.logs.push('パーティは全滅した');
       return state;
     }
     advanceToNextActor(state);
@@ -988,7 +988,7 @@ export function executeTurnAction(
       );
       const dealt = applyDamage(state, actor, target, amount, 'physical', isCrit, isWeak);
       state.logs.push(
-        `${actor.name}の攻撃！${target.name}に${dealt}ダメージ${isWeak ? '（WEAK!）' : isCrit ? '（会心！）' : ''}`,
+        `${actor.name}の攻撃・${target.name}に${dealt}ダメージ${isWeak ? ' WEAK' : isCrit ? ' 会心' : ''}`,
       );
 
       if (actor.uniqueEffects.includes('sunblade_heal')) {
@@ -1000,7 +1000,7 @@ export function executeTurnAction(
       if (isCrit && actor.uniqueEffects.includes('echo_crit_rune') && target.hp > 0) {
         const echoDmg = Math.max(1, Math.round(amount * 0.5));
         const eDealt = applyDamage(state, actor, target, echoDmg, 'star', false);
-        state.logs.push(`連撃ルーン発動！さらに${eDealt}追撃！`);
+        state.logs.push(`連撃ルーン・${eDealt}追撃`);
       }
 
       const extraChance =
@@ -1008,7 +1008,7 @@ export function executeTurnAction(
       if (target.hp > 0 && Math.random() * 100 < extraChance) {
         const extra = calcDamageNumber(actor, target, 0.72, 'atk', elem, false, false);
         const xDealt = applyDamage(state, actor, target, extra.amount, 'physical', extra.isCrit, extra.isWeak);
-        state.logs.push(`${actor.name}の追撃！${target.name}に${xDealt}ダメージ！`);
+        state.logs.push(`${actor.name}の追撃・${target.name}に${xDealt}ダメージ`);
       }
     }
   } else if (action.type === 'skill') {
@@ -1042,7 +1042,7 @@ export function executeTurnAction(
           true,
         );
       }
-      state.logs.push(`${actor.name}の「${skill.name}」！味方のHP回復＆毒を浄化！`);
+      state.logs.push(`${actor.name}の「${skill.name}」・味方を回復`);
     } else if (skill.kind === 'shield') {
       const targets = skill.target === 'all_allies' ? livingFriends : [actor];
       const shieldAmt = Math.max(
@@ -1065,7 +1065,7 @@ export function executeTurnAction(
           createdAt: now,
         });
       }
-      state.logs.push(`${actor.name}の「${skill.name}」！強固なバリアを展開！`);
+      state.logs.push(`${actor.name}の「${skill.name}」・バリア展開`);
     } else if (skill.kind === 'buff_atk' || skill.kind === 'buff_def') {
       const targets = skill.target === 'all_allies' ? livingFriends : [actor];
       for (const t of targets) {
@@ -1093,7 +1093,7 @@ export function executeTurnAction(
           createdAt: now,
         });
       }
-      state.logs.push(`${actor.name}の「${skill.name}」！味方全体が強化された！`);
+      state.logs.push(`${actor.name}の「${skill.name}」・味方を強化`);
     } else {
       const isAoE = skill.target === 'all_enemies';
       const targets = isAoE
@@ -1176,7 +1176,7 @@ export function executeTurnAction(
       }
 
       state.logs.push(
-        `${actor.name}の「${skill.name}」！計${totalDmg}ダメージ${hadWeak ? '（WEAK!）' : hadCrit ? '（会心！）' : ''}`,
+        `${actor.name}の「${skill.name}」・計${totalDmg}ダメージ${hadWeak ? ' WEAK' : hadCrit ? ' 会心' : ''}`,
       );
     }
   }
@@ -1184,13 +1184,13 @@ export function executeTurnAction(
   if (state.enemies.every((e) => e.hp <= 0)) {
     state.phase = 'victory';
     state.activeUid = null;
-    state.logs.push('死闘の末、魔物の群れを撃破した！');
+    state.logs.push('魔物の群れを撃破した');
     return state;
   }
   if (state.allies.every((a) => a.hp <= 0)) {
     state.phase = 'defeat';
     state.activeUid = null;
-    state.logs.push('パーティは全滅した…村へ帰還します。');
+    state.logs.push('パーティは全滅した');
     return state;
   }
 
@@ -1203,7 +1203,7 @@ export function executeTurnAction(
     Math.random() < 0.35
   ) {
     state.turnQueue.unshift(actor.uid);
-    state.logs.push(`🔥 ${actor.name}の怒りの2回行動！`);
+    state.logs.push(`🔥 ${actor.name}の2回行動`);
   }
 
   advanceToNextActor(state);

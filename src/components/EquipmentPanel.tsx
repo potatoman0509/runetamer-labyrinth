@@ -294,12 +294,12 @@ export function EquipmentPanel({
                 )}
               </div>
               <div style={{ fontSize: 9.5, color: 'var(--text-muted)' }}>
-                {SLOT_LABELS[selectedItem.slot]} iLv.{selectedItem.itemLevel} (T{selectedItem.worldTier}) 評価
+                {SLOT_LABELS[selectedItem.slot]} iLv.{selectedItem.itemLevel} T{selectedItem.worldTier} 評価
                 {calculateItemScore(selectedItem)}
                 {!isEquippedBySelectedUnit && scoreDiff !== 0 && (
                   <span className={scoreDiff > 0 ? 'stat-diff-pos' : 'stat-diff-neg'}>
                     {' '}
-                    ({scoreDiff > 0 ? `▲+${scoreDiff}` : `▼${scoreDiff}`})
+                    {scoreDiff > 0 ? `▲+${scoreDiff}` : `▼${scoreDiff}`}
                   </span>
                 )}
               </div>
@@ -364,7 +364,7 @@ export function EquipmentPanel({
                 })}
               </div>
               <div style={{ fontSize: 8.5, color: 'var(--text-dim)' }}>
-                ※OPをタップ選択すると1枠だけ再鍛造できます（+5/+10/+15で全OP底上げ！）
+                OP選択で1枠再鍛造・+5/+10/+15で全OP強化
               </div>
             </div>
           )}
@@ -381,7 +381,7 @@ export function EquipmentPanel({
                 borderRadius: 3,
               }}
             >
-              ★固有: {selectedItem.uniqueDesc}
+              ★固有：{selectedItem.uniqueDesc}
             </div>
           )}
 
@@ -399,11 +399,11 @@ export function EquipmentPanel({
                 {enhanceCost.isBreakthrough
                   ? `★突破+${selectedItem.enhanceLevel + 1}`
                   : `🔨強化+${selectedItem.enhanceLevel + 1}`}{' '}
-                (石{enhanceCost.stones}/{enhanceCost.gold}G)
+                💎{enhanceCost.stones} {enhanceCost.gold}G
               </button>
             ) : (
               <button type="button" className="rpg-btn sm" style={{ flex: 1 }} disabled>
-                ★強化MAX (+15)
+                ★強化MAX +15
               </button>
             )}
 
@@ -425,7 +425,7 @@ export function EquipmentPanel({
                 }}
               >
                 {validAffixIdx !== null
-                  ? `🔄再鍛造(石${rerollCost.stones}/${rerollCost.gold}G)`
+                  ? `🔄再鍛造 💎${rerollCost.stones} ${rerollCost.gold}G`
                   : '🔄OP選択で再鍛造'}
               </button>
             )}
@@ -466,7 +466,7 @@ export function EquipmentPanel({
               disabled={selectedItem.locked || Boolean(ownerOfSelected)}
               onClick={() => onSalvageItem(selectedItem.id)}
             >
-              分解+{salvageStones}石
+              分解+{salvageStones}💎
             </button>
             <button
               type="button"
@@ -487,7 +487,7 @@ export function EquipmentPanel({
           className={`pill-chip ${slotFilter === 'all' ? 'active' : ''}`}
           onClick={() => setSlotFilter('all')}
         >
-          全({save.inventory.length})
+          全 {save.inventory.length}
         </button>
         {SLOTS.map((s) => (
           <button
@@ -524,21 +524,21 @@ export function EquipmentPanel({
           className="rpg-btn sm"
           onClick={() => onBulkProcess('uncommon', 'salvage')}
         >
-          UC以下一括分解
+          UC以下分解
         </button>
         <button
           type="button"
           className="rpg-btn sm"
           onClick={() => onBulkProcess('rare', 'salvage')}
         >
-          R以下一括分解
+          R以下分解
         </button>
         <button
           type="button"
           className="rpg-btn sm"
           onClick={() => onBulkProcess('rare', 'sell')}
         >
-          R以下一括売却
+          R以下売却
         </button>
       </div>
 
@@ -592,8 +592,8 @@ export function EquipmentPanel({
                     }}
                   >
                     {SLOT_LABELS[item.slot]} iLv.{item.itemLevel}
-                    {item.setId ? ` [${SET_MAP[item.setId].name}]` : ''}
-                    {ownerId ? ` (${getSpecies(ownerId).name})` : ''}
+                    {item.setId ? `・${SET_MAP[item.setId].name}` : ''}
+                    {ownerId ? `・${getSpecies(ownerId).name}` : ''}
                   </div>
                 </div>
               </div>
@@ -613,7 +613,7 @@ export function EquipmentPanel({
         })}
         {filteredItems.length === 0 && (
           <div className="muted-text" style={{ textAlign: 'center', padding: 10 }}>
-            該当する装備がありません。迷宮で掘り出しましょう！
+            該当する装備がない
           </div>
         )}
       </div>

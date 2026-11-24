@@ -54,13 +54,13 @@ export const BOSS_RUSH_WAVES: BossRushWaveDef[] = [
   },
   {
     wave: 5,
-    title: 'Wave 5 (EX)：虚無の使徒＆財宝連合',
+    title: 'Wave 5 EX：虚無の使徒＆財宝連合',
     biome: 'abyss',
     equivFloor: 25,
     speciesIds: ['void_herald', 'gold_slime', 'mimic'],
     leadSprite: 'void_herald',
     bonusStones: 60,
-    rewardHint: '鍛冶石+60 / ミシック装備確定！',
+    rewardHint: '鍛冶石+60 / ミシック確定',
   },
 ];
 
