@@ -142,6 +142,38 @@ export function EquipmentPanel({
 
   return (
     <div className="panel-body" style={{ gap: 5 }}>
+      {/* Current Gold & Diamond (Forge Stones) Bar */}
+      <div
+        id="gear-currency-bar"
+        className="rpg-card-gold"
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 4,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 6,
+          padding: '4px 7px',
+        }}
+      >
+        <span style={{ fontFamily: 'var(--font-pixel)', fontSize: 10, color: '#fff3c7', flexShrink: 0 }}>
+          所持
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+          <span
+            id="gear-diamond-count"
+            className="gold-pill"
+            style={{ color: '#8ae8ff', borderColor: 'rgba(138, 232, 255, 0.45)', fontSize: 10.5 }}
+          >
+            💎{save.forgeStones.toLocaleString()}
+          </span>
+          <span id="gear-gold-count" className="gold-pill" style={{ fontSize: 10.5 }}>
+            {save.gold.toLocaleString()}G
+          </span>
+        </div>
+      </div>
+
       {/* Party Member Selector */}
       <div className="unit-pill-row">
         {save.partyIds.map((pid) => {
