@@ -450,9 +450,9 @@ body {
 
 /* ===== COMMAND-CHOICE EXPEDITION PANEL ===== */
 .choice-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
   width: 100%;
   min-width: 0;
 }
@@ -476,13 +476,13 @@ body {
 }
 
 .choice-list .choice-card {
-  padding: 5px 6px;
-  gap: 5px;
+  padding: 5px 8px;
+  gap: 7px;
 }
 
 .choice-list .choice-tag {
-  font-size: 8px;
-  padding: 1px 4px;
+  font-size: 9px;
+  padding: 2px 5px;
 }
 
 .choice-card:hover:not(:disabled) {

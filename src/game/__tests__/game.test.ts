@@ -169,23 +169,34 @@ describe('RuneTamer Labyrinth Core & v11 Systems', () => {
     expect(migrated!.discoveredMonsters).toContain('glacier_leviathan');
   });
 
-  it('generates 10 command-choice expedition steps, boss choices, stairs, and auto-advance picks', () => {
+  it('generates 5 varied command-choice expedition steps, boss choices, stairs, and auto-advance picks', () => {
     const village = createVillageExpedition();
     expect(village.inVillage).toBe(true);
     expect(village.floor).toBe(0);
 
     const floor1 = createDungeonExpedition(1, 1);
     expect(floor1.inVillage).toBe(false);
-    expect(floor1.choices.length).toBe(10);
+    expect(floor1.choices.length).toBe(5);
+    expect(new Set(floor1.choices.map((c) => c.kind)).size).toBe(5);
     expect(pickAutoExpeditionChoice(floor1, 0.9)).not.toBeNull();
 
+    // Sample many regular steps to verify the expanded variation pool appears cleanly
+    const seenKinds = new Set<string>();
+    for (let i = 0; i < 120; i += 1) {
+      const stepChoices = generateStepChoices(3, 1, STEPS_PER_FLOOR, 1, false, false);
+      expect(stepChoices.length).toBe(5);
+      expect(new Set(stepChoices.map((c) => c.kind)).size).toBe(5);
+      for (const ch of stepChoices) seenKinds.add(ch.kind);
+    }
+    expect(seenKinds.size).toBeGreaterThanOrEqual(15);
+
     const bossStepChoices = generateStepChoices(5, STEPS_PER_FLOOR, STEPS_PER_FLOOR, 1, false, false);
-    expect(bossStepChoices.length).toBe(10);
+    expect(bossStepChoices.length).toBe(5);
     expect(bossStepChoices.some((c) => c.kind === 'boss')).toBe(true);
     expect(bossStepChoices.some((c) => c.kind === 'rest')).toBe(true);
 
     const clearedChoices = generateStepChoices(5, STEPS_PER_FLOOR, STEPS_PER_FLOOR, 1, true, false);
-    expect(clearedChoices.length).toBe(10);
+    expect(clearedChoices.length).toBe(5);
     expect(clearedChoices.some((c) => c.kind === 'stairs')).toBe(true);
     expect(clearedChoices.some((c) => c.kind === 'return_village')).toBe(true);
   });

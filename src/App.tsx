@@ -71,6 +71,7 @@ import {
   canEvolveMonster,
   canTrueEvolveMonster,
   computeUnitStats,
+  expForNextLevel,
   getEvolutionRequirement,
   getPartyAggregatedLootBonuses,
   getTrueEvolutionRequirement,
@@ -245,14 +246,18 @@ export function App() {
   );
 
   const advanceExpeditionStep = useCallback(
-    (worldTier: number, markBossDefeated = false, markRestUsed = false, shouldAdvance = true) => {
+    (
+      worldTier: number,
+      markBossDefeated = false,
+      markRestUsed = false,
+      stepDelta: number | boolean = true,
+    ) => {
+      const delta = typeof stepDelta === 'number' ? stepDelta : stepDelta ? 1 : 0;
       setExpedition((prev) => {
         if (prev.inVillage) return prev;
         const nextBossDefeated = prev.bossDefeated || markBossDefeated;
         const nextRestUsed = prev.restUsedOnFloor || markRestUsed;
-        const nextStep = shouldAdvance
-          ? Math.min(prev.maxSteps, prev.step + 1)
-          : prev.step;
+        const nextStep = Math.min(prev.maxSteps, prev.step + delta);
         return {
           ...prev,
           step: nextStep,
@@ -266,7 +271,7 @@ export function App() {
             nextBossDefeated,
             nextRestUsed,
           ),
-          marchUntilMs: shouldAdvance ? Date.now() + 550 : prev.marchUntilMs,
+          marchUntilMs: delta > 0 ? Date.now() + 550 : prev.marchUntilMs,
         };
       });
     },
@@ -551,9 +556,203 @@ export function App() {
         return;
       }
 
-      // Battle / Elite / Boss / Rare Encounter (EVENT 5: Gold Slime & Void Herald!)
+      // ===== NEW EVENT 5: 魔力の泉 (MP Fountain) =====
+      if (choice.kind === 'fountain_mp') {
+        setSave((prev) => {
+          const nextRoster = { ...prev.roster };
+          const mapInv = new Map(prev.inventory.map((it) => [it.id, it]));
+          for (const id of Object.keys(nextRoster)) {
+            const u = nextRoster[id]!;
+            const st = computeUnitStats(u, prev, shrineBuffs, mapInv);
+            nextRoster[id] = {
+              ...u,
+              hp: Math.min(st.maxHp, u.hp + Math.round(st.maxHp * 0.25)),
+              mp: st.maxMp,
+            };
+          }
+          return { ...prev, roster: nextRoster };
+        });
+        soundEngine.playSfx('heal');
+        showToast('魔力の泉・全員MP全回復・HP+25%');
+        advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
+        return;
+      }
+
+      // ===== NEW EVENT 6: 秘薬の錬金釜 (Alchemy Pot) =====
+      if (choice.kind === 'alchemy_pot') {
+        const stones = Math.round((3 + expedition.floor * 0.25) * (1 + (save.worldTier - 1) * 0.35));
+        setRunPotions((p) => ({
+          hp: Math.min(5, p.hp + 1),
+          mp: Math.min(5, p.mp + 1),
+        }));
+        setSave((prev) => ({ ...prev, forgeStones: prev.forgeStones + stones }));
+        soundEngine.playSfx('buff');
+        showToast(`秘薬調合・HP/MP秘薬+1・💎+${stones}`);
+        advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
+        return;
+      }
+
+      // ===== NEW EVENT 7: 古代のルーン碑 (Rune Tablet) =====
+      if (choice.kind === 'rune_tablet') {
+        const expGain = Math.round(
+          (30 + expedition.floor * 13) * (1 + (save.worldTier - 1) * 0.45),
+        );
+        const powerRoll = Math.random() < 0.5;
+        if (powerRoll) {
+          setShrineBuffs((b) => ({ ...b, powerBonus: Math.min(0.54, b.powerBonus + 0.1) }));
+        } else {
+          setShrineBuffs((b) => ({ ...b, fortuneBonus: Math.min(240, b.fortuneBonus + 18) }));
+        }
+        let leveledAny = false;
+        setSave((prev) => {
+          const nextRoster = { ...prev.roster };
+          for (const pid of prev.partyIds) {
+            const u = nextRoster[pid];
+            if (!u) continue;
+            const updated = { ...u, exp: u.exp + expGain };
+            while (updated.exp >= expForNextLevel(updated.level)) {
+              updated.exp -= expForNextLevel(updated.level);
+              updated.level += 1;
+              leveledAny = true;
+            }
+            nextRoster[pid] = updated;
+          }
+          return { ...prev, roster: nextRoster };
+        });
+        soundEngine.playSfx(leveledAny ? 'levelup' : 'buff');
+        showToast(
+          `ルーン碑・全員EXP+${expGain}・${powerRoll ? '火力+10%' : 'トレハン+18%'}`,
+        );
+        advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
+        return;
+      }
+
+      // ===== NEW EVENT 8: 練武の祭場 (Training Ground) =====
+      if (choice.kind === 'training_ground') {
+        const expGain = Math.round(
+          (52 + expedition.floor * 19) * (1 + (save.worldTier - 1) * 0.5),
+        );
+        const stones = Math.round((4 + expedition.floor * 0.3) * (1 + (save.worldTier - 1) * 0.35));
+        let leveledAny = false;
+        setSave((prev) => {
+          const nextRoster = { ...prev.roster };
+          for (const pid of prev.partyIds) {
+            const u = nextRoster[pid];
+            if (!u) continue;
+            const updated = {
+              ...u,
+              hp: Math.max(1, Math.round(u.hp * 0.85)),
+              exp: u.exp + expGain,
+            };
+            while (updated.exp >= expForNextLevel(updated.level)) {
+              updated.exp -= expForNextLevel(updated.level);
+              updated.level += 1;
+              leveledAny = true;
+            }
+            nextRoster[pid] = updated;
+          }
+          return {
+            ...prev,
+            forgeStones: prev.forgeStones + stones,
+            roster: nextRoster,
+          };
+        });
+        soundEngine.playSfx(leveledAny ? 'levelup' : 'attack');
+        showToast(`特訓完了・全員EXP+${expGain}・💎+${stones}・HP-15%`);
+        advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
+        return;
+      }
+
+      // ===== NEW EVENT 9: 謎の落とし物袋 (Mystery Bag) =====
+      if (choice.kind === 'mystery_bag') {
+        const roll = Math.random();
+        if (roll < 0.3) {
+          const goldFound = Math.round(
+            75 * (1 + expedition.floor * 0.35) * Math.pow(2.0, save.worldTier - 1),
+          );
+          grantLootItems([], goldFound, 2, false);
+          showToast(`落とし物袋・金貨袋を発見 +${goldFound.toLocaleString()}G・💎+2`);
+        } else if (roll < 0.55) {
+          const stones = Math.round(
+            (7 + expedition.floor * 0.4) * (1 + (save.worldTier - 1) * 0.4),
+          );
+          grantLootItems([], 0, stones, false);
+          showToast(`落とし物袋・鍛冶石の塊 💎+${stones}`);
+        } else if (roll < 0.8) {
+          const item = generateEquipment(
+            expedition.floor + 1,
+            save.worldTier,
+            lootBonuses.magicFind + 28,
+            'gold_chest',
+          );
+          const res = grantLootItems([item], 0, 2, false);
+          showToast(`落とし物袋・${res.kept[0] ? res.kept[0].name : '装備'}・💎+2`);
+        } else {
+          const consolationGold = Math.round(
+            24 * (1 + expedition.floor * 0.25) * Math.pow(1.8, save.worldTier - 1),
+          );
+          setSave((prev) => {
+            const nextRoster = { ...prev.roster };
+            for (const pid of prev.partyIds) {
+              const u = nextRoster[pid];
+              if (u) nextRoster[pid] = { ...u, hp: Math.max(1, Math.round(u.hp * 0.88)) };
+            }
+            return { ...prev, gold: prev.gold + consolationGold, roster: nextRoster };
+          });
+          soundEngine.playSfx('attack');
+          showToast(`罠針・全員HP-12%・小金貨+${consolationGold}G`);
+        }
+        advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
+        return;
+      }
+
+      // ===== NEW EVENT 10: 謎の賭博師 (Gambler) =====
+      if (choice.kind === 'gambler') {
+        const bet = choice.merchantCostGold ?? 40;
+        if (save.gold >= bet) {
+          if (Math.random() < 0.55) {
+            const payout = Math.round(bet * 2.4);
+            const profit = payout - bet;
+            setSave((prev) => ({
+              ...prev,
+              gold: prev.gold + profit,
+              forgeStones: prev.forgeStones + 3,
+            }));
+            soundEngine.playSfx('victory');
+            showToast(`賭博勝利・+${profit.toLocaleString()}G・💎+3`);
+          } else {
+            setSave((prev) => ({
+              ...prev,
+              gold: Math.max(0, prev.gold - bet),
+              forgeStones: prev.forgeStones + 2,
+            }));
+            showToast(`賭博敗北・-${bet.toLocaleString()}G・参加賞💎+2`);
+          }
+        } else {
+          setSave((prev) => ({ ...prev, forgeStones: prev.forgeStones + 2 }));
+          showToast('資金不足のため見送り・賭博師から💎+2');
+        }
+        advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
+        return;
+      }
+
+      // ===== NEW EVENT 11: 隠し抜け道 (Expedition Shortcut) =====
+      if (choice.kind === 'expedition_shortcut') {
+        const bonusGold = Math.round(
+          30 * (1 + expedition.floor * 0.25) * Math.pow(1.8, save.worldTier - 1),
+        );
+        const stones = Math.round((3 + expedition.floor * 0.2) * (1 + (save.worldTier - 1) * 0.3));
+        grantLootItems([], bonusGold, stones, false);
+        soundEngine.playSfx('buff');
+        showToast(`隠し抜け道・進行STEP+2・💎+${stones}・+${bonusGold}G`);
+        advanceExpeditionStep(save.worldTier, false, false, 2);
+        return;
+      }
+
+      // Battle / Horde / Elite / Boss / Rare Encounter
       if (
         choice.kind === 'battle' ||
+        choice.kind === 'battle_horde' ||
         choice.kind === 'elite' ||
         choice.kind === 'boss' ||
         choice.kind === 'rare_encounter'
@@ -561,7 +760,7 @@ export function App() {
         const entity: MapEntity = {
           id: choice.id,
           kind:
-            choice.kind === 'battle'
+            choice.kind === 'battle' || choice.kind === 'battle_horde'
               ? 'enemy'
               : choice.kind === 'rare_encounter'
                 ? 'rare_enemy'
@@ -1898,12 +2097,14 @@ export function App() {
                           const extraClass =
                             ch.kind === 'boss' || ch.kind === 'curse_altar'
                               ? 'boss-choice'
-                              : ch.kind === 'stairs'
+                              : ch.kind === 'stairs' || ch.kind === 'expedition_shortcut'
                                 ? 'stairs-choice'
                                 : ch.kind === 'gold_chest' ||
                                     ch.kind === 'elite' ||
                                     ch.kind === 'rare_encounter' ||
-                                    ch.kind === 'suspicious_chest'
+                                    ch.kind === 'suspicious_chest' ||
+                                    ch.kind === 'alchemy_pot' ||
+                                    ch.kind === 'gambler'
                                   ? 'gold-choice'
                                   : '';
                           return (
@@ -1917,12 +2118,12 @@ export function App() {
                                 handleSelectChoice(ch);
                               }}
                             >
-                              <PixelIcon spriteKey={ch.spriteKey} size={20} />
+                              <PixelIcon spriteKey={ch.spriteKey} size={24} />
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div
                                   style={{
                                     fontFamily: 'var(--font-pixel)',
-                                    fontSize: 10.5,
+                                    fontSize: 11.5,
                                     color: '#fff7e0',
                                     whiteSpace: 'nowrap',
                                     overflow: 'hidden',
@@ -1933,10 +2134,10 @@ export function App() {
                                 </div>
                                 <div
                                   style={{
-                                    fontSize: 8.5,
+                                    fontSize: 9.5,
                                     color: 'var(--text-muted)',
                                     marginTop: 1,
-                                    lineHeight: 1.2,
+                                    lineHeight: 1.25,
                                     overflow: 'hidden',
                                     textOverflow: 'ellipsis',
                                     whiteSpace: 'nowrap',
