@@ -74,6 +74,7 @@ import {
   getUnlockedHeroSkillIds,
   SKILL_TREE_NODES,
 } from '../skillTree';
+import { sortEquipmentItems, sortRanchMonsters } from '../sortUtils';
 import {
   canEvolveMonster,
   canTrueEvolveMonster,
@@ -928,5 +929,58 @@ describe('RuneTamer Labyrinth Core & v11 Systems', () => {
     expect(ORCHESTRA_TRACKS.battle.instruments).toContain('timpani');
     expect(ORCHESTRA_TRACKS.boss.instruments).toContain('brass');
     expect(ORCHESTRA_TRACKS.boss.instruments).toContain('percussion');
+  });
+
+  it('sorts Monster Ranch roster and Equipment inventory across multiple keys and asc/desc directions', () => {
+    const baseSave = createInitialSave();
+    const uNormal = { ...createUnitInstance('leaf_slime', 3), awakening: 0 };
+    const uElite = { ...createUnitInstance('forest_elk', 12), awakening: 3 };
+    const uBoss = { ...createUnitInstance('crimson_wyrm', 8), awakening: 1 };
+    const save = {
+      ...baseSave,
+      roster: {
+        ...baseSave.roster,
+        leaf_slime: uNormal,
+        forest_elk: uElite,
+        crimson_wyrm: uBoss,
+      },
+    };
+    const invMap = new Map(save.inventory.map((it) => [it.id, it]));
+    const emptyBuffs = { powerBonus: 0, fortuneBonus: 0, curseEnemyBonus: 0 };
+    const monsters = [uNormal, uElite, uBoss];
+
+    const byLvDesc = sortRanchMonsters(monsters, save, emptyBuffs, invMap, 'level', 'desc');
+    expect(byLvDesc.map((u) => u.id)).toEqual(['forest_elk', 'crimson_wyrm', 'leaf_slime']);
+
+    const byLvAsc = sortRanchMonsters(monsters, save, emptyBuffs, invMap, 'level', 'asc');
+    expect(byLvAsc.map((u) => u.id)).toEqual(['leaf_slime', 'crimson_wyrm', 'forest_elk']);
+
+    const byTierDesc = sortRanchMonsters(monsters, save, emptyBuffs, invMap, 'tier', 'desc');
+    expect(byTierDesc.map((u) => u.id)).toEqual(['crimson_wyrm', 'forest_elk', 'leaf_slime']);
+
+    const byAwakeningDesc = sortRanchMonsters(monsters, save, emptyBuffs, invMap, 'awakening', 'desc');
+    expect(byAwakeningDesc[0]!.id).toBe('forest_elk');
+
+    // Equipment sorting
+    const itCommon = { ...generateEquipment(2, 1, 0, 'normal', 'rune', 'common'), enhanceLevel: 0 };
+    const itMythic = { ...generateEquipment(15, 2, 0, 'boss', 'weapon', 'mythic'), enhanceLevel: 5 };
+    const itEpicArmor = { ...generateEquipment(8, 1, 0, 'elite', 'armor', 'epic'), enhanceLevel: 2 };
+    const items = [itCommon, itMythic, itEpicArmor];
+    const eqInvMap = new Map(items.map((it) => [it.id, it]));
+    const ownerMap = new Map<string, string>();
+    const hero = baseSave.roster.hero!;
+
+    const byRarityDesc = sortEquipmentItems(items, hero, eqInvMap, ownerMap, 'rarity', 'desc');
+    expect(byRarityDesc.map((i) => i.id)).toEqual([itMythic.id, itEpicArmor.id, itCommon.id]);
+
+    const byEnhAsc = sortEquipmentItems(items, hero, eqInvMap, ownerMap, 'enhance', 'asc');
+    expect(byEnhAsc.map((i) => i.id)).toEqual([itCommon.id, itEpicArmor.id, itMythic.id]);
+
+    const bySlotAsc = sortEquipmentItems(items, hero, eqInvMap, ownerMap, 'slot', 'asc');
+    expect(bySlotAsc.map((i) => i.slot)).toEqual(['weapon', 'armor', 'rune']);
+
+    const byIlvDesc = sortEquipmentItems(items, hero, eqInvMap, ownerMap, 'itemLevel', 'desc');
+    expect(byIlvDesc[0]!.itemLevel).toBeGreaterThanOrEqual(byIlvDesc[1]!.itemLevel);
+    expect(byIlvDesc[1]!.itemLevel).toBeGreaterThanOrEqual(byIlvDesc[2]!.itemLevel);
   });
 });

@@ -11,6 +11,12 @@ import {
   UNIQUE_MAP,
 } from '../game/data/equipment';
 import { getSpecies } from '../game/data/monsters';
+import {
+  EQUIP_SORT_OPTIONS,
+  sortEquipmentItems,
+  type EquipSortKey,
+  type SortDirection,
+} from '../game/sortUtils';
 import { computeUnitStats } from '../game/stats';
 import type {
   ActiveShrineBuffs,
@@ -67,6 +73,8 @@ export function EquipmentPanel({
 }: EquipmentPanelProps) {
   const [selectedUnitId, setSelectedUnitId] = useState<string>(save.partyIds[0] ?? 'hero');
   const [slotFilter, setSlotFilter] = useState<EquipSlot | 'all'>('all');
+  const [sortKey, setSortKey] = useState<EquipSortKey>('score');
+  const [sortDir, setSortDir] = useState<SortDirection>('desc');
   const [selectedItemId, setSelectedItemId] = useState<string | null>(initialItemId ?? null);
   const [selectedAffixIdx, setSelectedAffixIdx] = useState<number | null>(null);
 
@@ -95,10 +103,9 @@ export function EquipmentPanel({
   );
 
   const filteredItems = useMemo(() => {
-    return save.inventory
-      .filter((it) => slotFilter === 'all' || it.slot === slotFilter)
-      .sort((a, b) => calculateItemScore(b) - calculateItemScore(a));
-  }, [save.inventory, slotFilter]);
+    const filtered = save.inventory.filter((it) => slotFilter === 'all' || it.slot === slotFilter);
+    return sortEquipmentItems(filtered, unit, invMap, equippedOwnerMap, sortKey, sortDir);
+  }, [save.inventory, slotFilter, unit, invMap, equippedOwnerMap, sortKey, sortDir]);
 
   const selectedItem: EquipmentItem | null =
     selectedItemId ? (invMap.get(selectedItemId) ?? null) : null;
@@ -659,6 +666,39 @@ export function EquipmentPanel({
         </button>
       </div>
 
+      {/* Equipment Sort Bar */}
+      <div className="sort-bar">
+        <span className="muted-text" style={{ flexShrink: 0, fontSize: 9.5 }}>
+          並替
+        </span>
+        <select
+          id="select-gear-sort"
+          aria-label="装備並び替え"
+          className="rpg-select"
+          value={sortKey}
+          onChange={(e) => {
+            const nextKey = e.target.value as EquipSortKey;
+            setSortKey(nextKey);
+            setSortDir(nextKey === 'slot' ? 'asc' : 'desc');
+          }}
+        >
+          {EQUIP_SORT_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        <button
+          id="btn-gear-sort-dir"
+          type="button"
+          className="rpg-btn sm"
+          style={{ flexShrink: 0, height: 24, padding: '0 7px' }}
+          onClick={() => setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))}
+        >
+          {sortDir === 'desc' ? '↓降順' : '↑昇順'}
+        </button>
+      </div>
+
       {/* Scrollable Inventory List */}
       <div className="item-list">
         {filteredItems.map((item) => {
@@ -666,10 +706,11 @@ export function EquipmentPanel({
           const ownerId = equippedOwnerMap.get(item.id);
           const curSlotId = unit.equipped[item.slot];
           const curItem = curSlotId ? invMap.get(curSlotId) : null;
+          const itemScore = calculateItemScore(item);
           const diff =
             ownerId === unit.id
               ? 0
-              : calculateItemScore(item) - (curItem ? calculateItemScore(curItem) : 0);
+              : itemScore - (curItem ? calculateItemScore(curItem) : 0);
 
           return (
             <button
@@ -709,6 +750,7 @@ export function EquipmentPanel({
                     }}
                   >
                     {SLOT_LABELS[item.slot]} iLv.{item.itemLevel}
+                    {sortKey === 'sellValue' ? `・${item.sellValue}G` : `・評${itemScore}`}
                     {item.setId ? `・${SET_MAP[item.setId].name}` : ''}
                     {ownerId ? `・${getSpecies(ownerId).name}` : ''}
                   </div>

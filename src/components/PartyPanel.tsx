@@ -14,6 +14,12 @@ import {
   type SkillBranch,
 } from '../game/skillTree';
 import {
+  RANCH_SORT_OPTIONS,
+  sortRanchMonsters,
+  type RanchSortKey,
+  type SortDirection,
+} from '../game/sortUtils';
+import {
   canEvolveMonster,
   canTrueEvolveMonster,
   computeUnitStats,
@@ -64,6 +70,8 @@ export function PartyPanel({
   const [tierFilter, setTierFilter] = useState<'all' | MonsterTier>('all');
   const [elemFilter, setElemFilter] = useState<'all' | ElementType>('all');
   const [favOnly, setFavOnly] = useState(false);
+  const [sortKey, setSortKey] = useState<RanchSortKey>('power');
+  const [sortDir, setSortDir] = useState<SortDirection>('desc');
 
   const favoriteSet = useMemo(() => new Set(save.favoriteMonsters ?? []), [save.favoriteMonsters]);
 
@@ -79,7 +87,7 @@ export function PartyPanel({
   const equippedHeroSkills = useMemo(() => getHeroEquippedSkills(save), [save]);
 
   const ownedMonsters = useMemo(() => {
-    return Object.values(save.roster)
+    const filtered = Object.values(save.roster)
       .filter((u) => u.id !== 'hero')
       .filter((u) => {
         const sp = getSpecies(u.speciesId);
@@ -88,18 +96,20 @@ export function PartyPanel({
         if (tierFilter !== 'all' && sp.tier !== tierFilter) return false;
         if (elemFilter !== 'all' && sp.element !== elemFilter) return false;
         return true;
-      })
-      .sort((a, b) => {
-        const aIn = save.partyIds.includes(a.id) ? 1 : 0;
-        const bIn = save.partyIds.includes(b.id) ? 1 : 0;
-        if (aIn !== bIn) return bIn - aIn;
-        const aFav = favoriteSet.has(a.id) ? 1 : 0;
-        const bFav = favoriteSet.has(b.id) ? 1 : 0;
-        if (aFav !== bFav) return bFav - aFav;
-        return computeUnitStats(b, save, shrineBuffs, invMap).powerScore -
-          computeUnitStats(a, save, shrineBuffs, invMap).powerScore;
       });
-  }, [save, shrineBuffs, invMap, favOnly, favoriteSet, roleFilter, tierFilter, elemFilter]);
+    return sortRanchMonsters(filtered, save, shrineBuffs, invMap, sortKey, sortDir);
+  }, [
+    save,
+    shrineBuffs,
+    invMap,
+    favOnly,
+    favoriteSet,
+    roleFilter,
+    tierFilter,
+    elemFilter,
+    sortKey,
+    sortDir,
+  ]);
 
   const branchNodes = useMemo(
     () => SKILL_TREE_NODES.filter((n) => n.branch === branch).sort((a, b) => a.tier - b.tier),
@@ -387,6 +397,37 @@ export function PartyPanel({
                 </button>
               ))}
             </div>
+            <div className="sort-bar">
+              <span className="muted-text" style={{ flexShrink: 0, fontSize: 9.5 }}>
+                並替
+              </span>
+              <select
+                id="select-ranch-sort"
+                aria-label="モンスター並び替え"
+                className="rpg-select"
+                value={sortKey}
+                onChange={(e) => {
+                  const nextKey = e.target.value as RanchSortKey;
+                  setSortKey(nextKey);
+                  setSortDir(nextKey === 'dex' ? 'asc' : 'desc');
+                }}
+              >
+                {RANCH_SORT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                id="btn-ranch-sort-dir"
+                type="button"
+                className="rpg-btn sm"
+                style={{ flexShrink: 0, height: 24, padding: '0 7px' }}
+                onClick={() => setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))}
+              >
+                {sortDir === 'desc' ? '↓降順' : '↑昇順'}
+              </button>
+            </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -406,6 +447,18 @@ export function PartyPanel({
               const canEvo = canEvolveMonster(u, save.forgeStones);
               const trueReq = getTrueEvolutionRequirement(u);
               const canTrueEvo = canTrueEvolveMonster(u, save.forgeStones);
+              const metricTag =
+                sortKey === 'atk'
+                  ? `ATK${st.atk}`
+                  : sortKey === 'mag'
+                    ? `MAG${st.mag}`
+                    : sortKey === 'def'
+                      ? `DEF${st.def}`
+                      : sortKey === 'spd'
+                        ? `SPD${st.spd}`
+                        : sortKey === 'hp'
+                          ? `HP${st.maxHp}`
+                          : `戦力${st.powerScore}`;
 
               return (
                 <div key={u.id} className="rpg-card" style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
@@ -460,7 +513,7 @@ export function PartyPanel({
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {sp.skills[0].name} / {sp.skills[1].name} ・ 戦力{st.powerScore}
+                      {sp.skills[0].name} / {sp.skills[1].name} ・ {metricTag}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
