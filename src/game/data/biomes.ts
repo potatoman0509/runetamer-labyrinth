@@ -126,7 +126,7 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
     name: '氷結回廊',
     shortName: '氷結回廊',
     subtitle: '白銀の極寒界',
-    bossSpeciesId: 'fenrir_lord',
+    bossSpeciesId: 'glacier_leviathan',
     floorRangeLabel: '21〜25F',
     palette: {
       skyTop: '#183754',

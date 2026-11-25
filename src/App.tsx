@@ -90,7 +90,7 @@ const EMPTY_SHRINE_BUFFS: ActiveShrineBuffs = {
   curseEnemyBonus: 0,
 };
 
-const INITIAL_RUN_POTIONS = { hp: 2, mp: 2 };
+const INITIAL_RUN_POTIONS = { hp: 1, mp: 1 };
 
 export function App() {
   const [activeSlot, setActiveSlot] = useState<SaveSlotId>(() => getActiveSaveSlot());
@@ -303,7 +303,7 @@ export function App() {
       }
 
       if (choice.kind === 'rest') {
-        healAllParty(0.4, false);
+        healAllParty(0.3, false);
         advanceExpeditionStep(save.worldTier, false, true, false);
         return;
       }
@@ -317,11 +317,11 @@ export function App() {
           healAllParty(1, true);
           showToast('癒しの祠・全員HP・MP全回復');
         } else if (choice.kind === 'shrine_power') {
-          setShrineBuffs((b) => ({ ...b, powerBonus: Math.min(0.75, b.powerBonus + 0.25) }));
-          showToast('剛力の祠・攻撃・魔力+25%');
+          setShrineBuffs((b) => ({ ...b, powerBonus: Math.min(0.54, b.powerBonus + 0.18) }));
+          showToast('剛力の祠・攻撃・魔力+18%');
         } else {
-          setShrineBuffs((b) => ({ ...b, fortuneBonus: Math.min(240, b.fortuneBonus + 45) }));
-          showToast('幸運の祠・トレハン+45%');
+          setShrineBuffs((b) => ({ ...b, fortuneBonus: Math.min(150, b.fortuneBonus + 30) }));
+          showToast('幸運の祠・トレハン+30%');
         }
         advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
         return;
@@ -331,16 +331,16 @@ export function App() {
       if (choice.kind === 'curse_altar') {
         setShrineBuffs((b) => ({
           ...b,
-          fortuneBonus: Math.min(350, b.fortuneBonus + 85),
-          curseEnemyBonus: Math.min(0.9, b.curseEnemyBonus + 0.18),
+          fortuneBonus: Math.min(240, b.fortuneBonus + 65),
+          curseEnemyBonus: Math.min(0.95, b.curseEnemyBonus + 0.2),
         }));
-        // Sacrifice 25% of current HP (non-lethal, min 1 HP)
+        // Sacrifice 28% of current HP (non-lethal, min 1 HP)
         setSave((prev) => {
           const nextRoster = { ...prev.roster };
           for (const pid of prev.partyIds) {
             const u = nextRoster[pid];
             if (u) {
-              nextRoster[pid] = { ...u, hp: Math.max(1, Math.round(u.hp * 0.75)) };
+              nextRoster[pid] = { ...u, hp: Math.max(1, Math.round(u.hp * 0.72)) };
             }
           }
           return { ...prev, roster: nextRoster };
@@ -348,13 +348,13 @@ export function App() {
         const rewardItem = generateEquipment(
           expedition.floor + 1,
           save.worldTier,
-          lootBonuses.magicFind + 85,
+          lootBonuses.magicFind + 55,
           'boss',
         );
-        const stones = Math.round((8 + expedition.floor * 0.6) * (1 + (save.worldTier - 1) * 0.45));
+        const stones = Math.round((6 + expedition.floor * 0.45) * (1 + (save.worldTier - 1) * 0.4));
         const res = grantLootItems([rewardItem], 0, stones, false);
         showToast(
-          `呪いの契約・MF+85%・💎+${stones}・${res.kept[0] ? `${res.kept[0].name}` : '装備'}獲得`,
+          `呪いの契約・MF+65%・💎+${stones}・${res.kept[0] ? `${res.kept[0].name}` : '装備'}獲得`,
         );
         advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
         return;
@@ -362,7 +362,7 @@ export function App() {
 
       // ===== NEW EVENT 2: 怪しい宝箱＆ミミック強襲 (Suspicious Chest / Mimic) =====
       if (choice.kind === 'suspicious_chest') {
-        if (Math.random() < 0.5) {
+        if (Math.random() < 0.55) {
           // Mimic Ambush Battle!
           const entity: MapEntity = {
             id: choice.id,
@@ -385,13 +385,17 @@ export function App() {
           showToast('宝箱ミミックが現れた');
           return;
         }
-        // Jackpot Treasure!
-        const items = [
-          generateEquipment(expedition.floor + 1, save.worldTier, lootBonuses.magicFind + 65, 'boss'),
-          generateEquipment(expedition.floor, save.worldTier, lootBonuses.magicFind + 45, 'gold_chest'),
+        // Jackpot Treasure (nerfed count)
+        const items: EquipmentItem[] = [
+          generateEquipment(expedition.floor + 1, save.worldTier, lootBonuses.magicFind + 45, 'boss'),
         ];
-        const bonusGold = Math.round(90 * (1 + expedition.floor * 0.35) * Math.pow(2.1, save.worldTier - 1));
-        const bonusStones = Math.round((7 + expedition.floor * 0.4) * (1 + (save.worldTier - 1) * 0.4));
+        if (Math.random() < 0.6) {
+          items.push(
+            generateEquipment(expedition.floor, save.worldTier, lootBonuses.magicFind + 30, 'gold_chest'),
+          );
+        }
+        const bonusGold = Math.round(70 * (1 + expedition.floor * 0.32) * Math.pow(2.0, save.worldTier - 1));
+        const bonusStones = Math.round((5 + expedition.floor * 0.32) * (1 + (save.worldTier - 1) * 0.38));
         const res = grantLootItems(items, bonusGold, bonusStones, true);
         showToast(
           `秘宝獲得・${res.kept[0] ? res.kept[0].name : '装備'}・💎+${bonusStones}・${bonusGold}G`,
@@ -407,18 +411,18 @@ export function App() {
           const item = generateEquipment(
             expedition.floor + 1,
             save.worldTier,
-            lootBonuses.magicFind + 40,
+            lootBonuses.magicFind + 28,
             'gold_chest',
           );
-          const stones = Math.round((9 + expedition.floor * 0.5) * (1 + (save.worldTier - 1) * 0.45));
+          const stones = Math.round((7 + expedition.floor * 0.4) * (1 + (save.worldTier - 1) * 0.4));
           setSave((prev) => ({ ...prev, gold: Math.max(0, prev.gold - cost) }));
           const res = grantLootItems([item], 0, stones, false);
           showToast(
             `行商人から購入・💎+${stones}・${res.kept[0] ? res.kept[0].name : '装備'}`,
           );
         } else {
-          healAllParty(0.4, true);
-          showToast('行商人から薬草を受け取った・HP・MP40%回復');
+          healAllParty(0.3, true);
+          showToast('行商人から薬草を受け取った・HP・MP30%回復');
         }
         advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
         return;
@@ -426,7 +430,6 @@ export function App() {
 
       // ===== NEW EVENT 4: 旅の鍛冶師 (Wandering Blacksmith Free +1) =====
       if (choice.kind === 'wandering_smith') {
-        // Find an equipped item under +15 on party (Hero first)
         let targetItemId: string | null = null;
         for (const pid of save.partyIds) {
           const u = save.roster[pid];
@@ -460,7 +463,7 @@ export function App() {
               : `旅の鍛冶師・${upgraded.name}を+${upgraded.enhanceLevel}へ強化`,
           );
         } else {
-          const giftStones = 8 + save.worldTier * 3;
+          const giftStones = 6 + save.worldTier * 2;
           setSave((prev) => ({ ...prev, forgeStones: prev.forgeStones + giftStones }));
           showToast(`旅の鍛冶師から💎+${giftStones}を受け取った`);
         }
@@ -468,28 +471,32 @@ export function App() {
         return;
       }
 
-      // Regular / Gold Chest
+      // Regular / Gold Chest (nerfed drop counts)
       if (choice.kind === 'chest' || choice.kind === 'gold_chest') {
         const isGold = choice.kind === 'gold_chest';
-        const itemCount = isGold ? 2 : 1;
+        const itemCount = isGold
+          ? 1 + (Math.random() < 0.45 ? 1 : 0)
+          : Math.random() < 0.7
+            ? 1
+            : 0;
         const generated: EquipmentItem[] = [];
         for (let i = 0; i < itemCount; i += 1) {
           generated.push(
             generateEquipment(
               expedition.floor,
               save.worldTier,
-              lootBonuses.magicFind + (isGold ? 35 : 12),
+              lootBonuses.magicFind + (isGold ? 22 : 5),
               isGold ? 'gold_chest' : 'chest',
             ),
           );
         }
         const bonusGold = Math.round(
-          (isGold ? 65 : 28) *
-            (1 + expedition.floor * 0.35) *
-            Math.pow(2.1, save.worldTier - 1),
+          (isGold ? 52 : 22) *
+            (1 + expedition.floor * 0.32) *
+            Math.pow(2.0, save.worldTier - 1),
         );
         const bonusStones = Math.round(
-          (isGold ? 5 : 2) * (1 + (save.worldTier - 1) * 0.4) * (1 + lootBonuses.stoneFind / 100),
+          (isGold ? 4 : 1) * (1 + (save.worldTier - 1) * 0.35) * (1 + lootBonuses.stoneFind / 100),
         );
         const res = grantLootItems(generated, bonusGold, bonusStones, true);
         const topItem = res.kept[0];
@@ -497,12 +504,14 @@ export function App() {
           showToast(
             `${isGold ? '黄金箱' : '宝箱'}・${topItem.name}・💎+${bonusStones}・${bonusGold}G`,
           );
-        } else {
+        } else if (res.autoCount > 0) {
           showToast(
             res.mode === 'salvage'
               ? `宝箱・自動分解で💎+${bonusStones + res.autoStones}`
               : `宝箱・自動売却で+${bonusGold + res.autoGold}G`,
           );
+        } else {
+          showToast(`${isGold ? '黄金箱' : '宝箱'}・💎+${bonusStones}・${bonusGold}G`);
         }
         advanceExpeditionStep(save.worldTier, false, false, choice.advancesStep);
         return;
@@ -854,7 +863,7 @@ export function App() {
       }));
       showToast(
         isBreakthrough
-          ? `★突破・${upgraded.name} +${upgraded.enhanceLevel}・全OP+18%`
+          ? `★突破・${upgraded.name} +${upgraded.enhanceLevel}・全OP+12%`
           : `🔨 ${upgraded.name} +${upgraded.enhanceLevel}`,
       );
     },
@@ -1630,13 +1639,13 @@ export function App() {
                         className="choice-card gold-choice"
                         onClick={handleStartBossRush}
                       >
-                        <PixelIcon spriteKey="seraph_omega" size={26} />
+                        <PixelIcon spriteKey="genesis_orrery" size={26} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 12, color: '#fff3bd' }}>
                             🏟 ボスラッシュ闘技場
                           </div>
                           <div className="muted-text">
-                            W{save.bossRushBestWave}/{BOSS_RUSH_MAX_WAVE}・W5/W8ミシック確定
+                            W{save.bossRushBestWave}/{BOSS_RUSH_MAX_WAVE}・W10ミシック確定
                           </div>
                         </div>
                         <span className="choice-tag" style={{ background: '#b8701a' }}>

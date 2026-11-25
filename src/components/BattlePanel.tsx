@@ -98,7 +98,7 @@ export function BattlePanel({
                 textAlign: 'center',
               }}
             >
-              🏆 闘技場 全{BOSS_RUSH_MAX_WAVE}Wave制覇・ミシック×2獲得
+              🏆 闘技場 全{BOSS_RUSH_MAX_WAVE}Wave制覇・ミシック獲得
             </div>
           )}
 

@@ -25,8 +25,8 @@ export function getCompendiumBonusPct(
   discoveredUniquesCount: number,
 ): { statPct: number; mfBonus: number } {
   return {
-    statPct: Math.round(discoveredMonstersCount * 1.2 + discoveredUniquesCount * 1.8),
-    mfBonus: Math.round(discoveredMonstersCount * 1.5 + discoveredUniquesCount * 3.5),
+    statPct: Math.round(discoveredMonstersCount * 0.3 + discoveredUniquesCount * 1.1),
+    mfBonus: Math.round(discoveredMonstersCount * 0.4 + discoveredUniquesCount * 2.0),
   };
 }
 
@@ -255,85 +255,85 @@ export function computeUnitStats(
   for (const [setId, count] of setCounts.entries()) {
     activeSets.push({ setId, count });
     if (count >= 2) {
-      if (setId === 'forest_guard') hpPct += 14;
-      else if (setId === 'ancient_rune') defPct += 16;
-      else if (setId === 'crimson_fury') atkPct += 15;
-      else if (setId === 'astral_mage') magPct += 16;
-      else if (setId === 'golden_greed') magicFind += 28;
+      if (setId === 'forest_guard') hpPct += 10;
+      else if (setId === 'ancient_rune') defPct += 11;
+      else if (setId === 'crimson_fury') atkPct += 11;
+      else if (setId === 'astral_mage') magPct += 11;
+      else if (setId === 'golden_greed') magicFind += 18;
       else if (setId === 'lunar_blade') {
-        spdFlat += 8;
-        critRate += 7;
+        spdFlat += 6;
+        critRate += 5;
       } else if (setId === 'frost_monarch') {
-        defPct += 14;
-        magPct += 10;
+        defPct += 10;
+        magPct += 7;
       } else if (setId === 'seraph_radiance') {
-        hpPct += 14;
-        magPct += 12;
+        hpPct += 10;
+        magPct += 8;
       } else if (setId === 'blood_pact') {
-        lifesteal += 10;
-        atkPct += 10;
+        lifesteal += 7;
+        atkPct += 7;
       } else if (setId === 'void_walker') {
-        armorPenPct += 14;
+        armorPenPct += 10;
       }
     }
     if (count >= 4) {
       if (setId === 'forest_guard') {
-        regenPct += 6;
-        damageTakenMult *= 0.91;
+        regenPct += 4;
+        damageTakenMult *= 0.94;
       } else if (setId === 'crimson_fury') {
-        critDmg += 36;
-        lifesteal += 7;
+        critDmg += 24;
+        lifesteal += 5;
       } else if (setId === 'golden_greed') {
-        goldFind += 35;
-        expFind += 28;
-        stoneFind += 30;
+        goldFind += 24;
+        expFind += 18;
+        stoneFind += 20;
       } else if (setId === 'lunar_blade') {
-        doubleHit += 16;
+        doubleHit += 11;
       } else if (setId === 'frost_monarch') {
-        statusDmgBonusPct += 22;
+        statusDmgBonusPct += 15;
       } else if (setId === 'seraph_radiance') {
-        regenPct += 5;
+        regenPct += 3;
       } else if (setId === 'void_walker') {
-        armorPenPct += 18;
-        skillPowerBonusPct += 18;
+        armorPenPct += 12;
+        skillPowerBonusPct += 12;
       }
     }
   }
   activeSets.sort((a, b) => b.count - a.count);
 
-  // Tightened unique bonuses + 14 new v10 uniques
-  if (uniqueEffects.includes('clover_luck')) goldFind += 30;
-  if (uniqueEffects.includes('astral_compass')) critDmg += 34;
-  if (uniqueEffects.includes('starlight_mantle')) damageTakenMult *= 0.89;
-  if (uniqueEffects.includes('mithril_fortress')) damageTakenMult *= 0.92;
-  if (uniqueEffects.includes('blazing_cloak')) regenPct += 5;
+  // Hardcore-nerfed unique item bonuses
+  if (uniqueEffects.includes('clover_luck')) goldFind += 20;
+  if (uniqueEffects.includes('astral_compass')) critDmg += 22;
+  if (uniqueEffects.includes('starlight_mantle')) damageTakenMult *= 0.93;
+  if (uniqueEffects.includes('mithril_fortress')) damageTakenMult *= 0.95;
+  if (uniqueEffects.includes('blazing_cloak')) regenPct += 3;
   if (uniqueEffects.includes('forge_heart_amulet')) {
-    stoneFind += 45;
-    atkPct += 11;
-    magPct += 11;
+    stoneFind += 28;
+    atkPct += 7;
+    magPct += 7;
   }
   if (uniqueEffects.includes('mimic_crown')) {
-    magicFind += 28;
-    damageTakenMult *= 1.12;
+    magicFind += 18;
+    damageTakenMult *= 1.15;
   }
-  if (uniqueEffects.includes('titan_gauntlet_relic')) hpPct += 12;
-  if (uniqueEffects.includes('seraph_lance')) armorPenPct += 18;
-  if (uniqueEffects.includes('prism_wand')) weaknessBonusPct += 25;
-  if (uniqueEffects.includes('glacier_plate')) damageTakenMult *= 0.88;
+  if (uniqueEffects.includes('titan_gauntlet_relic')) hpPct += 8;
+  if (uniqueEffects.includes('seraph_lance')) armorPenPct += 12;
+  if (uniqueEffects.includes('prism_wand')) weaknessBonusPct += 16;
+  if (uniqueEffects.includes('glacier_plate')) damageTakenMult *= 0.92;
   if (uniqueEffects.includes('seraph_robe')) {
-    regenPct += 7;
-    mpRegenBonus += 8;
+    regenPct += 5;
+    mpRegenBonus += 5;
   }
-  if (uniqueEffects.includes('fenrir_fang_relic')) spdFlat += 12;
-  if (uniqueEffects.includes('halo_diadem')) skillPowerBonusPct += 18;
-  if (uniqueEffects.includes('void_heart_relic')) armorPenPct += 22;
-  if (uniqueEffects.includes('crystal_scale_relic')) stoneFind += 35;
-  if (uniqueEffects.includes('judgment_rune')) statusDmgBonusPct += 28;
+  if (uniqueEffects.includes('fenrir_fang_relic')) spdFlat += 8;
+  if (uniqueEffects.includes('halo_diadem')) skillPowerBonusPct += 12;
+  if (uniqueEffects.includes('void_heart_relic')) armorPenPct += 15;
+  if (uniqueEffects.includes('crystal_scale_relic')) stoneFind += 22;
+  if (uniqueEffects.includes('judgment_rune')) statusDmgBonusPct += 18;
   if (uniqueEffects.includes('eternal_tamer_rune')) {
-    atkPct += 10;
-    magPct += 10;
-    defPct += 10;
-    hpPct += 10;
+    atkPct += 7;
+    magPct += 7;
+    defPct += 7;
+    hpPct += 7;
   }
 
   const powerMult = 1 + (shrineBuffs?.powerBonus ?? 0);
@@ -360,14 +360,14 @@ export function computeUnitStats(
   );
 
   if (uniqueEffects.includes('storm_bowblade')) {
-    atk += Math.round(spd * 0.9);
+    atk += Math.round(spd * 0.65);
   }
   if (uniqueEffects.includes('mithril_fortress')) {
-    atk += Math.round(def * 0.28);
+    atk += Math.round(def * 0.2);
   }
   if (activeSets.some((s) => s.setId === 'ancient_rune' && s.count >= 4)) {
-    atk += Math.round(def * 0.22);
-    mag += Math.round(def * 0.22);
+    atk += Math.round(def * 0.16);
+    mag += Math.round(def * 0.16);
   }
 
   const clampedCritRate = Math.min(92, critRate);

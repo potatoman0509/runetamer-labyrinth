@@ -1,5 +1,11 @@
-import { getBiomeBossId, getBiomeForFloor, isBossFloor } from './data/biomes';
-import { getBiomeNormalMonsters, getSpecies } from './data/monsters';
+import { getBiomeForFloor, isBossFloor } from './data/biomes';
+import {
+  ELITE_MONSTERS,
+  getBiomeEliteMonsters,
+  getBiomeNormalMonsters,
+  getBossForFloor,
+  getSpecies,
+} from './data/monsters';
 import type { BiomeId, DungeonBiomeId } from './types';
 
 export type ExpeditionChoiceKind =
@@ -68,6 +74,18 @@ function makeEnemyPack(biome: DungeonBiomeId, minSize: number, maxSize: number):
   return ids;
 }
 
+function makeElitePack(biome: DungeonBiomeId): string[] {
+  const elites = getBiomeEliteMonsters(biome);
+  const normals = getBiomeNormalMonsters(biome);
+  const lead = pick(elites.length > 0 ? elites : ELITE_MONSTERS);
+  const escortCount = Math.random() < 0.55 ? 2 : 1;
+  const ids = [lead.id];
+  for (let i = 0; i < escortCount; i += 1) {
+    ids.push(pick(normals).id);
+  }
+  return ids;
+}
+
 export function createVillageExpedition(): ExpeditionState {
   return {
     inVillage: true,
@@ -98,8 +116,8 @@ export function generateStepChoices(
   // Final step: Boss encounter or Stairs Down
   if (step >= maxSteps) {
     if (bossFloor && !bossDefeated) {
-      const bossId = getBiomeBossId(biome);
-      const bossSp = getSpecies(bossId);
+      const bossSp = getBossForFloor(floor);
+      const bossId = bossSp.id;
       const escort1 = pick(normalPool).id;
       const escort2 = pick(normalPool).id;
       const bossPack = floor >= 10 ? [escort1, bossId, escort2] : [bossId, escort1];
@@ -112,7 +130,7 @@ export function generateStepChoices(
           subtitle:
             floor >= 30
               ? '撃破で次階層・世界ランク解放'
-              : '装備3点・鍛冶石・ボス仲間化',
+              : '装備・鍛冶石・ボス仲間化',
           tag: 'BOSS',
           tagColor: '#d94848',
           spriteKey: bossSp.spriteKey,
@@ -126,7 +144,7 @@ export function generateStepChoices(
           id: nextChoiceId(),
           kind: 'rest',
           title: '焚き火で休む',
-          subtitle: '全員のHP・MPを40%回復',
+          subtitle: '全員のHP・MPを30%回復',
           tag: '回復',
           tagColor: '#3a9c5a',
           spriteKey: 'fountain',
@@ -134,12 +152,12 @@ export function generateStepChoices(
         });
       }
 
-      const grindPack = makeEnemyPack(biome, 2, 3);
+      const grindPack = makeElitePack(biome);
       const grindLead = getSpecies(grindPack[0]!);
       choices.push({
         id: nextChoiceId(),
         kind: 'elite',
-        title: `強敵：${grindLead.name}ほか`,
+        title: `★強敵：${grindLead.name}ほか`,
         subtitle: '経験値・装備・鍛冶石',
         tag: '★強敵',
         tagColor: '#c98820',
@@ -151,7 +169,7 @@ export function generateStepChoices(
       return choices;
     }
 
-    const farmPack = makeEnemyPack(biome, 2, 3);
+    const farmPack = makeElitePack(biome);
     const farmLead = getSpecies(farmPack[0]!);
     return [
       {
@@ -192,19 +210,15 @@ export function generateStepChoices(
   const normalPack = makeEnemyPack(biome, 1, 3);
   const normalLead = getSpecies(normalPack[0]!);
 
-  const elitePack = makeEnemyPack(biome, 2, 3);
+  const elitePack = makeElitePack(biome);
   const eliteLead = getSpecies(elitePack[0]!);
 
-  // Slot 1: Standard Battle OR Rare Encounter (Golden Slime / Void Herald / Crystal Dragon / Eclipse Reaper!)
+  // Slot 1: Standard Battle (110 Normals) OR Rare Elite Encounter (30 Elites)
   const rareRoll = Math.random();
   let choice1: ExpeditionChoice;
-  if (rareRoll < 0.14 + (worldTier - 1) * 0.02) {
-    const rarePool: string[] = ['gold_slime'];
-    if (floor >= 8) rarePool.push('void_herald');
-    if (floor >= 16) rarePool.push('crystal_dragon');
-    if (floor >= 21) rarePool.push('eclipse_reaper');
-    const rareId = pick(rarePool);
-    const rareSp = getSpecies(rareId);
+  if (rareRoll < 0.1 + (worldTier - 1) * 0.015) {
+    const biomeElites = getBiomeEliteMonsters(biome);
+    const rareSp = pick(biomeElites.length > 0 ? biomeElites : ELITE_MONSTERS);
     choice1 = {
       id: nextChoiceId(),
       kind: 'rare_encounter',
@@ -213,7 +227,7 @@ export function generateStepChoices(
       tag: '✦希少',
       tagColor: '#d99a1e',
       spriteKey: rareSp.spriteKey,
-      speciesIds: [rareId],
+      speciesIds: [rareSp.id],
       advancesStep: true,
     };
   } else {
@@ -221,7 +235,7 @@ export function generateStepChoices(
       id: nextChoiceId(),
       kind: 'battle',
       title: `${normalLead.name}${normalPack.length > 1 ? `ほか${normalPack.length - 1}体` : ''}`,
-      subtitle: '経験値・金貨・鍛冶石・仲間化',
+      subtitle: '経験値・金貨・仲間化',
       tag: '戦闘',
       tagColor: '#5c6a85',
       spriteKey: normalLead.spriteKey,
@@ -250,7 +264,7 @@ export function generateStepChoices(
       id: nextChoiceId(),
       kind: 'curse_altar',
       title: '呪いの祭壇',
-      subtitle: 'HP-25%・敵強化と引換にMF+85%・高レア装備',
+      subtitle: 'HP-25%・敵強化でMF+65%',
       tag: '呪い祭壇',
       tagColor: '#9e2e4f',
       spriteKey: 'curse_altar',
@@ -261,7 +275,7 @@ export function generateStepChoices(
       id: nextChoiceId(),
       kind: 'gold_chest',
       title: '黄金の宝箱',
-      subtitle: '高レア装備2点・鍛冶石・金貨',
+      subtitle: '高レア装備・鍛冶石・金貨',
       tag: '黄金箱',
       tagColor: '#d99a1e',
       spriteKey: 'gold_chest',
@@ -272,7 +286,7 @@ export function generateStepChoices(
       id: nextChoiceId(),
       kind: 'elite',
       title: `★強敵：${eliteLead.name}ほか`,
-      subtitle: '装備2点・鍛冶石・高レア率UP',
+      subtitle: 'エリート戦・装備・鍛冶石',
       tag: '★強敵',
       tagColor: '#c9781c',
       spriteKey: eliteLead.spriteKey,

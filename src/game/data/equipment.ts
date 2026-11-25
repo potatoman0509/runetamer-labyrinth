@@ -39,7 +39,7 @@ export const RARITY_META: Record<Rarity, RarityMeta> = {
     color: '#d8d5cc',
     bg: 'rgba(120, 118, 112, 0.2)',
     border: '#7d7a72',
-    powerMult: 1.0,
+    powerMult: 0.88,
     affixCount: 0,
     sellMult: 1,
     salvageBase: 1,
@@ -52,10 +52,10 @@ export const RARITY_META: Record<Rarity, RarityMeta> = {
     color: '#6ee07c',
     bg: 'rgba(66, 166, 82, 0.2)',
     border: '#49a858',
-    powerMult: 1.22,
+    powerMult: 1.06,
     affixCount: 1,
     sellMult: 2,
-    salvageBase: 2,
+    salvageBase: 1,
     rank: 1,
   },
   rare: {
@@ -65,10 +65,10 @@ export const RARITY_META: Record<Rarity, RarityMeta> = {
     color: '#68b8ff',
     bg: 'rgba(54, 128, 204, 0.22)',
     border: '#4898e6',
-    powerMult: 1.5,
+    powerMult: 1.26,
     affixCount: 2,
     sellMult: 4,
-    salvageBase: 4,
+    salvageBase: 3,
     rank: 2,
   },
   epic: {
@@ -78,10 +78,10 @@ export const RARITY_META: Record<Rarity, RarityMeta> = {
     color: '#e69cff',
     bg: 'rgba(156, 84, 196, 0.24)',
     border: '#b565db',
-    powerMult: 1.9,
+    powerMult: 1.54,
     affixCount: 3,
     sellMult: 8,
-    salvageBase: 8,
+    salvageBase: 6,
     rank: 3,
   },
   legendary: {
@@ -91,10 +91,10 @@ export const RARITY_META: Record<Rarity, RarityMeta> = {
     color: '#ffb84d',
     bg: 'rgba(219, 138, 36, 0.24)',
     border: '#e89b2d',
-    powerMult: 2.45,
+    powerMult: 1.92,
     affixCount: 4,
-    sellMult: 18,
-    salvageBase: 16,
+    sellMult: 16,
+    salvageBase: 12,
     rank: 4,
   },
   mythic: {
@@ -104,10 +104,10 @@ export const RARITY_META: Record<Rarity, RarityMeta> = {
     color: '#ff6e7f',
     bg: 'rgba(224, 67, 94, 0.28)',
     border: '#ff7084',
-    powerMult: 3.25,
+    powerMult: 2.45,
     affixCount: 5,
-    sellMult: 40,
-    salvageBase: 34,
+    sellMult: 34,
+    salvageBase: 26,
     rank: 5,
   },
 };
@@ -119,7 +119,7 @@ export const SLOT_LABELS: Record<EquipSlot, string> = {
   rune: 'ルーン',
 };
 
-// ===== 10 EQUIPMENT SETS (2pc & 4pc bonuses) =====
+// ===== 10 EQUIPMENT SETS (2pc & 4pc bonuses, nerfed for hardcore) =====
 export interface SetDef {
   id: SetId;
   name: string;
@@ -133,71 +133,71 @@ export const SET_LIST: SetDef[] = [
     id: 'forest_guard',
     name: '森の守護',
     color: '#63d471',
-    bonus2Desc: 'HP+14%',
-    bonus4Desc: '再生+6%・被ダメ-9%',
+    bonus2Desc: 'HP+10%',
+    bonus4Desc: '再生+4%・被ダメ-6%',
   },
   {
     id: 'ancient_rune',
     name: '古代ルーン',
     color: '#69c9e8',
-    bonus2Desc: '防御+16%',
-    bonus4Desc: '開幕盾+18%・防御22%を攻魔加算',
+    bonus2Desc: '防御+11%',
+    bonus4Desc: '開幕盾+12%・防御16%を攻魔加算',
   },
   {
     id: 'crimson_fury',
     name: '紅蓮の狂戦',
     color: '#ff785a',
-    bonus2Desc: '攻撃+15%',
-    bonus4Desc: '会心倍率+36%・吸血+7%',
+    bonus2Desc: '攻撃+11%',
+    bonus4Desc: '会心倍率+24%・吸血+5%',
   },
   {
     id: 'astral_mage',
     name: '星屑の魔導',
     color: '#7da8ff',
-    bonus2Desc: '魔力+16%',
-    bonus4Desc: 'スキル+20%・毎T MP+6',
+    bonus2Desc: '魔力+11%',
+    bonus4Desc: 'スキル+14%・毎T MP+4',
   },
   {
     id: 'golden_greed',
     name: '黄金トレハン',
     color: '#ffd65c',
-    bonus2Desc: 'MF+28%',
-    bonus4Desc: '金貨+35%・EXP+28%・石+30%',
+    bonus2Desc: 'MF+18%',
+    bonus4Desc: '金貨+24%・EXP+18%・石+20%',
   },
   {
     id: 'lunar_blade',
     name: '銀月の連撃',
     color: '#d4b8ff',
-    bonus2Desc: '素早さ+8・会心+7%',
-    bonus4Desc: '追撃+16%・物理+15%',
+    bonus2Desc: '素早さ+6・会心+5%',
+    bonus4Desc: '追撃+11%・物理+10%',
   },
   {
     id: 'frost_monarch',
     name: '氷皇の威光',
     color: '#7ce8ff',
-    bonus2Desc: '防御+14%・魔力+10%',
-    bonus4Desc: '攻撃時22%凍結・状態異常敵へ与ダメ+22%',
+    bonus2Desc: '防御+10%・魔力+7%',
+    bonus4Desc: '攻撃時16%凍結・異常敵へ与ダメ+15%',
   },
   {
     id: 'seraph_radiance',
     name: '熾天使の聖光',
     color: '#ffe875',
-    bonus2Desc: 'HP+14%・魔力+12%',
-    bonus4Desc: '毎T再生+5%・回復/盾効果+20%',
+    bonus2Desc: 'HP+10%・魔力+8%',
+    bonus4Desc: '毎T再生+3%・回復/盾効果+14%',
   },
   {
     id: 'blood_pact',
     name: '紅血の契約',
     color: '#ff5c77',
-    bonus2Desc: '吸血+10%・攻撃+10%',
-    bonus4Desc: 'HP50%以下で与ダメ+26%・会心+12%',
+    bonus2Desc: '吸血+7%・攻撃+7%',
+    bonus4Desc: 'HP50%以下で与ダメ+18%・会心+8%',
   },
   {
     id: 'void_walker',
     name: '虚無の歩み',
     color: '#c48aff',
-    bonus2Desc: '防御貫通+14%',
-    bonus4Desc: '防御貫通+18%・スキル威力+18%',
+    bonus2Desc: '防御貫通+10%',
+    bonus4Desc: '防御貫通+12%・スキル威力+12%',
   },
 ];
 
@@ -255,19 +255,19 @@ interface AffixDef {
 }
 
 const AFFIX_POOL: AffixDef[] = [
-  { stat: 'atkPct', label: '攻撃', min: 5, max: 14, scalePerLevel: 0.25, isPercent: true },
-  { stat: 'magPct', label: '魔力', min: 5, max: 14, scalePerLevel: 0.25, isPercent: true },
-  { stat: 'defPct', label: '防御', min: 5, max: 14, scalePerLevel: 0.22, isPercent: true },
-  { stat: 'hpPct', label: '最大HP', min: 6, max: 16, scalePerLevel: 0.25, isPercent: true },
-  { stat: 'spdFlat', label: '素早さ', min: 2, max: 7, scalePerLevel: 0.12, isPercent: false },
-  { stat: 'critRate', label: '会心率', min: 3, max: 9, scalePerLevel: 0.08, isPercent: true },
-  { stat: 'critDmg', label: '会心倍率', min: 10, max: 28, scalePerLevel: 0.35, isPercent: true },
-  { stat: 'lifesteal', label: '吸血', min: 3, max: 9, scalePerLevel: 0.07, isPercent: true },
-  { stat: 'doubleHit', label: '追撃率', min: 4, max: 11, scalePerLevel: 0.08, isPercent: true },
-  { stat: 'magicFind', label: 'トレハン', min: 8, max: 22, scalePerLevel: 0.35, isPercent: true },
-  { stat: 'goldFind', label: '金貨増', min: 10, max: 26, scalePerLevel: 0.4, isPercent: true },
-  { stat: 'expFind', label: '経験値増', min: 8, max: 22, scalePerLevel: 0.35, isPercent: true },
-  { stat: 'regenPct', label: '毎T再生', min: 2, max: 6, scalePerLevel: 0.05, isPercent: true },
+  { stat: 'atkPct', label: '攻撃', min: 3, max: 10, scalePerLevel: 0.18, isPercent: true },
+  { stat: 'magPct', label: '魔力', min: 3, max: 10, scalePerLevel: 0.18, isPercent: true },
+  { stat: 'defPct', label: '防御', min: 3, max: 10, scalePerLevel: 0.16, isPercent: true },
+  { stat: 'hpPct', label: '最大HP', min: 4, max: 12, scalePerLevel: 0.18, isPercent: true },
+  { stat: 'spdFlat', label: '素早さ', min: 1, max: 5, scalePerLevel: 0.09, isPercent: false },
+  { stat: 'critRate', label: '会心率', min: 2, max: 6, scalePerLevel: 0.06, isPercent: true },
+  { stat: 'critDmg', label: '会心倍率', min: 7, max: 20, scalePerLevel: 0.25, isPercent: true },
+  { stat: 'lifesteal', label: '吸血', min: 2, max: 6, scalePerLevel: 0.05, isPercent: true },
+  { stat: 'doubleHit', label: '追撃率', min: 3, max: 8, scalePerLevel: 0.06, isPercent: true },
+  { stat: 'magicFind', label: 'トレハン', min: 5, max: 15, scalePerLevel: 0.24, isPercent: true },
+  { stat: 'goldFind', label: '金貨増', min: 6, max: 18, scalePerLevel: 0.28, isPercent: true },
+  { stat: 'expFind', label: '経験値増', min: 5, max: 15, scalePerLevel: 0.24, isPercent: true },
+  { stat: 'regenPct', label: '毎T再生', min: 1, max: 4, scalePerLevel: 0.04, isPercent: true },
 ];
 
 export interface UniqueTemplate {
@@ -281,18 +281,18 @@ export interface UniqueTemplate {
   guaranteedAffix: { stat: AffixStat; label: string; value: number; isPercent: boolean };
 }
 
-// ===== 26 HANDCRAFTED UNIQUE EQUIPMENT TEMPLATES =====
+// ===== 40 HANDCRAFTED UNIQUE EQUIPMENT TEMPLATES =====
 export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
-  // Weapons (8)
+  // Weapons (12)
   {
     id: 'sunblade_heal',
     name: '陽だまりの聖剣',
     slot: 'weapon',
     iconKey: 'sword',
     minTier: 1,
-    desc: '攻撃時、味方全体のHPを最大HPの4%回復',
-    weights: { atk: 1.35, mag: 0.55 },
-    guaranteedAffix: { stat: 'atkPct', label: '攻撃', value: 18, isPercent: true },
+    desc: '攻撃時、味方全体のHPを最大HPの2%回復',
+    weights: { atk: 1.2, mag: 0.48 },
+    guaranteedAffix: { stat: 'atkPct', label: '攻撃', value: 12, isPercent: true },
   },
   {
     id: 'twin_fang_strike',
@@ -300,9 +300,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'weapon',
     iconKey: 'dagger',
     minTier: 1,
-    desc: '通常攻撃・物理スキル時に35%で追加攻撃',
-    weights: { atk: 1.15, spd: 0.7 },
-    guaranteedAffix: { stat: 'doubleHit', label: '追撃率', value: 15, isPercent: true },
+    desc: '通常攻撃・物理スキル時に18%で追加攻撃',
+    weights: { atk: 1.05, spd: 0.6 },
+    guaranteedAffix: { stat: 'doubleHit', label: '追撃率', value: 10, isPercent: true },
   },
   {
     id: 'sun_king_staff',
@@ -310,9 +310,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'weapon',
     iconKey: 'staff',
     minTier: 1,
-    desc: '魔法スキル威力+35%＆消費MP-25%',
-    weights: { mag: 1.5, hp: 1.1 },
-    guaranteedAffix: { stat: 'magPct', label: '魔力', value: 22, isPercent: true },
+    desc: '魔法スキル威力+15%・消費MP-15%',
+    weights: { mag: 1.32, hp: 0.95 },
+    guaranteedAffix: { stat: 'magPct', label: '魔力', value: 14, isPercent: true },
   },
   {
     id: 'berserker_axe',
@@ -320,9 +320,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'weapon',
     iconKey: 'axe',
     minTier: 1,
-    desc: '減少HP1%ごとに与ダメージ+1.2%',
-    weights: { atk: 1.55, hp: 1.0 },
-    guaranteedAffix: { stat: 'critDmg', label: '会心倍率', value: 35, isPercent: true },
+    desc: '減少HP1%ごとに与ダメージ+0.6%',
+    weights: { atk: 1.38, hp: 0.88 },
+    guaranteedAffix: { stat: 'critDmg', label: '会心倍率', value: 24, isPercent: true },
   },
   {
     id: 'giant_slayer_blade',
@@ -330,9 +330,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'weapon',
     iconKey: 'sword',
     minTier: 1,
-    desc: 'ボス・強敵への与ダメージ+45%',
-    weights: { atk: 1.5, def: 0.35 },
-    guaranteedAffix: { stat: 'atkPct', label: '攻撃', value: 24, isPercent: true },
+    desc: 'ボス・強敵への与ダメージ+22%',
+    weights: { atk: 1.32, def: 0.3 },
+    guaranteedAffix: { stat: 'atkPct', label: '攻撃', value: 16, isPercent: true },
   },
   {
     id: 'meteor_scepter',
@@ -340,9 +340,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'weapon',
     iconKey: 'staff',
     minTier: 1,
-    desc: '全体攻撃スキルの威力+35%＆会心率+12%',
-    weights: { mag: 1.55, spd: 0.45 },
-    guaranteedAffix: { stat: 'critRate', label: '会心率', value: 12, isPercent: true },
+    desc: '全体攻撃スキルの威力+16%・会心率+6%',
+    weights: { mag: 1.36, spd: 0.38 },
+    guaranteedAffix: { stat: 'critRate', label: '会心率', value: 8, isPercent: true },
   },
   {
     id: 'vampire_scythe',
@@ -350,9 +350,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'weapon',
     iconKey: 'axe',
     minTier: 1,
-    desc: '吸血+20%＆敵を倒すたびHP25%回復',
-    weights: { atk: 1.4, mag: 0.45 },
-    guaranteedAffix: { stat: 'lifesteal', label: '吸血', value: 20, isPercent: true },
+    desc: '吸血+12%・敵撃破時HP12%回復',
+    weights: { atk: 1.25, mag: 0.4 },
+    guaranteedAffix: { stat: 'lifesteal', label: '吸血', value: 12, isPercent: true },
   },
   {
     id: 'storm_bowblade',
@@ -360,21 +360,21 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'weapon',
     iconKey: 'dagger',
     minTier: 2,
-    desc: '素早さの120%を攻撃力に加算',
-    weights: { atk: 1.1, spd: 1.0 },
-    guaranteedAffix: { stat: 'spdFlat', label: '素早さ', value: 14, isPercent: false },
+    desc: '素早さの65%を攻撃力に加算',
+    weights: { atk: 1.0, spd: 0.85 },
+    guaranteedAffix: { stat: 'spdFlat', label: '素早さ', value: 9, isPercent: false },
   },
 
-  // Armor (6)
+  // Armor (9)
   {
     id: 'world_tree_armor',
     name: '世界樹の翠鎧',
     slot: 'armor',
     iconKey: 'armor',
     minTier: 1,
-    desc: '毎ターン開始時に最大HPの10%を自動再生',
-    weights: { def: 1.25, hp: 3.4 },
-    guaranteedAffix: { stat: 'hpPct', label: '最大HP', value: 22, isPercent: true },
+    desc: '毎ターン開始時に最大HPの5%再生',
+    weights: { def: 1.12, hp: 3.0 },
+    guaranteedAffix: { stat: 'hpPct', label: '最大HP', value: 15, isPercent: true },
   },
   {
     id: 'golden_aegis',
@@ -382,9 +382,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'armor',
     iconKey: 'plate',
     minTier: 1,
-    desc: '戦闘開始時、最大HP25%分のバリアを展開',
-    weights: { def: 1.55, hp: 2.8 },
-    guaranteedAffix: { stat: 'defPct', label: '防御', value: 22, isPercent: true },
+    desc: '戦闘開始時、最大HP12%分のバリア展開',
+    weights: { def: 1.36, hp: 2.5 },
+    guaranteedAffix: { stat: 'defPct', label: '防御', value: 15, isPercent: true },
   },
   {
     id: 'dragonscale_thorns',
@@ -392,9 +392,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'armor',
     iconKey: 'plate',
     minTier: 1,
-    desc: '被ダメージの35%を攻撃者に自動反射',
-    weights: { def: 1.45, atk: 0.45, hp: 2.6 },
-    guaranteedAffix: { stat: 'atkPct', label: '攻撃', value: 14, isPercent: true },
+    desc: '被ダメージの18%を攻撃者へ反射',
+    weights: { def: 1.28, atk: 0.38, hp: 2.3 },
+    guaranteedAffix: { stat: 'atkPct', label: '攻撃', value: 10, isPercent: true },
   },
   {
     id: 'starlight_mantle',
@@ -402,9 +402,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'armor',
     iconKey: 'robe',
     minTier: 1,
-    desc: '被ダメージ-15%＆毎ターンMP+8回復',
-    weights: { def: 1.0, mag: 0.85, hp: 2.4 },
-    guaranteedAffix: { stat: 'magPct', label: '魔力', value: 18, isPercent: true },
+    desc: '被ダメージ-8%・毎ターンMP+4回復',
+    weights: { def: 0.9, mag: 0.74, hp: 2.15 },
+    guaranteedAffix: { stat: 'magPct', label: '魔力', value: 12, isPercent: true },
   },
   {
     id: 'mithril_fortress',
@@ -412,9 +412,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'armor',
     iconKey: 'plate',
     minTier: 1,
-    desc: '防御力の35%を攻撃力に加算＆被ダメ-10%',
-    weights: { def: 1.7, hp: 3.2 },
-    guaranteedAffix: { stat: 'defPct', label: '防御', value: 28, isPercent: true },
+    desc: '防御力の20%を攻撃力に加算・被ダメ-5%',
+    weights: { def: 1.5, hp: 2.8 },
+    guaranteedAffix: { stat: 'defPct', label: '防御', value: 18, isPercent: true },
   },
   {
     id: 'blazing_cloak',
@@ -422,21 +422,21 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'armor',
     iconKey: 'robe',
     minTier: 2,
-    desc: 'HP50%以上で与ダメ+22%＆毎T再生+6%',
-    weights: { def: 1.15, atk: 0.55, mag: 0.55, hp: 2.6 },
-    guaranteedAffix: { stat: 'hpPct', label: '最大HP', value: 24, isPercent: true },
+    desc: 'HP50%以上で与ダメ+10%・毎T再生+3%',
+    weights: { def: 1.02, atk: 0.48, mag: 0.48, hp: 2.3 },
+    guaranteedAffix: { stat: 'hpPct', label: '最大HP', value: 16, isPercent: true },
   },
 
-  // Relics (7)
+  // Relics (11)
   {
     id: 'clover_luck',
     name: '幸運の四葉遺物',
     slot: 'relic',
     iconKey: 'amulet',
     minTier: 1,
-    desc: 'トレハン+45%＆ゴールド獲得+40%',
-    weights: { hp: 2.0, spd: 0.45, atk: 0.4, mag: 0.4 },
-    guaranteedAffix: { stat: 'magicFind', label: 'トレハン', value: 45, isPercent: true },
+    desc: 'トレハン+24%・ゴールド獲得+20%',
+    weights: { hp: 1.8, spd: 0.4, atk: 0.36, mag: 0.36 },
+    guaranteedAffix: { stat: 'magicFind', label: 'トレハン', value: 24, isPercent: true },
   },
   {
     id: 'crimson_chalice',
@@ -444,9 +444,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'relic',
     iconKey: 'chalice',
     minTier: 1,
-    desc: '吸血+18%＆HP満タン超過の回復をバリアに変換',
-    weights: { hp: 2.6, atk: 0.55, mag: 0.55 },
-    guaranteedAffix: { stat: 'lifesteal', label: '吸血', value: 18, isPercent: true },
+    desc: '吸血+10%・超過回復をバリアに変換',
+    weights: { hp: 2.3, atk: 0.48, mag: 0.48 },
+    guaranteedAffix: { stat: 'lifesteal', label: '吸血', value: 10, isPercent: true },
   },
   {
     id: 'chronos_hourglass',
@@ -454,9 +454,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'relic',
     iconKey: 'compass',
     minTier: 1,
-    desc: '素早さ大幅UP＆全スキル威力+20%',
-    weights: { spd: 0.9, atk: 0.6, mag: 0.6 },
-    guaranteedAffix: { stat: 'spdFlat', label: '素早さ', value: 12, isPercent: false },
+    desc: '素早さUP・全スキル威力+9%',
+    weights: { spd: 0.78, atk: 0.52, mag: 0.52 },
+    guaranteedAffix: { stat: 'spdFlat', label: '素早さ', value: 8, isPercent: false },
   },
   {
     id: 'astral_compass',
@@ -464,9 +464,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'relic',
     iconKey: 'compass',
     minTier: 2,
-    desc: '会心率+15%＆会心倍率+45%',
-    weights: { atk: 0.75, mag: 0.75, spd: 0.6 },
-    guaranteedAffix: { stat: 'critRate', label: '会心率', value: 15, isPercent: true },
+    desc: '会心率+9%・会心倍率+24%',
+    weights: { atk: 0.65, mag: 0.65, spd: 0.52 },
+    guaranteedAffix: { stat: 'critRate', label: '会心率', value: 9, isPercent: true },
   },
   {
     id: 'forge_heart_amulet',
@@ -474,9 +474,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'relic',
     iconKey: 'amulet',
     minTier: 1,
-    desc: '鍛冶石の獲得量+60%＆攻撃/魔力+15%',
-    weights: { atk: 0.6, mag: 0.6, hp: 2.4 },
-    guaranteedAffix: { stat: 'magicFind', label: 'トレハン', value: 30, isPercent: true },
+    desc: '鍛冶石獲得+32%・攻撃/魔力+8%',
+    weights: { atk: 0.52, mag: 0.52, hp: 2.1 },
+    guaranteedAffix: { stat: 'magicFind', label: 'トレハン', value: 18, isPercent: true },
   },
   {
     id: 'mimic_crown',
@@ -484,9 +484,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'relic',
     iconKey: 'chalice',
     minTier: 1,
-    desc: '金貨+65%・トレハン+35%・被ダメ+10%',
-    weights: { atk: 0.75, mag: 0.75, spd: 0.5 },
-    guaranteedAffix: { stat: 'goldFind', label: '金貨増', value: 65, isPercent: true },
+    desc: '金貨+35%・トレハン+18%・被ダメ+14%',
+    weights: { atk: 0.65, mag: 0.65, spd: 0.42 },
+    guaranteedAffix: { stat: 'goldFind', label: '金貨増', value: 35, isPercent: true },
   },
   {
     id: 'titan_gauntlet_relic',
@@ -494,21 +494,21 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'relic',
     iconKey: 'amulet',
     minTier: 1,
-    desc: '通常攻撃・物理スキル威力+30%＆最大HP+15%',
-    weights: { atk: 0.95, hp: 2.8 },
-    guaranteedAffix: { stat: 'atkPct', label: '攻撃', value: 20, isPercent: true },
+    desc: '物理攻撃威力+14%・最大HP+8%',
+    weights: { atk: 0.85, hp: 2.4 },
+    guaranteedAffix: { stat: 'atkPct', label: '攻撃', value: 14, isPercent: true },
   },
 
-  // Runes (5)
+  // Runes (8)
   {
     id: 'echo_crit_rune',
     name: '連撃の古ルーン',
     slot: 'rune',
     iconKey: 'rune_red',
     minTier: 1,
-    desc: '会心発生時、必ず50%威力の追撃が発生',
-    weights: { atk: 1.0, spd: 0.4 },
-    guaranteedAffix: { stat: 'critRate', label: '会心率', value: 12, isPercent: true },
+    desc: '会心発生時、26%威力の追撃が発生',
+    weights: { atk: 0.9, spd: 0.36 },
+    guaranteedAffix: { stat: 'critRate', label: '会心率', value: 8, isPercent: true },
   },
   {
     id: 'phoenix_ash_rune',
@@ -516,9 +516,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'rune',
     iconKey: 'rune_green',
     minTier: 1,
-    desc: '戦闘中1度だけ致死ダメージをHP35%で踏みとどまる',
-    weights: { hp: 2.8, def: 0.9 },
-    guaranteedAffix: { stat: 'regenPct', label: '毎T再生', value: 6, isPercent: true },
+    desc: '戦闘中1度だけ致死攻撃をHP18%で耐える',
+    weights: { hp: 2.4, def: 0.8 },
+    guaranteedAffix: { stat: 'regenPct', label: '毎T再生', value: 4, isPercent: true },
   },
   {
     id: 'sage_star_rune',
@@ -526,9 +526,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'rune',
     iconKey: 'rune_blue',
     minTier: 2,
-    desc: '毎ターンMP+12回復＆魔力+25%',
-    weights: { mag: 1.15, hp: 1.5 },
-    guaranteedAffix: { stat: 'magPct', label: '魔力', value: 25, isPercent: true },
+    desc: '毎ターンMP+6回復・魔力+15%',
+    weights: { mag: 1.0, hp: 1.35 },
+    guaranteedAffix: { stat: 'magPct', label: '魔力', value: 15, isPercent: true },
   },
   {
     id: 'overdrive_rune',
@@ -536,9 +536,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'rune',
     iconKey: 'rune_red',
     minTier: 1,
-    desc: '全与ダメージ+25%・毎ターンHP5%消費',
-    weights: { atk: 1.1, mag: 1.1 },
-    guaranteedAffix: { stat: 'critDmg', label: '会心倍率', value: 40, isPercent: true },
+    desc: '全与ダメ+12%・毎ターンHP6%消費',
+    weights: { atk: 0.96, mag: 0.96 },
+    guaranteedAffix: { stat: 'critDmg', label: '会心倍率', value: 26, isPercent: true },
   },
   {
     id: 'guardian_vow_rune',
@@ -546,20 +546,19 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'rune',
     iconKey: 'rune_green',
     minTier: 1,
-    desc: '開幕に味方全体へHP9%バリア',
-    weights: { def: 1.1, hp: 2.5 },
-    guaranteedAffix: { stat: 'defPct', label: '防御', value: 16, isPercent: true },
+    desc: '開幕に味方全体へHP6%バリア',
+    weights: { def: 0.96, hp: 2.2 },
+    guaranteedAffix: { stat: 'defPct', label: '防御', value: 12, isPercent: true },
   },
-  // ===== v10 NEW UNIQUES (14 -> TOTAL 40) =====
   {
     id: 'frostbite_blade',
     name: '凍牙の魔氷剣',
     slot: 'weapon',
     iconKey: 'sword',
     minTier: 1,
-    desc: '攻撃時25%で凍結付与・凍結敵へ与ダメ+25%',
-    weights: { atk: 1.35, mag: 0.5 },
-    guaranteedAffix: { stat: 'atkPct', label: '攻撃', value: 16, isPercent: true },
+    desc: '攻撃時18%で凍結・凍結敵へ与ダメ+16%',
+    weights: { atk: 1.2, mag: 0.44 },
+    guaranteedAffix: { stat: 'atkPct', label: '攻撃', value: 12, isPercent: true },
   },
   {
     id: 'seraph_lance',
@@ -567,9 +566,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'weapon',
     iconKey: 'sword',
     minTier: 2,
-    desc: '聖属性攻撃+24%・防御貫通+18%',
-    weights: { atk: 1.4, mag: 0.7 },
-    guaranteedAffix: { stat: 'critRate', label: '会心率', value: 12, isPercent: true },
+    desc: '聖属性攻撃+16%・防御貫通+12%',
+    weights: { atk: 1.24, mag: 0.6 },
+    guaranteedAffix: { stat: 'critRate', label: '会心率', value: 8, isPercent: true },
   },
   {
     id: 'eclipse_reaper_scythe',
@@ -577,9 +576,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'weapon',
     iconKey: 'axe',
     minTier: 2,
-    desc: '攻撃時35%で防御低下・吸血+12%',
-    weights: { atk: 1.5, spd: 0.45 },
-    guaranteedAffix: { stat: 'lifesteal', label: '吸血', value: 12, isPercent: true },
+    desc: '攻撃時25%で防御低下・吸血+8%',
+    weights: { atk: 1.32, spd: 0.4 },
+    guaranteedAffix: { stat: 'lifesteal', label: '吸血', value: 8, isPercent: true },
   },
   {
     id: 'prism_wand',
@@ -587,9 +586,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'weapon',
     iconKey: 'staff',
     minTier: 1,
-    desc: '弱点倍率+25%・スキル消費MP-20%',
-    weights: { mag: 1.45, spd: 0.4 },
-    guaranteedAffix: { stat: 'magPct', label: '魔力', value: 18, isPercent: true },
+    desc: '弱点倍率+16%・スキル消費MP-15%',
+    weights: { mag: 1.28, spd: 0.36 },
+    guaranteedAffix: { stat: 'magPct', label: '魔力', value: 12, isPercent: true },
   },
   {
     id: 'glacier_plate',
@@ -597,9 +596,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'armor',
     iconKey: 'plate',
     minTier: 1,
-    desc: '被ダメ-12%・被弾時25%で敵を凍結',
-    weights: { def: 1.6, hp: 3.1 },
-    guaranteedAffix: { stat: 'defPct', label: '防御', value: 22, isPercent: true },
+    desc: '被ダメ-7%・被弾時18%で凍結反撃',
+    weights: { def: 1.4, hp: 2.7 },
+    guaranteedAffix: { stat: 'defPct', label: '防御', value: 15, isPercent: true },
   },
   {
     id: 'seraph_robe',
@@ -607,9 +606,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'armor',
     iconKey: 'robe',
     minTier: 2,
-    desc: '毎T再生+7%・毎T MP+8回復',
-    weights: { def: 1.15, mag: 1.0, hp: 2.6 },
-    guaranteedAffix: { stat: 'hpPct', label: '最大HP', value: 20, isPercent: true },
+    desc: '毎T再生+4%・毎T MP+4回復',
+    weights: { def: 1.02, mag: 0.88, hp: 2.3 },
+    guaranteedAffix: { stat: 'hpPct', label: '最大HP', value: 14, isPercent: true },
   },
   {
     id: 'abyssal_carapace',
@@ -617,9 +616,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'armor',
     iconKey: 'armor',
     minTier: 1,
-    desc: '状態異常の敵からの被ダメ-18%',
-    weights: { def: 1.4, hp: 2.9 },
-    guaranteedAffix: { stat: 'hpPct', label: '最大HP', value: 18, isPercent: true },
+    desc: '状態異常の敵からの被ダメ-12%',
+    weights: { def: 1.25, hp: 2.5 },
+    guaranteedAffix: { stat: 'hpPct', label: '最大HP', value: 12, isPercent: true },
   },
   {
     id: 'fenrir_fang_relic',
@@ -627,9 +626,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'relic',
     iconKey: 'amulet',
     minTier: 1,
-    desc: '追撃率+15%・素早さ+12',
-    weights: { atk: 0.85, spd: 0.85 },
-    guaranteedAffix: { stat: 'doubleHit', label: '追撃率', value: 15, isPercent: true },
+    desc: '追撃率+10%・素早さ+8',
+    weights: { atk: 0.75, spd: 0.75 },
+    guaranteedAffix: { stat: 'doubleHit', label: '追撃率', value: 10, isPercent: true },
   },
   {
     id: 'halo_diadem',
@@ -637,9 +636,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'relic',
     iconKey: 'chalice',
     minTier: 2,
-    desc: 'スキル威力+18%・全回復効果+18%',
-    weights: { mag: 0.95, hp: 2.5 },
-    guaranteedAffix: { stat: 'magPct', label: '魔力', value: 18, isPercent: true },
+    desc: 'スキル威力+12%・回復効果+12%',
+    weights: { mag: 0.85, hp: 2.2 },
+    guaranteedAffix: { stat: 'magPct', label: '魔力', value: 12, isPercent: true },
   },
   {
     id: 'void_heart_relic',
@@ -647,9 +646,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'relic',
     iconKey: 'compass',
     minTier: 2,
-    desc: '防御貫通+22%・会心倍率+35%',
-    weights: { atk: 0.9, mag: 0.9 },
-    guaranteedAffix: { stat: 'critDmg', label: '会心倍率', value: 35, isPercent: true },
+    desc: '防御貫通+15%・会心倍率+22%',
+    weights: { atk: 0.8, mag: 0.8 },
+    guaranteedAffix: { stat: 'critDmg', label: '会心倍率', value: 22, isPercent: true },
   },
   {
     id: 'crystal_scale_relic',
@@ -657,9 +656,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'relic',
     iconKey: 'amulet',
     minTier: 1,
-    desc: 'トレハン+35%・鍛冶石+35%',
-    weights: { def: 0.8, hp: 2.4, spd: 0.5 },
-    guaranteedAffix: { stat: 'magicFind', label: 'トレハン', value: 35, isPercent: true },
+    desc: 'トレハン+20%・鍛冶石+20%',
+    weights: { def: 0.7, hp: 2.1, spd: 0.44 },
+    guaranteedAffix: { stat: 'magicFind', label: 'トレハン', value: 20, isPercent: true },
   },
   {
     id: 'blizzard_rune',
@@ -667,9 +666,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'rune',
     iconKey: 'rune_blue',
     minTier: 1,
-    desc: 'スキル時25%で凍結付与・魔力+15%',
-    weights: { mag: 1.05, spd: 0.45 },
-    guaranteedAffix: { stat: 'magPct', label: '魔力', value: 15, isPercent: true },
+    desc: 'スキル時18%で凍結・魔力+10%',
+    weights: { mag: 0.92, spd: 0.4 },
+    guaranteedAffix: { stat: 'magPct', label: '魔力', value: 10, isPercent: true },
   },
   {
     id: 'judgment_rune',
@@ -677,9 +676,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'rune',
     iconKey: 'rune_red',
     minTier: 2,
-    desc: '状態異常の敵へ与ダメ+28%',
-    weights: { atk: 1.05, mag: 1.05 },
-    guaranteedAffix: { stat: 'critRate', label: '会心率', value: 12, isPercent: true },
+    desc: '状態異常の敵へ与ダメ+18%',
+    weights: { atk: 0.92, mag: 0.92 },
+    guaranteedAffix: { stat: 'critRate', label: '会心率', value: 8, isPercent: true },
   },
   {
     id: 'eternal_tamer_rune',
@@ -687,9 +686,9 @@ export const UNIQUE_TEMPLATES: UniqueTemplate[] = [
     slot: 'rune',
     iconKey: 'rune_green',
     minTier: 2,
-    desc: '全能力+10%・連携ゲージ獲得+30%',
-    weights: { atk: 0.7, mag: 0.7, def: 0.7, hp: 2.2 },
-    guaranteedAffix: { stat: 'expFind', label: '経験値増', value: 30, isPercent: true },
+    desc: '全能力+7%・連携ゲージ獲得+20%',
+    weights: { atk: 0.62, mag: 0.62, def: 0.62, hp: 1.95 },
+    guaranteedAffix: { stat: 'expFind', label: '経験値増', value: 20, isPercent: true },
   },
 ];
 
@@ -718,46 +717,46 @@ export function rollRarity(
   magicFind: number,
   source: LootSource,
 ): Rarity {
-  const mfFactor = 1 + Math.max(0, magicFind) / 100;
-  const tierBoost = 1 + (Math.max(1, worldTier) - 1) * 0.45;
+  const mfFactor = 1 + Math.max(0, magicFind) / 180;
+  const tierBoost = 1 + (Math.max(1, worldTier) - 1) * 0.3;
   const luck = mfFactor * tierBoost;
 
   let weights: Record<Rarity, number>;
   if (source === 'boss' || source === 'rare_enemy') {
     weights = {
       common: 0,
-      uncommon: 0,
-      rare: 20,
-      epic: 39 * Math.pow(luck, 0.25),
-      legendary: 29 * Math.pow(luck, 0.52),
-      mythic: 12 * Math.pow(luck, 0.8),
+      uncommon: 8,
+      rare: 36,
+      epic: 34 * Math.pow(luck, 0.2),
+      legendary: 17 * Math.pow(luck, 0.44),
+      mythic: 5 * Math.pow(luck, 0.68),
     };
   } else if (source === 'gold_chest' || source === 'elite') {
     weights = {
-      common: 0,
-      uncommon: 14,
-      rare: 35,
-      epic: 31 * Math.pow(luck, 0.35),
-      legendary: 15 * Math.pow(luck, 0.62),
-      mythic: 4 * Math.pow(luck, 0.85),
+      common: 4,
+      uncommon: 26,
+      rare: 38,
+      epic: 22 * Math.pow(luck, 0.28),
+      legendary: 8.5 * Math.pow(luck, 0.5),
+      mythic: 1.5 * Math.pow(luck, 0.72),
     };
   } else if (source === 'chest' || source === 'shop') {
     weights = {
-      common: 12,
-      uncommon: 28,
-      rare: 33,
-      epic: 18 * Math.pow(luck, 0.38),
-      legendary: 7 * Math.pow(luck, 0.68),
-      mythic: 1.8 * Math.pow(luck, 0.9),
+      common: 22,
+      uncommon: 34,
+      rare: 28,
+      epic: 11.5 * Math.pow(luck, 0.3),
+      legendary: 3.8 * Math.pow(luck, 0.55),
+      mythic: 0.7 * Math.pow(luck, 0.78),
     };
   } else {
     weights = {
-      common: 38,
-      uncommon: 32,
-      rare: 19 * Math.pow(luck, 0.3),
-      epic: 8 * Math.pow(luck, 0.52),
-      legendary: 2.2 * Math.pow(luck, 0.78),
-      mythic: 0.45 * Math.pow(luck, 1.0),
+      common: 52,
+      uncommon: 30,
+      rare: 12.5 * Math.pow(luck, 0.24),
+      epic: 4.3 * Math.pow(luck, 0.45),
+      legendary: 1.0 * Math.pow(luck, 0.65),
+      mythic: 0.18 * Math.pow(luck, 0.85),
     };
   }
 
@@ -780,9 +779,9 @@ function rollSingleAffix(
   if (pool.length === 0) return null;
   const def = pick(pool);
   const raw =
-    randRange(def.min * 0.85, def.max * 0.88) +
-    itemLevel * def.scalePerLevel * (0.62 + rarityRank * 0.12);
-  const val = Math.max(1, Math.round(raw * (1 + (worldTier - 1) * 0.1)));
+    randRange(def.min * 0.82, def.max * 0.85) +
+    itemLevel * def.scalePerLevel * (0.55 + rarityRank * 0.1);
+  const val = Math.max(1, Math.round(raw * (1 + (worldTier - 1) * 0.08)));
   return {
     stat: def.stat,
     label: def.label,
@@ -811,7 +810,7 @@ export function generateEquipment(
 
   let uniqueTemplate: UniqueTemplate | undefined;
   const uniqueChance =
-    rarity === 'mythic' ? 0.65 : rarity === 'legendary' ? 0.34 : 0;
+    rarity === 'mythic' ? 0.38 : rarity === 'legendary' ? 0.16 : 0;
   if (uniqueChance > 0 && Math.random() < uniqueChance) {
     const eligible = UNIQUE_TEMPLATES.filter(
       (u) => u.minTier <= safeTier && (!forcedSlot || u.slot === forcedSlot),
@@ -837,32 +836,32 @@ export function generateEquipment(
 
   let setId: SetId | undefined;
   const setChance =
-    meta.rank >= 4 ? 0.72 : meta.rank === 3 ? 0.6 : meta.rank === 2 ? 0.45 : 0;
+    meta.rank >= 4 ? 0.48 : meta.rank === 3 ? 0.36 : meta.rank === 2 ? 0.24 : 0;
   if (setChance > 0 && Math.random() < setChance) {
     setId = pick(SET_LIST).id;
   }
 
-  const tierPower = Math.pow(1.36, safeTier - 1);
-  const floorPower = (9 + itemLevel * 2.1 + Math.pow(itemLevel, 1.2) * 0.44) * tierPower;
-  const rollMult = meta.powerMult * randRange(0.9, 1.08);
+  const tierPower = Math.pow(1.28, safeTier - 1);
+  const floorPower = (7.5 + itemLevel * 1.75 + Math.pow(itemLevel, 1.18) * 0.36) * tierPower;
+  const rollMult = meta.powerMult * randRange(0.88, 1.05);
 
   const baseStats: EquipmentItem['baseStats'] = {};
   if (baseTemplate.weights.atk) {
-    baseStats.atk = Math.max(2, Math.round(floorPower * 0.38 * baseTemplate.weights.atk * rollMult));
+    baseStats.atk = Math.max(2, Math.round(floorPower * 0.35 * baseTemplate.weights.atk * rollMult));
   }
   if (baseTemplate.weights.mag) {
-    baseStats.mag = Math.max(2, Math.round(floorPower * 0.38 * baseTemplate.weights.mag * rollMult));
+    baseStats.mag = Math.max(2, Math.round(floorPower * 0.35 * baseTemplate.weights.mag * rollMult));
   }
   if (baseTemplate.weights.def) {
-    baseStats.def = Math.max(2, Math.round(floorPower * 0.31 * baseTemplate.weights.def * rollMult));
+    baseStats.def = Math.max(2, Math.round(floorPower * 0.28 * baseTemplate.weights.def * rollMult));
   }
   if (baseTemplate.weights.hp) {
-    baseStats.hp = Math.max(10, Math.round(floorPower * 1.02 * baseTemplate.weights.hp * rollMult));
+    baseStats.hp = Math.max(8, Math.round(floorPower * 0.92 * baseTemplate.weights.hp * rollMult));
   }
   if (baseTemplate.weights.spd) {
     baseStats.spd = Math.max(
       1,
-      Math.round((2 + itemLevel * 0.14 + safeTier * 1.5) * baseTemplate.weights.spd * Math.sqrt(meta.powerMult)),
+      Math.round((1.5 + itemLevel * 0.11 + safeTier * 1.2) * baseTemplate.weights.spd * Math.sqrt(meta.powerMult)),
     );
   }
 
@@ -870,7 +869,7 @@ export function generateEquipment(
   const usedStats = new Set<AffixStat>();
   if (uniqueTemplate) {
     const g = uniqueTemplate.guaranteedAffix;
-    const scaled = Math.round(g.value * (1 + (safeTier - 1) * 0.14));
+    const scaled = Math.max(1, Math.round(g.value * 0.72 * (1 + (safeTier - 1) * 0.1)));
     affixes.push({ ...g, value: scaled });
     usedStats.add(g.stat);
   }
@@ -887,8 +886,8 @@ export function generateEquipment(
     : `${pick(PREFIXES[rarity])}${baseTemplate.name}`;
 
   const sellValue = Math.max(
-    8,
-    Math.round((12 + itemLevel * 6) * meta.sellMult * Math.pow(1.35, safeTier - 1)),
+    6,
+    Math.round((10 + itemLevel * 5) * meta.sellMult * Math.pow(1.3, safeTier - 1)),
   );
 
   return {
@@ -917,22 +916,22 @@ export const MAX_ENHANCE_LEVEL = 20;
 
 export function getSalvageValue(item: EquipmentItem): number {
   const base = RARITY_META[item.rarity].salvageBase;
-  const tierBonus = 1 + (item.worldTier - 1) * 0.4;
-  const enhanceRefund = item.enhanceLevel * 2;
+  const tierBonus = 1 + (item.worldTier - 1) * 0.35;
+  const enhanceRefund = Math.floor(item.enhanceLevel * 1.5);
   return Math.max(1, Math.round(base * tierBonus) + enhanceRefund);
 }
 
 export function getEnhanceCost(item: EquipmentItem): { stones: number; gold: number; isBreakthrough: boolean } {
   const nextLv = item.enhanceLevel + 1;
   const isBreakthrough = nextLv === 5 || nextLv === 10 || nextLv === 15 || nextLv === 20;
-  const rarityFactor = 1 + RARITY_META[item.rarity].rank * 0.25;
+  const rarityFactor = 1 + RARITY_META[item.rarity].rank * 0.28;
   const stones = Math.max(
     1,
-    Math.round((2 + nextLv * 1.5 + (isBreakthrough ? 5 : 0)) * rarityFactor),
+    Math.round((2 + nextLv * 1.65 + (isBreakthrough ? 6 : 0)) * rarityFactor),
   );
   const gold = Math.max(
-    25,
-    Math.round((30 + item.itemLevel * 8 + nextLv * 28) * rarityFactor * (isBreakthrough ? 1.55 : 1)),
+    30,
+    Math.round((35 + item.itemLevel * 9 + nextLv * 32) * rarityFactor * (isBreakthrough ? 1.6 : 1)),
   );
   return { stones, gold, isBreakthrough };
 }
@@ -948,20 +947,20 @@ export function enhanceEquipment(item: EquipmentItem): {
   const isBreakthrough = nextLv === 5 || nextLv === 10 || nextLv === 15 || nextLv === 20;
 
   const bump = (v?: number, minAdd = 1) =>
-    v !== undefined ? v + Math.max(minAdd, Math.round(v * 0.068)) : undefined;
+    v !== undefined ? v + Math.max(minAdd, Math.round(v * 0.048)) : undefined;
 
   const nextBase: EquipmentItem['baseStats'] = {
     ...(item.baseStats.atk !== undefined ? { atk: bump(item.baseStats.atk, 1) } : {}),
     ...(item.baseStats.mag !== undefined ? { mag: bump(item.baseStats.mag, 1) } : {}),
     ...(item.baseStats.def !== undefined ? { def: bump(item.baseStats.def, 1) } : {}),
-    ...(item.baseStats.hp !== undefined ? { hp: bump(item.baseStats.hp, 4) } : {}),
+    ...(item.baseStats.hp !== undefined ? { hp: bump(item.baseStats.hp, 3) } : {}),
     ...(item.baseStats.spd !== undefined ? { spd: bump(item.baseStats.spd, 1) } : {}),
   };
 
   const nextAffixes = isBreakthrough
     ? item.affixes.map((af) => ({
         ...af,
-        value: Math.max(af.value + 1, Math.round(af.value * 1.18)),
+        value: Math.max(af.value + 1, Math.round(af.value * 1.12)),
         masterworked: true,
       }))
     : item.affixes;
@@ -973,7 +972,7 @@ export function enhanceEquipment(item: EquipmentItem): {
       enhanceLevel: nextLv,
       baseStats: nextBase,
       affixes: nextAffixes,
-      sellValue: Math.round(item.sellValue * 1.1),
+      sellValue: Math.round(item.sellValue * 1.08),
     },
   };
 }
@@ -981,8 +980,8 @@ export function enhanceEquipment(item: EquipmentItem): {
 export function getRerollCost(item: EquipmentItem): { stones: number; gold: number } {
   const rank = RARITY_META[item.rarity].rank;
   const tries = item.rerollCount;
-  const stones = Math.max(2, Math.round((3 + rank * 2) * (1 + tries * 0.35)));
-  const gold = Math.max(40, Math.round((50 + item.itemLevel * 12) * (1 + tries * 0.4)));
+  const stones = Math.max(2, Math.round((4 + rank * 2) * (1 + tries * 0.4)));
+  const gold = Math.max(50, Math.round((60 + item.itemLevel * 14) * (1 + tries * 0.45)));
   return { stones, gold };
 }
 
@@ -999,7 +998,7 @@ export function rerollAffixSlot(item: EquipmentItem, affixIndex: number): Equipm
 
   const breakthroughs = Math.floor(item.enhanceLevel / 5);
   if (breakthroughs > 0) {
-    fresh.value = Math.max(fresh.value + 1, Math.round(fresh.value * Math.pow(1.18, breakthroughs)));
+    fresh.value = Math.max(fresh.value + 1, Math.round(fresh.value * Math.pow(1.12, breakthroughs)));
     fresh.masterworked = true;
   }
 
@@ -1038,9 +1037,9 @@ export function createStarterWeapon(): EquipmentItem {
     worldTier: 1,
     enhanceLevel: 0,
     rerollCount: 0,
-    baseStats: { atk: 10, mag: 5 },
-    affixes: [{ stat: 'magicFind', label: 'トレハン', value: 10, isPercent: true }],
+    baseStats: { atk: 7, mag: 3 },
+    affixes: [{ stat: 'magicFind', label: 'トレハン', value: 5, isPercent: true }],
     locked: false,
-    sellValue: 25,
+    sellValue: 20,
   };
 }

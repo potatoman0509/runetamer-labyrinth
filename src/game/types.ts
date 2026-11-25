@@ -151,11 +151,14 @@ export interface SkillDef {
   description: string;
 }
 
+export type MonsterTier = 'normal' | 'elite' | 'boss';
+
 export interface MonsterSpecies {
   id: string;
   name: string;
   title: string;
   biome: DungeonBiomeId | 'hero' | 'special';
+  tier: MonsterTier;
   isBoss: boolean;
   role: MonsterRole;
   element: ElementType;

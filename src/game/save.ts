@@ -1,12 +1,12 @@
 import { createStarterWeapon } from './data/equipment';
-import { HERO_SPECIES, SPECIES_MAP } from './data/monsters';
+import { HERO_SPECIES, SPECIES_MAP, resolveSpeciesId } from './data/monsters';
 import { computeUnitStats } from './stats';
 import type { EquipmentItem, GameSave, UnitInstance } from './types';
 import { generateShopInventory } from './worldTier';
 
 export const SAVE_STORAGE_KEY = 'runetamer_labyrinth_save_v1';
 export const ACTIVE_SLOT_STORAGE_KEY = 'runetamer_labyrinth_active_slot_v1';
-export const CURRENT_SAVE_VERSION = 10;
+export const CURRENT_SAVE_VERSION = 11;
 
 export type SaveSlotId = 1 | 2 | 3;
 export const SAVE_SLOT_IDS: SaveSlotId[] = [1, 2, 3];
@@ -379,26 +379,43 @@ export function validateSave(data: unknown): GameSave | null {
   const safeRoster: Record<string, UnitInstance> = {};
   for (const [k, u] of Object.entries(s.roster)) {
     if (!u || typeof u !== 'object' || !u.speciesId) continue;
-    safeRoster[k] = {
+    const resolvedId = k === 'hero' ? 'hero' : resolveSpeciesId(u.speciesId);
+    const resolvedKey = k === 'hero' ? 'hero' : resolveSpeciesId(k);
+    const prev = safeRoster[resolvedKey];
+    const nextAwakening =
+      (typeof u.awakening === 'number' && u.awakening >= 0 ? u.awakening : 0) +
+      (prev ? prev.awakening + 1 : 0);
+    safeRoster[resolvedKey] = {
       ...u,
-      level: typeof u.level === 'number' && u.level >= 1 ? u.level : 1,
+      id: resolvedKey,
+      speciesId: resolvedId,
+      level: Math.max(
+        prev?.level ?? 1,
+        typeof u.level === 'number' && u.level >= 1 ? u.level : 1,
+      ),
       exp: typeof u.exp === 'number' && u.exp >= 0 ? u.exp : 0,
-      awakening: typeof u.awakening === 'number' && u.awakening >= 0 ? u.awakening : 0,
-      evolved: Boolean(u.evolved) || Boolean(u.trueEvolved),
-      trueEvolved: Boolean(u.trueEvolved),
+      awakening: nextAwakening,
+      evolved: Boolean(u.evolved) || Boolean(u.trueEvolved) || Boolean(prev?.evolved),
+      trueEvolved: Boolean(u.trueEvolved) || Boolean(prev?.trueEvolved),
       hp: typeof u.hp === 'number' && u.hp >= 0 ? u.hp : 100,
       mp: typeof u.mp === 'number' && u.mp >= 0 ? u.mp : 20,
       equipped: {
-        weapon: u.equipped?.weapon ?? null,
-        armor: u.equipped?.armor ?? null,
-        relic: u.equipped?.relic ?? null,
-        rune: u.equipped?.rune ?? null,
+        weapon: u.equipped?.weapon ?? prev?.equipped.weapon ?? null,
+        armor: u.equipped?.armor ?? prev?.equipped.armor ?? null,
+        relic: u.equipped?.relic ?? prev?.equipped.relic ?? null,
+        rune: u.equipped?.rune ?? prev?.equipped.rune ?? null,
       },
     };
   }
   if (!safeRoster.hero) return null;
 
-  const safeParty = s.partyIds.filter((id) => Boolean(safeRoster[id]));
+  const safeParty = Array.from(
+    new Set(
+      s.partyIds
+        .map((id) => (id === 'hero' ? 'hero' : resolveSpeciesId(id)))
+        .filter((id) => Boolean(safeRoster[id])),
+    ),
+  );
   if (!safeParty.includes('hero')) safeParty.unshift('hero');
 
   const safeEquippedSkills: [string, string] =
@@ -460,7 +477,7 @@ export function validateSave(data: unknown): GameSave | null {
     },
     highestFloorByTier: { ...fallback.highestFloorByTier, ...(s.highestFloorByTier ?? {}) },
     discoveredMonsters: Array.isArray(s.discoveredMonsters)
-      ? s.discoveredMonsters
+      ? Array.from(new Set(s.discoveredMonsters.map((id) => resolveSpeciesId(String(id)))))
       : fallback.discoveredMonsters,
     discoveredUniques: Array.isArray(s.discoveredUniques) ? s.discoveredUniques : [],
     shopItems:

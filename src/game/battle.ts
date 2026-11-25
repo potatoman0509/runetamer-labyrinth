@@ -97,11 +97,11 @@ export function createBattleState(
       const mp = Math.min(st.maxMp, Math.max(0, u.mp));
 
       let startShieldPct = syn.startShieldPct;
-      if (st.uniqueEffects.includes('golden_aegis')) startShieldPct += 18;
-      if (activeSetIds4pc.includes('ancient_rune')) startShieldPct += 18;
+      if (st.uniqueEffects.includes('golden_aegis')) startShieldPct += 12;
+      if (activeSetIds4pc.includes('ancient_rune')) startShieldPct += 12;
 
       const startSpd = st.uniqueEffects.includes('chronos_hourglass')
-        ? Math.round(st.spd * 1.22)
+        ? Math.round(st.spd * 1.15)
         : st.spd;
 
       const isTrueEvolved = Boolean(u.trueEvolved) && u.speciesId !== 'hero';
@@ -122,7 +122,7 @@ export function createBattleState(
         mp,
         maxMp: st.maxMp,
         shield: Math.min(
-          Math.round(st.maxHp * 0.65),
+          Math.round(st.maxHp * 0.55),
           Math.round((st.maxHp * startShieldPct) / 100),
         ),
         atk: st.atk,
@@ -162,8 +162,8 @@ export function createBattleState(
   if (vowCount > 0) {
     for (const a of allies) {
       a.shield = Math.min(
-        Math.round(a.maxHp * 0.65),
-        a.shield + Math.round(a.maxHp * 0.09 * vowCount),
+        Math.round(a.maxHp * 0.55),
+        a.shield + Math.round(a.maxHp * 0.06 * vowCount),
       );
     }
   }
@@ -183,7 +183,8 @@ export function createBattleState(
   const enemies: BattleUnitState[] = speciesIds.map((spId, idx) => {
     const sp = getSpecies(spId);
     const isBossUnit = sp.isBoss || (isBossBattle && idx === 0);
-    const isEliteUnit = !isBossUnit && (isEliteBattle || isRareBattle) && idx === 0;
+    const isEliteUnit =
+      !isBossUnit && (sp.tier === 'elite' || ((isEliteBattle || isRareBattle) && idx === 0));
 
     const hpRoleMult = isBossUnit ? 3.85 : isRareBattle ? 2.3 : isEliteUnit ? 2.15 : 1.28;
     const atkRoleMult = isBossUnit ? 1.65 : isRareBattle ? 1.48 : isEliteUnit ? 1.45 : 1.22;
@@ -306,9 +307,9 @@ export function createBattleState(
     bossRushWave,
     activeTrials: [...(save.activeTrials ?? [])],
     turn: 1,
-    limitGauge: Math.min(100, Math.max(0, opts.initialLimitGauge ?? 20)),
-    hpPotions: trials.noPotions ? 0 : (opts.hpPotions ?? 2),
-    mpPotions: trials.noPotions ? 0 : (opts.mpPotions ?? 2),
+    limitGauge: Math.min(100, Math.max(0, opts.initialLimitGauge ?? 15)),
+    hpPotions: trials.noPotions ? 0 : (opts.hpPotions ?? 1),
+    mpPotions: trials.noPotions ? 0 : (opts.mpPotions ?? 1),
     allies,
     enemies,
     turnQueue: [],
@@ -361,10 +362,10 @@ export function getSkillMpCost(actor: BattleUnitState, skill: SkillDef): number 
     actor.uniqueEffects.includes('sun_king_staff') &&
     (skill.statScale === 'mag' || skill.statScale === 'hybrid')
   ) {
-    mult *= 0.8;
+    mult *= 0.85;
   }
   if (actor.uniqueEffects.includes('prism_wand')) {
-    mult *= 0.8;
+    mult *= 0.85;
   }
   return Math.max(1, Math.round(skill.mpCost * mult));
 }
@@ -377,7 +378,7 @@ function addLimitGauge(state: BattleState, baseAmount: number): void {
   const hasEternal = state.allies.some(
     (a) => a.hp > 0 && a.uniqueEffects.includes('eternal_tamer_rune'),
   );
-  const gain = hasEternal ? Math.round(baseAmount * 1.3) : baseAmount;
+  const gain = hasEternal ? Math.round(baseAmount * 1.2) : baseAmount;
   state.limitGauge = Math.min(100, state.limitGauge + gain);
 }
 
@@ -456,8 +457,8 @@ function applyHealing(
   if (target.hp <= 0) return 0;
   const trials = computeTrialModifiers(state.activeTrials);
   let healMult = trials.healMult;
-  if (caster?.activeSetIds4pc.includes('seraph_radiance')) healMult *= 1.2;
-  if (caster?.uniqueEffects.includes('halo_diadem')) healMult *= 1.18;
+  if (caster?.activeSetIds4pc.includes('seraph_radiance')) healMult *= 1.14;
+  if (caster?.uniqueEffects.includes('halo_diadem')) healMult *= 1.12;
   const actual = Math.max(1, Math.round(amount * healMult));
   const missing = target.maxHp - target.hp;
   const healed = Math.min(missing, actual);
@@ -469,8 +470,8 @@ function applyHealing(
   }
 
   if (allowOverhealShield && actual > missing) {
-    const overflow = Math.min(Math.round(target.maxHp * 0.32), actual - missing);
-    target.shield = Math.min(Math.round(target.maxHp * 0.6), target.shield + overflow);
+    const overflow = Math.min(Math.round(target.maxHp * 0.24), actual - missing);
+    target.shield = Math.min(Math.round(target.maxHp * 0.5), target.shield + overflow);
   }
 
   state.floatingTexts.push({
@@ -502,11 +503,10 @@ function applyDamage(
   const now = Date.now();
   let dmgMult = defender.damageTakenMult;
   if (defender.uniqueEffects.includes('abyssal_carapace') && isTargetAfflicted(attacker)) {
-    dmgMult *= 0.82;
+    dmgMult *= 0.88;
   }
   let dmg = Math.max(1, Math.round(rawDamage * dmgMult));
   if (defender.defending) {
-    // v10 nerfed defend mitigation (55% reduction instead of 65%)
     dmg = Math.max(1, Math.round(dmg * 0.45));
   }
 
@@ -551,7 +551,7 @@ function applyDamage(
     !defender.phoenixUsed
   ) {
     defender.phoenixUsed = true;
-    defender.hp = Math.max(1, Math.round(defender.maxHp * 0.25));
+    defender.hp = Math.max(1, Math.round(defender.maxHp * 0.18));
     state.logs.push(`${defender.name}の不死鳥の灰ルーンが輝き、踏みとどまった`);
     state.floatingTexts.push({
       id: nextEffectId(),
@@ -567,7 +567,7 @@ function applyDamage(
     applyHealing(
       state,
       attacker,
-      Math.round(attacker.maxHp * 0.18),
+      Math.round(attacker.maxHp * 0.12),
       attacker.uniqueEffects.includes('crimson_chalice'),
       false,
       attacker,
@@ -608,7 +608,7 @@ function applyDamage(
     attacker.hp > 0 &&
     totalDealt > 0
   ) {
-    const reflect = Math.max(1, Math.round(totalDealt * 0.26));
+    const reflect = Math.max(1, Math.round(totalDealt * 0.18));
     attacker.hp = Math.max(0, attacker.hp - reflect);
     state.floatingTexts.push({
       id: nextEffectId(),
@@ -625,7 +625,7 @@ function applyDamage(
     attacker.hp > 0 &&
     totalDealt > 0
   ) {
-    applyStatusEffect(state, attacker, 'freeze', 0.25, 1);
+    applyStatusEffect(state, attacker, 'freeze', 0.18, 1);
   }
 
   return totalDealt;
@@ -658,9 +658,9 @@ function calcDamageNumber(
   const mitigation = 100 / (100 + defense * 1.18);
   let dmg = offense * power * (0.93 + Math.random() * 0.14) * mitigation;
 
-  // v10 player offensive skill nerf (-12% base on ally skills)
+  // Player offensive skill scaling
   if (attacker.isAlly && isSkill) {
-    dmg *= 0.88;
+    dmg *= 0.86;
   }
 
   if (attacker.burnTurns > 0) {
@@ -681,7 +681,7 @@ function calcDamageNumber(
     if (attacker.statusDmgBonusPct > 0) dmg *= 1 + attacker.statusDmgBonusPct / 100;
   }
   if (defender.freezeTurns > 0 && attacker.uniqueEffects.includes('frostbite_blade')) {
-    dmg *= 1.25;
+    dmg *= 1.16;
   }
 
   const isWeak = isElementalWeakness(element, defender.speciesId);
@@ -691,50 +691,50 @@ function calcDamageNumber(
 
   if (attacker.uniqueEffects.includes('berserker_axe')) {
     const missingPct = Math.max(0, (1 - attacker.hp / attacker.maxHp) * 100);
-    dmg *= 1 + missingPct * 0.009;
+    dmg *= 1 + missingPct * 0.006;
   }
   if (attacker.uniqueEffects.includes('giant_slayer_blade') && (defender.isBoss || defender.isElite)) {
-    dmg *= 1.32;
-  }
-  if (isSkill && isAoE && attacker.uniqueEffects.includes('meteor_scepter')) {
-    dmg *= 1.24;
-  }
-  if (attacker.uniqueEffects.includes('blazing_cloak') && attacker.hp / attacker.maxHp >= 0.5) {
-    dmg *= 1.16;
-  }
-  if (attacker.uniqueEffects.includes('titan_gauntlet_relic') && statScale === 'atk') {
     dmg *= 1.22;
   }
+  if (isSkill && isAoE && attacker.uniqueEffects.includes('meteor_scepter')) {
+    dmg *= 1.16;
+  }
+  if (attacker.uniqueEffects.includes('blazing_cloak') && attacker.hp / attacker.maxHp >= 0.5) {
+    dmg *= 1.1;
+  }
+  if (attacker.uniqueEffects.includes('titan_gauntlet_relic') && statScale === 'atk') {
+    dmg *= 1.14;
+  }
   if (attacker.uniqueEffects.includes('overdrive_rune')) {
-    dmg *= 1.18;
+    dmg *= 1.12;
   }
   if (isSkill && attacker.uniqueEffects.includes('chronos_hourglass')) {
-    dmg *= 1.14;
+    dmg *= 1.09;
   }
   if (
     isSkill &&
     attacker.uniqueEffects.includes('sun_king_staff') &&
     (statScale === 'mag' || statScale === 'hybrid')
   ) {
-    dmg *= 1.24;
+    dmg *= 1.15;
   }
   if (element === 'holy' && attacker.uniqueEffects.includes('seraph_lance')) {
-    dmg *= 1.24;
+    dmg *= 1.16;
   }
   if (isSkill && attacker.activeSetIds4pc.includes('astral_mage')) {
-    dmg *= 1.2;
+    dmg *= 1.14;
   }
   if (statScale === 'atk' && attacker.activeSetIds4pc.includes('lunar_blade')) {
-    dmg *= 1.15;
+    dmg *= 1.1;
   }
 
   let extraCrit = critBonus;
   if (attacker.activeSetIds4pc.includes('blood_pact') && attacker.hp / attacker.maxHp <= 0.5) {
-    dmg *= 1.26;
-    extraCrit += 12;
+    dmg *= 1.18;
+    extraCrit += 8;
   }
   if (isSkill && isAoE && attacker.uniqueEffects.includes('meteor_scepter')) {
-    extraCrit += 9;
+    extraCrit += 6;
   }
 
   const critChance = Math.min(96, attacker.critRate + extraCrit);
@@ -780,9 +780,9 @@ function startUnitTurnPassives(state: BattleState, actor: BattleUnitState): void
 
   if (actor.isAlly) {
     let mpGain = 4 + actor.mpRegenBonus;
-    if (actor.uniqueEffects.includes('sage_star_rune')) mpGain += 9;
-    if (actor.uniqueEffects.includes('starlight_mantle')) mpGain += 6;
-    if (actor.activeSetIds4pc.includes('astral_mage')) mpGain += 6;
+    if (actor.uniqueEffects.includes('sage_star_rune')) mpGain += 6;
+    if (actor.uniqueEffects.includes('starlight_mantle')) mpGain += 4;
+    if (actor.activeSetIds4pc.includes('astral_mage')) mpGain += 4;
     actor.mp = Math.min(actor.maxMp, actor.mp + mpGain);
   }
 
@@ -793,7 +793,7 @@ function startUnitTurnPassives(state: BattleState, actor: BattleUnitState): void
 
   let totalRegenPct = actor.regenPct;
   if (actor.uniqueEffects.includes('world_tree_armor')) {
-    totalRegenPct += 7;
+    totalRegenPct += 5;
   }
   if (totalRegenPct > 0 && actor.hp > 0 && actor.hp < actor.maxHp) {
     const amt = Math.max(1, Math.round((actor.maxHp * totalRegenPct) / 100));
@@ -970,7 +970,7 @@ export function executeTurnAction(
     state.hpPotions -= 1;
     for (const a of state.allies) {
       if (a.hp > 0) {
-        applyHealing(state, a, Math.round(a.maxHp * 0.32), false, true);
+        applyHealing(state, a, Math.round(a.maxHp * 0.24), false, true);
       }
     }
     state.logs.push(`🧪 回復の秘薬で全員回復・残${state.hpPotions}`);
@@ -982,7 +982,7 @@ export function executeTurnAction(
     state.mpPotions -= 1;
     for (const a of state.allies) {
       if (a.hp > 0) {
-        const gain = Math.max(12, Math.round(a.maxMp * 0.35));
+        const gain = Math.max(8, Math.round(a.maxMp * 0.25));
         a.mp = Math.min(a.maxMp, a.mp + gain);
         state.floatingTexts.push({
           id: nextEffectId(),
@@ -1011,11 +1011,10 @@ export function executeTurnAction(
     const livingEnemies = state.enemies.filter((e) => e.hp > 0);
     const totalPower = livingAllies.reduce((sum, a) => sum + Math.max(a.atk, a.mag), 0);
 
-    // v10 tightened Limit Break heal (22%) & shield (14%)
     for (const a of livingAllies) {
       a.lungeUntilMs = now + 380;
-      applyHealing(state, a, Math.round(a.maxHp * 0.22), false, true);
-      a.shield = Math.min(Math.round(a.maxHp * 0.65), a.shield + Math.round(a.maxHp * 0.14));
+      applyHealing(state, a, Math.round(a.maxHp * 0.18), false, true);
+      a.shield = Math.min(Math.round(a.maxHp * 0.55), a.shield + Math.round(a.maxHp * 0.12));
     }
 
     let totalDmg = 0;
@@ -1035,7 +1034,7 @@ export function executeTurnAction(
         });
       }
       const mitigation = 100 / (100 + e.def * 0.8);
-      const raw = totalPower * 1.55 * mitigation;
+      const raw = totalPower * 1.48 * mitigation;
       totalDmg += applyDamage(state, leadAlly, e, raw, 'limit_break', true, false);
     }
 
@@ -1175,30 +1174,30 @@ export function executeTurnAction(
 
       if (target.hp > 0) {
         if (actor.uniqueEffects.includes('frostbite_blade')) {
-          applyStatusEffect(state, target, 'freeze', 0.25, 1);
+          applyStatusEffect(state, target, 'freeze', 0.18, 1);
         }
         if (actor.activeSetIds4pc.includes('frost_monarch')) {
-          applyStatusEffect(state, target, 'freeze', 0.22, 1);
+          applyStatusEffect(state, target, 'freeze', 0.16, 1);
         }
         if (actor.uniqueEffects.includes('eclipse_reaper_scythe')) {
-          applyStatusEffect(state, target, 'def_break', 0.35, 3);
+          applyStatusEffect(state, target, 'def_break', 0.25, 3);
         }
       }
 
       if (actor.uniqueEffects.includes('sunblade_heal')) {
         for (const fr of livingFriends) {
-          applyHealing(state, fr, Math.round(fr.maxHp * 0.03), false, false, actor);
+          applyHealing(state, fr, Math.round(fr.maxHp * 0.02), false, false, actor);
         }
       }
 
       if (isCrit && actor.uniqueEffects.includes('echo_crit_rune') && target.hp > 0) {
-        const echoDmg = Math.max(1, Math.round(amount * 0.38));
+        const echoDmg = Math.max(1, Math.round(amount * 0.26));
         const eDealt = applyDamage(state, actor, target, echoDmg, 'star', false);
         state.logs.push(`連撃ルーン・${eDealt}追撃`);
       }
 
       const extraChance =
-        actor.doubleHit + (actor.uniqueEffects.includes('twin_fang_strike') ? 25 : 0);
+        actor.doubleHit + (actor.uniqueEffects.includes('twin_fang_strike') ? 18 : 0);
       if (target.hp > 0 && Math.random() * 100 < extraChance) {
         const extra = calcDamageNumber(actor, target, 0.68, 'atk', elem, false, false);
         const xDealt = applyDamage(state, actor, target, extra.amount, 'physical', extra.isCrit, extra.isWeak);
@@ -1225,7 +1224,7 @@ export function executeTurnAction(
             ];
       const baseHeal = Math.max(
         16,
-        actor.mag * skill.power * (actor.isAlly ? 0.96 : 1.15) * (1 + actor.skillPowerBonusPct / 100),
+        actor.mag * skill.power * (actor.isAlly ? 0.94 : 1.15) * (1 + actor.skillPowerBonusPct / 100),
       );
       for (const t of targets) {
         applyHealing(
@@ -1240,19 +1239,19 @@ export function executeTurnAction(
       state.logs.push(`${actor.name}の「${skill.name}」・味方を回復`);
     } else if (skill.kind === 'shield') {
       const targets = skill.target === 'all_allies' ? livingFriends : [actor];
-      const seraphMult = actor.activeSetIds4pc.includes('seraph_radiance') ? 1.2 : 1;
+      const seraphMult = actor.activeSetIds4pc.includes('seraph_radiance') ? 1.14 : 1;
       const shieldAmt = Math.max(
         20,
         Math.round(
           actor.def *
             skill.power *
-            (actor.isAlly ? 1.35 : 1.6) *
+            (actor.isAlly ? 1.3 : 1.6) *
             (1 + actor.skillPowerBonusPct / 100) *
             seraphMult,
         ),
       );
       for (const t of targets) {
-        t.shield = Math.min(Math.round(t.maxHp * 0.65), t.shield + shieldAmt);
+        t.shield = Math.min(Math.round(t.maxHp * 0.58), t.shield + shieldAmt);
         state.floatingTexts.push({
           id: nextEffectId(),
           targetUid: t.uid,
@@ -1270,17 +1269,17 @@ export function executeTurnAction(
       state.logs.push(`${actor.name}の「${skill.name}」・バリア展開`);
     } else if (skill.kind === 'buff_atk' || skill.kind === 'buff_def') {
       const targets = skill.target === 'all_allies' ? livingFriends : [actor];
-      const seraphMult = actor.activeSetIds4pc.includes('seraph_radiance') ? 1.2 : 1;
+      const seraphMult = actor.activeSetIds4pc.includes('seraph_radiance') ? 1.14 : 1;
       for (const t of targets) {
         if (skill.kind === 'buff_atk') {
           t.atkBuffTurns = 4;
           if (skill.power >= 0.85) {
-            applyHealing(state, t, Math.round(actor.mag * skill.power * 0.64), false, true, actor);
+            applyHealing(state, t, Math.round(actor.mag * skill.power * 0.62), false, true, actor);
           }
         } else {
           t.defBuffTurns = 4;
-          const shieldAmt = Math.max(15, Math.round(actor.def * skill.power * 0.92 * seraphMult));
-          t.shield = Math.min(Math.round(t.maxHp * 0.65), t.shield + shieldAmt);
+          const shieldAmt = Math.max(15, Math.round(actor.def * skill.power * 0.88 * seraphMult));
+          t.shield = Math.min(Math.round(t.maxHp * 0.58), t.shield + shieldAmt);
         }
         state.floatingTexts.push({
           id: nextEffectId(),
@@ -1341,16 +1340,16 @@ export function executeTurnAction(
 
           if (actor.isAlly && t.hp > 0) {
             if (actor.uniqueEffects.includes('frostbite_blade')) {
-              applyStatusEffect(state, t, 'freeze', 0.25, 1);
+              applyStatusEffect(state, t, 'freeze', 0.18, 1);
             }
             if (actor.activeSetIds4pc.includes('frost_monarch')) {
-              applyStatusEffect(state, t, 'freeze', 0.22, 1);
+              applyStatusEffect(state, t, 'freeze', 0.16, 1);
             }
             if (actor.uniqueEffects.includes('blizzard_rune')) {
-              applyStatusEffect(state, t, 'freeze', 0.25, 1);
+              applyStatusEffect(state, t, 'freeze', 0.18, 1);
             }
             if (actor.uniqueEffects.includes('eclipse_reaper_scythe')) {
-              applyStatusEffect(state, t, 'def_break', 0.35, 3);
+              applyStatusEffect(state, t, 'def_break', 0.25, 3);
             }
           }
 
@@ -1359,7 +1358,7 @@ export function executeTurnAction(
               state,
               actor,
               t,
-              Math.max(1, Math.round(amount * 0.38)),
+              Math.max(1, Math.round(amount * 0.26)),
               'star',
               false,
             );
@@ -1372,7 +1371,7 @@ export function executeTurnAction(
         applyHealing(
           state,
           actor,
-          Math.max(5, Math.round(totalDmg * 0.35)),
+          Math.max(5, Math.round(totalDmg * 0.3)),
           actor.uniqueEffects.includes('crimson_chalice'),
           false,
           actor,
@@ -1380,7 +1379,7 @@ export function executeTurnAction(
       }
       if (actor.uniqueEffects.includes('sunblade_heal')) {
         for (const fr of livingFriends) {
-          applyHealing(state, fr, Math.round(fr.maxHp * 0.03), false, false, actor);
+          applyHealing(state, fr, Math.round(fr.maxHp * 0.02), false, false, actor);
         }
       }
 
@@ -1389,7 +1388,7 @@ export function executeTurnAction(
         skill.statScale === 'atk' &&
         targets[0] &&
         targets[0].hp > 0 &&
-        Math.random() < 0.26
+        Math.random() < 0.18
       ) {
         const extra = calcDamageNumber(actor, targets[0], 0.68, 'atk', skill.element, false, false);
         const xDealt = applyDamage(
@@ -1502,19 +1501,19 @@ export function resolveBattleVictory(
 
   const floorScale = 1 + (battle.floor - 1) * 0.36 + Math.pow(battle.floor, 1.32) * 0.09;
   const battleTypeMult = battle.bossRushWave
-    ? 2.8 + battle.bossRushWave * 0.65
+    ? 2.6 + battle.bossRushWave * 0.55
     : battle.isBossBattle
-      ? 3.6
+      ? 3.2
       : battle.isRareBattle
-        ? 3.0
+        ? 2.6
         : battle.isEliteBattle
-          ? 2.0
-          : 1.15;
+          ? 1.8
+          : 1.05;
 
   const exp = Math.max(
-    22,
+    20,
     Math.round(
-      28 *
+      26 *
         battle.enemies.length *
         floorScale *
         battleTypeMult *
@@ -1523,13 +1522,13 @@ export function resolveBattleVictory(
     ),
   );
   const gold = Math.max(
-    16,
+    12,
     Math.round(
-      22 *
+      17 *
         battle.enemies.length *
         floorScale *
         battleTypeMult *
-        (battle.isRareBattle ? 2.2 : 1) *
+        (battle.isRareBattle ? 1.8 : 1) *
         tierMods.goldMult *
         (1 + partyBonuses.goldFind / 100),
     ),
@@ -1539,17 +1538,17 @@ export function resolveBattleVictory(
     ? getBossRushWave(battle.bossRushWave).bonusStones
     : 0;
   const baseStones = battle.isRareBattle
-    ? 16
+    ? 11
     : battle.isBossBattle
-      ? 12
+      ? 8
       : battle.isEliteBattle
-        ? 5
-        : 2;
+        ? 3
+        : 1;
   const forgeStones = Math.max(
     1,
     Math.round(
-      (baseStones + rushBonusStones + Math.floor(battle.floor / 4)) *
-        (1 + (battle.worldTier - 1) * 0.45) *
+      (baseStones + rushBonusStones + Math.floor(battle.floor / 5)) *
+        (1 + (battle.worldTier - 1) * 0.38) *
         (1 + partyBonuses.stoneFind / 100),
     ),
   );
@@ -1581,19 +1580,20 @@ export function resolveBattleVictory(
     roster[unitId] = updated;
   }
 
+  // Strictly nerfed equipment drop counts
   const dropCount = battle.bossRushWave
     ? battle.bossRushWave >= BOSS_RUSH_MAX_WAVE
-      ? 4
+      ? 2
       : battle.bossRushWave >= 5
-        ? 3
-        : 2
-    : battle.isBossBattle
-      ? 3
-      : battle.isRareBattle
         ? 2
+        : 1
+    : battle.isBossBattle
+      ? 2
+      : battle.isRareBattle
+        ? 1 + (Math.random() < 0.65 ? 1 : 0)
         : battle.isEliteBattle
-          ? 2
-          : Math.random() < 0.8
+          ? 1 + (Math.random() < 0.45 ? 1 : 0)
+          : Math.random() < 0.42
             ? 1
             : 0;
 
@@ -1607,8 +1607,7 @@ export function resolveBattleVictory(
 
   for (let i = 0; i < dropCount; i += 1) {
     const forcedRarity =
-      (battle.bossRushWave === BOSS_RUSH_MAX_WAVE && i < 2) ||
-      (battle.bossRushWave === 5 && i === 0)
+      battle.bossRushWave === BOSS_RUSH_MAX_WAVE && i === 0
         ? ('mythic' as const)
         : undefined;
     const source = battle.isBossBattle
@@ -1621,7 +1620,7 @@ export function resolveBattleVictory(
     const item = generateEquipment(
       battle.floor,
       battle.worldTier,
-      partyBonuses.magicFind + (battle.bossRushWave ? battle.bossRushWave * 25 : 10),
+      partyBonuses.magicFind + (battle.bossRushWave ? battle.bossRushWave * 15 : 0),
       source,
       undefined,
       forcedRarity,
@@ -1650,7 +1649,7 @@ export function resolveBattleVictory(
   for (const spId of uniqueEnemySpecies) {
     const sp = getSpecies(spId);
     const isAlreadyOwned = Boolean(roster[spId]);
-    const chance = isAlreadyOwned ? sp.recruitRate * 0.45 : Math.min(0.85, sp.recruitRate * 1.45);
+    const chance = isAlreadyOwned ? sp.recruitRate * 0.35 : Math.min(0.65, sp.recruitRate * 1.1);
 
     if (Math.random() < chance) {
       discoveredMonsters.add(spId);

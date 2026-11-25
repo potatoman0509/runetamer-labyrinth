@@ -20,7 +20,15 @@ import {
   SET_LIST,
   UNIQUE_TEMPLATES,
 } from '../data/equipment';
-import { MONSTER_LIST } from '../data/monsters';
+import { paintSprite } from '../../engine/hdSprites';
+import {
+  BOSS_MONSTERS,
+  ELITE_MONSTERS,
+  getBossForFloor,
+  getSpecies,
+  MONSTER_LIST,
+  NORMAL_MONSTERS,
+} from '../data/monsters';
 import {
   createDungeonExpedition,
   createVillageExpedition,
@@ -41,6 +49,7 @@ import {
   loadGameFromSlot,
   SAVE_STORAGE_KEY,
   saveGameToSlot,
+  validateSave,
 } from '../save';
 import {
   canUpgradeSkillNode,
@@ -60,7 +69,7 @@ import { computePartySynergies } from '../synergy';
 import { computeTrialModifiers, TRIAL_MODS } from '../trials';
 import { getWorldTierBlessing, toRoman } from '../worldTier';
 
-describe('RuneTamer Labyrinth Core & v10 Systems', () => {
+describe('RuneTamer Labyrinth Core & v11 Systems', () => {
   it('cycles 6 biomes properly across 1-30F and endless floors', () => {
     expect(getBiomeForFloor(1)).toBe('forest');
     expect(getBiomeForFloor(5)).toBe('forest');
@@ -79,10 +88,63 @@ describe('RuneTamer Labyrinth Core & v10 Systems', () => {
     expect(isBossFloor(7)).toBe(false);
   });
 
-  it('has 35 collectible monsters, 40 unique templates, and 10 equipment sets', () => {
-    expect(MONSTER_LIST.length).toBe(35);
+  it('has exactly 150 unique non-variant monsters (10 Boss, 30 Elite, 110 Normal), 40 uniques, and 10 sets', () => {
+    expect(MONSTER_LIST.length).toBe(150);
+    expect(BOSS_MONSTERS.length).toBe(10);
+    expect(ELITE_MONSTERS.length).toBe(30);
+    expect(NORMAL_MONSTERS.length).toBe(110);
     expect(UNIQUE_TEMPLATES.length).toBe(40);
     expect(SET_LIST.length).toBe(10);
+
+    const ids = new Set(MONSTER_LIST.map((m) => m.id));
+    const names = new Set(MONSTER_LIST.map((m) => m.name));
+    const spriteKeys = new Set(MONSTER_LIST.map((m) => m.spriteKey));
+    expect(ids.size).toBe(150);
+    expect(names.size).toBe(150);
+    expect(spriteKeys.size).toBe(150);
+
+    // Verify all 10 unique bosses rotate across floors 5F..50F
+    const bossIds = new Set<string>();
+    for (let fl = 5; fl <= 50; fl += 5) {
+      bossIds.add(getBossForFloor(fl).id);
+    }
+    expect(bossIds.size).toBe(10);
+  });
+
+  it('renders a unique non-empty 32x32 HD pixel sprite for every single one of the 150 monsters', () => {
+    const signatures = new Set<string>();
+    for (const m of MONSTER_LIST) {
+      const grid = paintSprite(m.spriteKey, 0);
+      expect(grid.size).toBe(32);
+      const nonEmpty = grid.buf.filter((c) => c !== null).length;
+      expect(nonEmpty).toBeGreaterThan(40);
+      const sig = grid.buf.map((c) => c ?? '.').join('');
+      signatures.add(sig);
+    }
+    expect(signatures.size).toBe(150);
+  });
+
+  it('migrates legacy removed variant monster IDs seamlessly via getSpecies and validateSave', () => {
+    expect(getSpecies('gold_slime').id).toBe('dust_scarab');
+    expect(getSpecies('fenrir_lord').id).toBe('glacier_leviathan');
+    expect(getSpecies('ember_pup').id).toBe('cinder_salamander');
+
+    const base = createInitialSave();
+    const legacyRaw = {
+      ...base,
+      version: 10,
+      partyIds: ['hero', 'gold_slime'],
+      roster: {
+        ...base.roster,
+        gold_slime: { ...createUnitInstance('leaf_slime', 5), id: 'gold_slime', speciesId: 'gold_slime' },
+      },
+      discoveredMonsters: ['leaf_slime', 'gold_slime', 'fenrir_lord'],
+    };
+    const migrated = validateSave(legacyRaw);
+    expect(migrated).not.toBeNull();
+    expect(migrated!.partyIds).toContain('dust_scarab');
+    expect(migrated!.roster.dust_scarab?.speciesId).toBe('dust_scarab');
+    expect(migrated!.discoveredMonsters).toContain('glacier_leviathan');
   });
 
   it('generates command-choice expedition steps, boss choices, stairs, and auto-advance picks', () => {
@@ -140,7 +202,7 @@ describe('RuneTamer Labyrinth Core & v10 Systems', () => {
     expect(item.enhanceLevel).toBe(MAX_ENHANCE_LEVEL);
   });
 
-  it('applies 2pc & 4pc Equipment Set bonuses (including new v10 sets) and Party Formation Synergies', () => {
+  it('applies nerfed 2pc & 4pc Equipment Set bonuses and Party Formation Synergies', () => {
     const save = createInitialSave();
     const w = { ...generateEquipment(5, 1, 0, 'elite', 'weapon', 'rare'), setId: 'crimson_fury' as const };
     const a = { ...generateEquipment(5, 1, 0, 'elite', 'armor', 'rare'), setId: 'crimson_fury' as const };
@@ -159,9 +221,9 @@ describe('RuneTamer Labyrinth Core & v10 Systems', () => {
     };
     const stats = computeUnitStats(setHero, saveWithSet);
     expect(stats.activeSets.some((s) => s.setId === 'crimson_fury' && s.count === 4)).toBe(true);
-    expect(stats.critDmg).toBeGreaterThanOrEqual(186); // 150 base + 36 from v10 4pc
+    expect(stats.critDmg).toBeGreaterThanOrEqual(174); // 150 base + 24 from nerfed 4pc
 
-    // New v10 Void Walker set gives armor penetration + skill power
+    // Void Walker set gives nerfed armor penetration + skill power
     const vw1 = { ...generateEquipment(5, 1, 0, 'elite', 'weapon', 'rare'), setId: 'void_walker' as const };
     const vw2 = { ...generateEquipment(5, 1, 0, 'elite', 'armor', 'rare'), setId: 'void_walker' as const };
     const vw3 = { ...generateEquipment(5, 1, 0, 'elite', 'relic', 'rare'), setId: 'void_walker' as const };
@@ -175,8 +237,8 @@ describe('RuneTamer Labyrinth Core & v10 Systems', () => {
       inventory: [vw1, vw2, vw3, vw4, ...save.inventory],
       roster: { ...save.roster, hero: vwHero },
     });
-    expect(vwStats.armorPenPct).toBeGreaterThanOrEqual(32); // 14 + 18
-    expect(vwStats.skillPowerBonusPct).toBeGreaterThanOrEqual(18);
+    expect(vwStats.armorPenPct).toBeGreaterThanOrEqual(22); // 10 + 12
+    expect(vwStats.skillPowerBonusPct).toBeGreaterThanOrEqual(12);
 
     // Party synergy: Tank + 2 DPS + Support triggers Balanced Party + Nature Resonance
     save.roster.acorn_boar = createUnitInstance('acorn_boar', 1);
@@ -217,6 +279,9 @@ describe('RuneTamer Labyrinth Core & v10 Systems', () => {
     };
 
     let battle = createBattleState(save, bossEntity, 30);
+    expect(battle.hpPotions).toBe(1);
+    expect(battle.mpPotions).toBe(1);
+
     let safety = 0;
     while (battle.phase !== 'victory' && battle.phase !== 'defeat' && safety < 80) {
       battle = stepEnemyOrAutoTurn(battle, true, 'allout');
@@ -268,8 +333,8 @@ describe('RuneTamer Labyrinth Core & v10 Systems', () => {
   it('supports elemental weakness cycle and telegraphed boss charge -> ultimate nuke', () => {
     expect(isElementalWeakness('fire', 'leaf_slime')).toBe(true);
     expect(isElementalWeakness('nature', 'stone_imp')).toBe(true);
-    expect(isElementalWeakness('holy', 'ember_pup')).toBe(true);
-    expect(isElementalWeakness('fire', 'ember_pup')).toBe(false);
+    expect(isElementalWeakness('holy', 'cinder_salamander')).toBe(true);
+    expect(isElementalWeakness('fire', 'cinder_salamander')).toBe(false);
 
     const save = createInitialSave();
     const boss = {
@@ -335,8 +400,8 @@ describe('RuneTamer Labyrinth Core & v10 Systems', () => {
     const save = createInitialSave();
     const boss = createBossRushEntity(1);
     const b0 = createBattleState(save, boss, 6, {
-      hpPotions: 2,
-      mpPotions: 2,
+      hpPotions: 1,
+      mpPotions: 1,
       initialLimitGauge: 100,
     });
     const activeBefore = b0.activeUid;
@@ -353,14 +418,14 @@ describe('RuneTamer Labyrinth Core & v10 Systems', () => {
     };
 
     const afterHpPot = executeTurnAction(hurtState, { type: 'use_hp_potion' });
-    expect(afterHpPot.hpPotions).toBe(1);
+    expect(afterHpPot.hpPotions).toBe(0);
     expect(afterHpPot.activeUid).toBe(activeBefore);
     expect(afterHpPot.allies[0]!.hp).toBeGreaterThan(hurtState.allies[0]!.hp);
     expect(afterHpPot.allies[0]!.poisonTurns).toBe(0);
     expect(afterHpPot.allies[0]!.burnTurns).toBe(0);
 
     const afterMpPot = executeTurnAction(afterHpPot, { type: 'use_mp_potion' });
-    expect(afterMpPot.mpPotions).toBe(1);
+    expect(afterMpPot.mpPotions).toBe(0);
     expect(afterMpPot.activeUid).toBe(activeBefore);
     expect(afterMpPot.allies[0]!.mp).toBeGreaterThan(0);
 
@@ -408,12 +473,15 @@ describe('RuneTamer Labyrinth Core & v10 Systems', () => {
     expect(trueStats.skillPowerBonusPct).toBe(lv25EvoStats.skillPowerBonusPct + 14);
   });
 
-  it('supports 8-Wave Boss Rush Arena with dual Mythics on Wave 8 EX victory', () => {
-    expect(BOSS_RUSH_WAVES.length).toBe(8);
-    expect(BOSS_RUSH_MAX_WAVE).toBe(8);
+  it('supports 10-Wave Boss Rush Arena featuring all 10 unique bosses with Mythic on Wave 10 EX victory', () => {
+    expect(BOSS_RUSH_WAVES.length).toBe(10);
+    expect(BOSS_RUSH_MAX_WAVE).toBe(10);
+    const waveBossIds = new Set(BOSS_RUSH_WAVES.map((w) => w.speciesIds[0]));
+    expect(waveBossIds.size).toBe(10);
+
     const save = createInitialSave();
-    const wave8 = createBossRushEntity(8);
-    const b0 = createBattleState(save, wave8, 36, { bossRushWave: 8 });
+    const wave10 = createBossRushEntity(10);
+    const b0 = createBattleState(save, wave10, 46, { bossRushWave: 10 });
     const winState = {
       ...b0,
       phase: 'victory' as const,
@@ -421,10 +489,10 @@ describe('RuneTamer Labyrinth Core & v10 Systems', () => {
     };
     const { nextSave, reward } = resolveBattleVictory(save, winState);
     const mythics = reward.items.filter((i) => i.rarity === 'mythic');
-    expect(mythics.length).toBeGreaterThanOrEqual(2);
-    expect(nextSave.bossRushBestWave).toBe(8);
+    expect(mythics.length).toBeGreaterThanOrEqual(1);
+    expect(nextSave.bossRushBestWave).toBe(10);
     expect(nextSave.stats.bossRushClears).toBe(1);
-    expect(reward.forgeStones).toBeGreaterThanOrEqual(120);
+    expect(reward.forgeStones).toBeGreaterThanOrEqual(100);
   });
 
   it('enforces Trial Modifiers (iron_foes, no_potions, blood_boss, drought) and tracks trialClears', () => {

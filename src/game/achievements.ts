@@ -35,9 +35,9 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'reroll_5', title: 'OP厳選師', desc: 'OP再鍛造5回', target: 5, rewardStones: 18, rewardSp: 1, permStatPct: 1, permMf: 4, getValue: (s) => s.stats.totalRerolls },
   { id: 'reroll_25', title: '神OP探究者', desc: 'OP再鍛造25回', target: 25, rewardStones: 55, rewardSp: 1, permStatPct: 3, permMf: 8, getValue: (s) => s.stats.totalRerolls },
 
-  { id: 'mon_8', title: '魔物使いの素質', desc: '魔物図鑑8種', target: 8, rewardStones: 16, rewardSp: 1, permStatPct: 2, permMf: 4, getValue: (s) => s.discoveredMonsters.length },
-  { id: 'mon_18', title: 'ルーンテイマー', desc: '魔物図鑑18種', target: 18, rewardStones: 45, rewardSp: 1, permStatPct: 3, permMf: 8, getValue: (s) => s.discoveredMonsters.length },
-  { id: 'mon_30', title: '万魔の主', desc: '魔物図鑑30種', target: 30, rewardStones: 90, rewardSp: 2, permStatPct: 5, permMf: 14, getValue: (s) => s.discoveredMonsters.length },
+  { id: 'mon_8', title: '魔物使いの素質', desc: '魔物図鑑20種', target: 20, rewardStones: 16, rewardSp: 1, permStatPct: 2, permMf: 4, getValue: (s) => s.discoveredMonsters.length },
+  { id: 'mon_18', title: 'ルーンテイマー', desc: '魔物図鑑60種', target: 60, rewardStones: 45, rewardSp: 1, permStatPct: 3, permMf: 8, getValue: (s) => s.discoveredMonsters.length },
+  { id: 'mon_30', title: '万魔の主', desc: '魔物図鑑120種', target: 120, rewardStones: 90, rewardSp: 2, permStatPct: 5, permMf: 14, getValue: (s) => s.discoveredMonsters.length },
 
   { id: 'uniq_5', title: '秘宝コレクター', desc: '固有装備5種', target: 5, rewardStones: 24, rewardSp: 1, permStatPct: 2, permMf: 6, getValue: (s) => s.discoveredUniques.length },
   { id: 'uniq_15', title: '聖遺物収集家', desc: '固有装備15種', target: 15, rewardStones: 60, rewardSp: 2, permStatPct: 4, permMf: 12, getValue: (s) => s.discoveredUniques.length },
@@ -49,8 +49,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'tier_2', title: '世界ランクⅡ', desc: 'Tier II解放', target: 2, rewardStones: 40, rewardSp: 2, permStatPct: 4, permMf: 10, getValue: (s) => s.maxUnlockedTier },
   { id: 'tier_3', title: '世界ランクⅢ', desc: 'Tier III解放', target: 3, rewardStones: 80, rewardSp: 2, permStatPct: 5, permMf: 15, getValue: (s) => s.maxUnlockedTier },
 
-  { id: 'rush_5', title: '闘技場の王者', desc: '闘技場Wave5制覇', target: 5, rewardStones: 60, rewardSp: 2, permStatPct: 4, permMf: 10, getValue: (s) => s.bossRushBestWave },
-  { id: 'rush_8', title: '終焉闘技場の覇神', desc: '闘技場Wave8制覇', target: 8, rewardStones: 120, rewardSp: 3, permStatPct: 6, permMf: 18, getValue: (s) => s.bossRushBestWave },
+  { id: 'rush_5', title: '闘技場の王者', desc: '闘技場Wave5制覇', target: 5, rewardStones: 50, rewardSp: 2, permStatPct: 4, permMf: 10, getValue: (s) => s.bossRushBestWave },
+  { id: 'rush_8', title: '終焉闘技場の覇神', desc: '闘技場Wave10制覇', target: 10, rewardStones: 110, rewardSp: 3, permStatPct: 6, permMf: 16, getValue: (s) => s.bossRushBestWave },
 ];
 
 export const ACHIEVEMENT_MAP: Record<string, AchievementDef> = Object.fromEntries(

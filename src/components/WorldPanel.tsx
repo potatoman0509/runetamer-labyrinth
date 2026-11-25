@@ -310,7 +310,7 @@ export function WorldPanel({
               <span style={{ color: '#82ff9e' }}>最高 W{save.bossRushBestWave}/{BOSS_RUSH_MAX_WAVE}</span>
             </div>
             <div className="muted-text">
-              全{BOSS_RUSH_MAX_WAVE}連戦・W5ミシック×1 / W8ミシック×2
+              全{BOSS_RUSH_MAX_WAVE}連戦・W5高率 / W10ミシック確定
             </div>
             <button
               id="btn-start-boss-rush"

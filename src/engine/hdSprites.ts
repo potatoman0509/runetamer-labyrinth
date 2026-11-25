@@ -4,9 +4,11 @@
  * directional 5-tone shading, specular highlights, and smooth 8-frame articulated motion.
  */
 
+import { paintAtlasMonster } from './monsterSpriteAtlas';
+
 export const ANIM_FRAME_COUNT = 8;
 
-class PixelGrid {
+export class PixelGrid {
   readonly size: number;
   readonly buf: (string | null)[];
 
@@ -845,7 +847,7 @@ const EQUIP_ICON_KEYS = new Set([
   'rune_green',
 ]);
 
-function paintSprite(key: string, frameIndex: number): PixelGrid {
+export function paintSprite(key: string, frameIndex: number): PixelGrid {
   if (EQUIP_ICON_KEYS.has(key)) {
     const g = new PixelGrid(24);
     drawEquipIcon24(g, key);
@@ -1416,7 +1418,9 @@ function paintSprite(key: string, frameIndex: number): PixelGrid {
       break;
     }
     default:
-      drawPropOrEvent(g, key, phase);
+      if (!paintAtlasMonster(g, key, phase)) {
+        drawPropOrEvent(g, key, phase);
+      }
       break;
   }
 

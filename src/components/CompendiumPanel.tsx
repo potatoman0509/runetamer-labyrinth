@@ -6,9 +6,15 @@ import {
 } from '../game/achievements';
 import { BIOMES } from '../game/data/biomes';
 import { SLOT_LABELS, UNIQUE_TEMPLATES } from '../game/data/equipment';
-import { MONSTER_LIST, ROLE_LABELS } from '../game/data/monsters';
+import {
+  BOSS_MONSTERS,
+  ELITE_MONSTERS,
+  MONSTER_LIST,
+  NORMAL_MONSTERS,
+  ROLE_LABELS,
+} from '../game/data/monsters';
 import { getCompendiumBonusPct } from '../game/stats';
-import type { GameSave } from '../game/types';
+import type { GameSave, MonsterTier } from '../game/types';
 import { PixelIcon } from './PixelIcon';
 
 interface CompendiumPanelProps {
@@ -18,6 +24,7 @@ interface CompendiumPanelProps {
 
 export function CompendiumPanel({ save, onClaimAchievement }: CompendiumPanelProps) {
   const [subTab, setSubTab] = useState<'monsters' | 'uniques' | 'achievements'>('monsters');
+  const [tierFilter, setTierFilter] = useState<'all' | MonsterTier>('all');
 
   const bonus = getCompendiumBonusPct(
     save.discoveredMonsters.length,
@@ -26,6 +33,11 @@ export function CompendiumPanel({ save, onClaimAchievement }: CompendiumPanelPro
   const achBonus = getClaimedAchievementBonuses(save);
   const unclaimedList = useMemo(() => getUnclaimedAchievements(save), [save]);
   const claimedSet = useMemo(() => new Set(save.claimedAchievements ?? []), [save.claimedAchievements]);
+
+  const filteredMonsters = useMemo(() => {
+    if (tierFilter === 'all') return MONSTER_LIST;
+    return MONSTER_LIST.filter((m) => m.tier === tierFilter);
+  }, [tierFilter]);
 
   const sortedAchievements = useMemo(() => {
     return [...ACHIEVEMENTS].sort((a, b) => {
@@ -84,82 +96,137 @@ export function CompendiumPanel({ save, onClaimAchievement }: CompendiumPanelPro
       </div>
 
       {subTab === 'monsters' ? (
-        <div className="compendium-grid">
-          {MONSTER_LIST.map((sp) => {
-            const found = save.discoveredMonsters.includes(sp.id);
-            const owned = save.roster[sp.id];
-            const role = ROLE_LABELS[sp.role];
-            const biomeName =
-              sp.biome === 'special'
-                ? '希少'
-                : sp.biome !== 'hero'
-                  ? BIOMES[sp.biome].shortName
-                  : '';
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 3 }}>
+            <button
+              id="btn-comp-tier-all"
+              type="button"
+              className={`pill-chip ${tierFilter === 'all' ? 'active' : ''}`}
+              style={{ textAlign: 'center', padding: '3px 2px', fontSize: 9.5 }}
+              onClick={() => setTierFilter('all')}
+            >
+              全{MONSTER_LIST.length}
+            </button>
+            <button
+              id="btn-comp-tier-normal"
+              type="button"
+              className={`pill-chip ${tierFilter === 'normal' ? 'active' : ''}`}
+              style={{ textAlign: 'center', padding: '3px 2px', fontSize: 9.5 }}
+              onClick={() => setTierFilter('normal')}
+            >
+              N {NORMAL_MONSTERS.length}
+            </button>
+            <button
+              id="btn-comp-tier-elite"
+              type="button"
+              className={`pill-chip ${tierFilter === 'elite' ? 'active' : ''}`}
+              style={{ textAlign: 'center', padding: '3px 2px', fontSize: 9.5 }}
+              onClick={() => setTierFilter('elite')}
+            >
+              ★E {ELITE_MONSTERS.length}
+            </button>
+            <button
+              id="btn-comp-tier-boss"
+              type="button"
+              className={`pill-chip ${tierFilter === 'boss' ? 'active' : ''}`}
+              style={{ textAlign: 'center', padding: '3px 2px', fontSize: 9.5 }}
+              onClick={() => setTierFilter('boss')}
+            >
+              ☠B {BOSS_MONSTERS.length}
+            </button>
+          </div>
+          <div className="compendium-grid">
+            {filteredMonsters.map((sp) => {
+              const found = save.discoveredMonsters.includes(sp.id);
+              const owned = save.roster[sp.id];
+              const role = ROLE_LABELS[sp.role];
+              const biomeName =
+                sp.biome === 'special'
+                  ? '希少'
+                  : sp.biome !== 'hero'
+                    ? BIOMES[sp.biome].shortName
+                    : '';
 
-            return (
-              <div
-                key={sp.id}
-                className="rpg-card"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  opacity: found ? 1 : 0.65,
-                  borderColor: sp.isBoss && found ? 'var(--border-gold)' : undefined,
-                }}
-              >
-                <PixelIcon spriteKey={sp.spriteKey} size={24} silhouette={!found} />
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      color: sp.isBoss && found ? '#ffe570' : 'var(--text-main)',
-                    }}
-                  >
-                    {found ? sp.name : '？？？'}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: 1, minWidth: 0 }}>
-                    <span className="role-badge" style={{ background: role.color, fontSize: 8.5 }}>
-                      {role.label}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 8.5,
-                        color: 'var(--text-muted)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {biomeName}
-                      {sp.isBoss ? '★' : ''}
-                    </span>
-                  </div>
-                  {found && (
+              return (
+                <div
+                  key={sp.id}
+                  className="rpg-card"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    opacity: found ? 1 : 0.65,
+                    borderColor:
+                      sp.tier === 'boss' && found
+                        ? 'var(--border-gold)'
+                        : sp.tier === 'elite' && found
+                          ? '#a865e8'
+                          : undefined,
+                  }}
+                >
+                  <PixelIcon spriteKey={sp.spriteKey} size={24} silhouette={!found} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
                     <div
                       style={{
-                        fontSize: 8.5,
-                        color: '#9ee8ad',
-                        marginTop: 1,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
+                        color:
+                          sp.tier === 'boss' && found
+                            ? '#ffe570'
+                            : sp.tier === 'elite' && found
+                              ? '#dfb3ff'
+                              : 'var(--text-main)',
                       }}
                     >
-                      {owned
-                        ? `${owned.trueEvolved ? '【真】' : owned.evolved ? '【極】' : ''}Lv.${owned.level} ★+${owned.awakening}`
-                        : sp.passiveDesc}
+                      {found ? sp.name : '？？？'}
                     </div>
-                  )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: 1, minWidth: 0 }}>
+                      <span className="role-badge" style={{ background: role.color, fontSize: 8.5 }}>
+                        {role.label}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 8.5,
+                          color:
+                            sp.tier === 'boss'
+                              ? '#ffe570'
+                              : sp.tier === 'elite'
+                                ? '#d5a4ff'
+                                : 'var(--text-muted)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {biomeName}
+                        {sp.tier === 'boss' ? '☠' : sp.tier === 'elite' ? '★' : ''}
+                      </span>
+                    </div>
+                    {found && (
+                      <div
+                        style={{
+                          fontSize: 8.5,
+                          color: '#9ee8ad',
+                          marginTop: 1,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {owned
+                          ? `${owned.trueEvolved ? '【真】' : owned.evolved ? '【極】' : ''}Lv.${owned.level} ★+${owned.awakening}`
+                          : sp.passiveDesc}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        </>
       ) : subTab === 'uniques' ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {UNIQUE_TEMPLATES.map((u) => {
