@@ -18,6 +18,7 @@ import {
   type SortDirection,
 } from '../game/sortUtils';
 import { computeUnitStats } from '../game/stats';
+import { getUnitEquipVisualKey } from '../engine/equipVisuals';
 import type {
   ActiveShrineBuffs,
   AutoLootMode,
@@ -224,6 +225,7 @@ export function EquipmentPanel({
           if (!u) return null;
           const sp = getSpecies(u.speciesId);
           const st = computeUnitStats(u, save, shrineBuffs, invMap);
+          const eqKey = getUnitEquipVisualKey(u, invMap);
           return (
             <button
               key={pid}
@@ -231,7 +233,7 @@ export function EquipmentPanel({
               className={`unit-pill ${pid === activeUnitId ? 'selected' : ''}`}
               onClick={() => setSelectedUnitId(pid)}
             >
-              <PixelIcon spriteKey={sp.spriteKey} size={22} />
+              <PixelIcon spriteKey={sp.spriteKey} equipKey={eqKey} size={22} />
               <span
                 style={{
                   fontSize: 9,
@@ -252,10 +254,15 @@ export function EquipmentPanel({
         })}
       </div>
 
-      {/* Selected Unit Stats + 1-Tap Auto-Optimal Equip + Active Set Badges + 4 Equipped Slots */}
+      {/* Selected Unit Equipped Preview + Stats + 1-Tap Auto-Optimal Equip */}
       <div className="rpg-card" style={{ padding: '5px 7px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, minWidth: 0 }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 7px', fontSize: 10, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, minWidth: 0 }}>
+          <PixelIcon
+            spriteKey={getSpecies(unit.speciesId).spriteKey}
+            equipKey={getUnitEquipVisualKey(unit, invMap)}
+            size={32}
+          />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 7px', fontSize: 10, minWidth: 0, flex: 1 }}>
             <span>ATK <strong>{unitStats.atk}</strong></span>
             <span>MAG <strong>{unitStats.mag}</strong></span>
             <span>DEF <strong>{unitStats.def}</strong></span>

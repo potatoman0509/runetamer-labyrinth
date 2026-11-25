@@ -27,6 +27,11 @@ import {
   getSignatureStyle,
   resolveMotionRecipe,
 } from '../../engine/battleMotions';
+import {
+  getUnitEquipVisualKey,
+  resolveEquipmentAppearance,
+  resolveSpeciesEquipRig,
+} from '../../engine/equipVisuals';
 import { paintSprite } from '../../engine/hdSprites';
 import { ORCHESTRA_TRACKS } from '../../engine/sound';
 import {
@@ -982,5 +987,64 @@ describe('RuneTamer Labyrinth Core & v11 Systems', () => {
     const byIlvDesc = sortEquipmentItems(items, hero, eqInvMap, ownerMap, 'itemLevel', 'desc');
     expect(byIlvDesc[0]!.itemLevel).toBeGreaterThanOrEqual(byIlvDesc[1]!.itemLevel);
     expect(byIlvDesc[1]!.itemLevel).toBeGreaterThanOrEqual(byIlvDesc[2]!.itemLevel);
+  });
+
+  it('renders equipment appearances individually across Hero, all 150 monsters, and all 40 Unique templates (Option C)', () => {
+    // 1. All 151 species (hero + 150 monsters) resolve bounded anatomical equip rigs
+    const heroRig = resolveSpeciesEquipRig('hero');
+    expect(heroRig.speciesKey).toBe('hero');
+    for (const sp of MONSTER_LIST) {
+      const rig = resolveSpeciesEquipRig(sp.id);
+      expect(rig.speciesKey).toBe(sp.id);
+      expect(rig.handX).toBeGreaterThanOrEqual(1);
+      expect(rig.handX).toBeLessThanOrEqual(30);
+      expect(rig.headY).toBeGreaterThanOrEqual(1);
+      expect(rig.headY).toBeLessThanOrEqual(30);
+    }
+
+    // 2. All 40 Unique equipment items produce valid distinct visual recipes
+    expect(UNIQUE_TEMPLATES.length).toBe(40);
+    const visualFingerprints = new Set<string>();
+    for (const uq of UNIQUE_TEMPLATES) {
+      const key =
+        uq.slot === 'weapon'
+          ? `${uq.iconKey}~mythic~7~${uq.id}||||`
+          : uq.slot === 'armor'
+            ? `|${uq.iconKey}~mythic~7~${uq.id}|||ancient_rune`
+            : uq.slot === 'relic'
+              ? `||${uq.iconKey}~mythic~7~${uq.id}||`
+              : `|||${uq.iconKey}~mythic~7~${uq.id}|`;
+      const resolved = resolveEquipmentAppearance(key);
+      expect(resolved).not.toBeNull();
+      visualFingerprints.add(JSON.stringify(resolved));
+    }
+    expect(visualFingerprints.size).toBe(40);
+
+    // 3. Equipping Hero & monsters visibly modifies 32x32 PixelGrid buffers
+    const diffPixels = (species: string, eqA: string, eqB: string) => {
+      const a = paintSprite(species, 0, eqA).buf;
+      const b = paintSprite(species, 0, eqB).buf;
+      let changed = 0;
+      for (let i = 0; i < a.length; i += 1) {
+        if (a[i] !== b[i]) changed += 1;
+      }
+      return changed;
+    };
+
+    const fullMythicKey =
+      'axe~mythic~8~eclipse_reaper_scythe|plate~mythic~8~dragonscale_thorns|chalice~mythic~8~halo_diadem|rune_red~mythic~8~eternal_tamer_rune|seraph_radiance';
+    for (const spKey of ['hero', 'leaf_slime', 'crimson_wyrm', 'genesis_orrery', 'glacier_leviathan']) {
+      expect(diffPixels(spKey, '', fullMythicKey)).toBeGreaterThan(20);
+    }
+
+    // 4. Battle creation attaches equipKey for equipped allies
+    const save = createInitialSave();
+    const invMap = new Map(save.inventory.map((it) => [it.id, it]));
+    const expectedHeroEq = getUnitEquipVisualKey(save.roster.hero!, invMap);
+    expect(expectedHeroEq.length).toBeGreaterThan(0);
+
+    const b = createBattleState(save, createBossRushEntity(1), 5);
+    const battleHero = b.allies.find((a) => a.speciesId === 'hero')!;
+    expect(battleHero.equipKey).toBe(expectedHeroEq);
   });
 });

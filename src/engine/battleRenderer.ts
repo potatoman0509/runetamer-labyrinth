@@ -427,7 +427,7 @@ export function renderBattleScene(
     const hurtShakeX = isHurt ? Math.round(Math.sin(timeMs * 0.08) * 5) : 0;
 
     const drawScale = Math.round(pos.scale);
-    const sprite = getSpriteCanvas(unit.spriteKey, drawScale, unit.isAlly, false, frameIdx);
+    const sprite = getSpriteCanvas(unit.spriteKey, drawScale, unit.isAlly, false, frameIdx, unit.equipKey);
     const sw = sprite.width;
     const sh = sprite.height;
 

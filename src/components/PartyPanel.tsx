@@ -35,6 +35,7 @@ import type {
   MonsterRole,
   MonsterTier,
 } from '../game/types';
+import { getUnitEquipVisualKey } from '../engine/equipVisuals';
 import { PixelIcon } from './PixelIcon';
 
 interface PartyPanelProps {
@@ -200,7 +201,7 @@ export function PartyPanel({
               return (
                 <div key={pid} className="rpg-card-gold" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                    <PixelIcon spriteKey={sp.spriteKey} size={26} />
+                    <PixelIcon spriteKey={sp.spriteKey} equipKey={getUnitEquipVisualKey(u, invMap)} size={26} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                         {isMonster && u.trueEvolved ? (
@@ -462,7 +463,7 @@ export function PartyPanel({
 
               return (
                 <div key={u.id} className="rpg-card" style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
-                  <PixelIcon spriteKey={sp.spriteKey} size={24} />
+                  <PixelIcon spriteKey={sp.spriteKey} equipKey={getUnitEquipVisualKey(u, invMap)} size={24} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
                       {u.trueEvolved ? (

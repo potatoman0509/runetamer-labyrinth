@@ -1,4 +1,5 @@
 import { getSignatureStyle } from '../engine/battleMotions';
+import { getUnitEquipVisualKey } from '../engine/equipVisuals';
 import { getBossGimmick, SHIFT_ELEMENTS } from './bossGimmicks';
 import { BOSS_RUSH_MAX_WAVE, getBossRushWave } from './bossRush';
 import { getBiomeForFloor } from './data/biomes';
@@ -128,6 +129,7 @@ export function createBattleState(
         speciesId: u.speciesId,
         name: isTrueEvolved ? `【真】${sp.name}` : isEvolved ? `【極】${sp.name}` : sp.name,
         spriteKey: sp.spriteKey,
+        equipKey: getUnitEquipVisualKey(u, invMap),
         level: u.level,
         isBoss: false,
         isElite: false,

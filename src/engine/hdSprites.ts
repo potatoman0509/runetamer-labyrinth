@@ -4,6 +4,13 @@
  * directional 5-tone shading, specular highlights, and smooth 8-frame articulated motion.
  */
 
+import {
+  applyEquipmentVisualsToMonster,
+  applyHeroExtraAccessories,
+  drawWeaponAt,
+  resolveEquipmentAppearance,
+  type ResolvedEquipAppearance,
+} from './equipVisuals';
 import { paintAtlasMonster } from './monsterSpriteAtlas';
 
 export const ANIM_FRAME_COUNT = 8;
@@ -202,38 +209,67 @@ function drawSlime(
   g.outline(colors.outline);
 }
 
-function drawHero(g: PixelGrid, phase: number): void {
+function drawHero(
+  g: PixelGrid,
+  phase: number,
+  appearance?: ResolvedEquipAppearance | null,
+): void {
   const breath = Math.round(Math.sin(phase) * 0.9);
   const capeWave = Math.sin(phase);
   const swordGlow = Math.cos(phase);
 
-  // Flowing crimson cape behind (3-segment silky wave!)
+  const armor = appearance?.armor;
+  const capeMain = armor?.cape ?? '#c93c38';
+  const capeShade = armor?.capeShade ?? '#8f2424';
+  const capeLight = armor ? armor.light : '#eb5b4e';
+  const bodyMain = armor?.main ?? '#2a8754';
+  const bodyLight = armor?.light ?? '#4ec278';
+  const bodyShade = armor?.shade ?? '#1d5e3a';
+  const trimCol = armor?.trim ?? '#f2c144';
+  const scarfCol = armor ? armor.trim : '#d9453b';
+
+  // Flowing dynamic cape behind (colored & styled by equipped armor!)
   for (let i = 0; i < 10; i += 1) {
     const waveX = Math.round(Math.sin(phase - i * 0.45) * 1.8);
-    g.rect(6 + waveX - Math.floor(i * 0.2), 14 + i + breath, 7, 2, i > 6 ? '#8f2424' : '#c93c38');
+    g.rect(6 + waveX - Math.floor(i * 0.2), 14 + i + breath, 7, 2, i > 6 ? capeShade : capeMain);
   }
-  g.rect(8 + Math.round(capeWave), 15 + breath, 4, 5, '#eb5b4e');
+  g.rect(8 + Math.round(capeWave), 15 + breath, 4, 5, capeLight);
 
-  // Boots & legs (subtle stance)
-  g.rect(11, 24, 3, 5, '#3b573f');
-  g.rect(17, 24, 3, 5, '#3b573f');
-  g.rect(10, 27, 4, 3, '#5c3c24');
-  g.rect(17, 27, 4, 3, '#5c3c24');
-  g.px(11, 27, '#94633e');
-  g.px(18, 27, '#94633e');
+  // Boots & legs (armored greaves if wearing plate/fortress/carapace)
+  const legCol = armor?.kind === 'plate' || armor?.kind === 'fortress' ? armor.shade : '#3b573f';
+  const bootCol = armor?.kind === 'plate' || armor?.kind === 'fortress' ? armor.main : '#5c3c24';
+  g.rect(11, 24, 3, 5, legCol);
+  g.rect(17, 24, 3, 5, legCol);
+  g.rect(10, 27, 4, 3, bootCol);
+  g.rect(17, 27, 4, 3, bootCol);
+  g.px(11, 27, armor ? trimCol : '#94633e');
+  g.px(18, 27, armor ? trimCol : '#94633e');
 
-  // Emerald Tunic & Gold Belt
-  g.rect(10, 14 + breath, 11, 10, '#2a8754');
-  g.rect(11, 15 + breath, 4, 7, '#4ec278');
-  g.rect(17, 15 + breath, 3, 8, '#1d5e3a');
-  g.rect(10, 21 + breath, 11, 2, '#f2c144');
+  // Tunic / Plate / Robe & Belt
+  if (armor?.kind === 'robe') {
+    g.rect(10, 14 + breath, 11, 13, bodyMain);
+    g.rect(11, 15 + breath, 4, 10, bodyLight);
+    g.rect(17, 15 + breath, 3, 11, bodyShade);
+  } else {
+    g.rect(10, 14 + breath, 11, 10, bodyMain);
+    g.rect(11, 15 + breath, 4, 7, bodyLight);
+    g.rect(17, 15 + breath, 3, 8, bodyShade);
+  }
+  g.rect(10, 21 + breath, 11, 2, trimCol);
   g.rect(14, 21 + breath, 3, 2, '#fff2b0');
-  // Scarf collar
-  g.rect(10, 13 + breath, 11, 2, '#d9453b');
+  // Collar / scarf
+  g.rect(10, 13 + breath, 11, 2, scarfCol);
+
+  // Pauldrons if wearing heavy/epic+ armor
+  if (armor?.pauldron) {
+    g.rect(8, 13 + breath, 3, 3, bodyLight);
+    g.rect(19, 13 + breath, 3, 3, bodyShade);
+    g.px(9, 13 + breath, trimCol);
+    g.px(20, 13 + breath, trimCol);
+  }
 
   // Head & expressive hair
   g.ellipse(15.5, 9 + breath, 5, 4.8, '#f7cfa7', '#d9a47c', '#ffe8cf');
-  // Hair bangs + windswept tuft
   const hairTip = Math.round(Math.sin(phase + 0.6));
   g.ellipse(15.5, 6 + breath, 5.6, 3.2, '#8c4e27', '#5c3016', '#c97e42');
   g.rect(9 + hairTip, 6 + breath, 3, 5, '#8c4e27');
@@ -247,17 +283,23 @@ function drawHero(g: PixelGrid, phase: number): void {
   g.px(13, 9 + breath, '#ffffff');
   g.px(17, 9 + breath, '#ffffff');
 
-  // Glowing Rune Blade raised on right!
-  const sy = Math.round(Math.sin(phase) * 1.4);
-  g.line(22, 19 + breath + sy, 28, 7 + sy, '#63d9ff', 2);
-  g.line(22, 18 + breath + sy, 27, 8 + sy, '#ebfcff', 1);
-  // Hilt & gold crossguard
-  g.rect(20, 18 + breath + sy, 4, 2, '#f5c749');
-  g.rect(20, 20 + breath + sy, 2, 3, '#6e4024');
-  // Blade gleam spark
-  if (swordGlow > 0.2) {
-    g.px(27, 6 + sy, '#ffffff');
-    g.px(29, 8 + sy, '#8ae8ff');
+  // Held Weapon on right hand!
+  if (appearance?.weapon) {
+    drawWeaponAt(g, appearance.weapon, 22, 19 + breath, 'raised', phase, 1);
+  } else {
+    const sy = Math.round(Math.sin(phase) * 1.4);
+    g.line(22, 19 + breath + sy, 28, 7 + sy, '#63d9ff', 2);
+    g.line(22, 18 + breath + sy, 27, 8 + sy, '#ebfcff', 1);
+    g.rect(20, 18 + breath + sy, 4, 2, '#f5c749');
+    g.rect(20, 20 + breath + sy, 2, 3, '#6e4024');
+    if (swordGlow > 0.2) {
+      g.px(27, 6 + sy, '#ffffff');
+      g.px(29, 8 + sy, '#8ae8ff');
+    }
+  }
+
+  if (appearance) {
+    applyHeroExtraAccessories(g, phase, appearance);
   }
 
   g.outline('#181524');
@@ -847,7 +889,7 @@ const EQUIP_ICON_KEYS = new Set([
   'rune_green',
 ]);
 
-export function paintSprite(key: string, frameIndex: number): PixelGrid {
+export function paintSprite(key: string, frameIndex: number, equipKey?: string): PixelGrid {
   if (EQUIP_ICON_KEYS.has(key)) {
     const g = new PixelGrid(24);
     drawEquipIcon24(g, key);
@@ -856,11 +898,12 @@ export function paintSprite(key: string, frameIndex: number): PixelGrid {
 
   const g = new PixelGrid(32);
   const phase = ((frameIndex % ANIM_FRAME_COUNT) / ANIM_FRAME_COUNT) * Math.PI * 2;
+  const appearance = resolveEquipmentAppearance(equipKey);
 
   switch (key) {
     case 'hero':
-      drawHero(g, phase);
-      break;
+      drawHero(g, phase, appearance);
+      return g;
     case 'leaf_slime':
       drawSlime(
         g,
@@ -1424,11 +1467,17 @@ export function paintSprite(key: string, frameIndex: number): PixelGrid {
       break;
   }
 
+  if (appearance) {
+    applyEquipmentVisualsToMonster(g, key, phase, appearance);
+  }
+
   return g;
 }
 
 const frameCanvasCache = new Map<string, HTMLCanvasElement>();
 const staticUrlCache = new Map<string, string>();
+const MAX_FRAME_CACHE = 950;
+const MAX_URL_CACHE = 360;
 
 export function getHdSpriteCanvas(
   key: string,
@@ -1436,13 +1485,15 @@ export function getHdSpriteCanvas(
   flipX = false,
   silhouette = false,
   frameIndex = 0,
+  equipKey?: string,
 ): HTMLCanvasElement {
   const f = EQUIP_ICON_KEYS.has(key) ? 0 : ((frameIndex % ANIM_FRAME_COUNT) + ANIM_FRAME_COUNT) % ANIM_FRAME_COUNT;
-  const cacheKey = `${key}_${scale}_${flipX ? 1 : 0}_${silhouette ? 1 : 0}_${f}`;
+  const eqTag = equipKey ? `|eq=${equipKey}` : '';
+  const cacheKey = `${key}_${scale}_${flipX ? 1 : 0}_${silhouette ? 1 : 0}_${f}${eqTag}`;
   const cached = frameCanvasCache.get(cacheKey);
   if (cached) return cached;
 
-  const grid = paintSprite(key, f);
+  const grid = paintSprite(key, f, equipKey);
   const pxScale = Math.max(1, Math.round(scale));
   const canvas = document.createElement('canvas');
   canvas.width = grid.size * pxScale;
@@ -1461,6 +1512,10 @@ export function getHdSpriteCanvas(
     }
   }
 
+  if (frameCanvasCache.size >= MAX_FRAME_CACHE) {
+    const oldest = frameCanvasCache.keys().next().value;
+    if (oldest) frameCanvasCache.delete(oldest);
+  }
   frameCanvasCache.set(cacheKey, canvas);
   return canvas;
 }
@@ -1469,13 +1524,19 @@ export function getHdSpriteDataUrl(
   key: string,
   scale = 2,
   silhouette = false,
+  equipKey?: string,
 ): string {
-  const cacheKey = `${key}_${scale}_${silhouette ? 1 : 0}`;
+  const eqTag = equipKey ? `|eq=${equipKey}` : '';
+  const cacheKey = `${key}_${scale}_${silhouette ? 1 : 0}${eqTag}`;
   const cached = staticUrlCache.get(cacheKey);
   if (cached) return cached;
   if (typeof document === 'undefined') return '';
-  const canvas = getHdSpriteCanvas(key, scale, false, silhouette, 0);
+  const canvas = getHdSpriteCanvas(key, scale, false, silhouette, 0, equipKey);
   const url = canvas.toDataURL();
+  if (staticUrlCache.size >= MAX_URL_CACHE) {
+    const oldest = staticUrlCache.keys().next().value;
+    if (oldest) staticUrlCache.delete(oldest);
+  }
   staticUrlCache.set(cacheKey, url);
   return url;
 }

@@ -5,6 +5,7 @@ interface PixelIconProps {
   spriteKey: string;
   size?: number;
   silhouette?: boolean;
+  equipKey?: string;
   alt?: string;
 }
 
@@ -12,11 +13,12 @@ export function PixelIcon({
   spriteKey,
   size = 32,
   silhouette = false,
+  equipKey,
   alt = '',
 }: PixelIconProps) {
   const src = useMemo(
-    () => getSpriteDataUrl(spriteKey, 2, silhouette),
-    [spriteKey, silhouette],
+    () => getSpriteDataUrl(spriteKey, 2, silhouette, equipKey),
+    [spriteKey, silhouette, equipKey],
   );
 
   return (

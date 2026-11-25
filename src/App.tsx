@@ -6,6 +6,7 @@ import { GameCanvas } from './components/GameCanvas';
 import { PartyPanel } from './components/PartyPanel';
 import { PixelIcon } from './components/PixelIcon';
 import { WorldPanel, type WorldSection } from './components/WorldPanel';
+import { getUnitEquipVisualKey } from './engine/equipVisuals';
 import { soundEngine } from './engine/sound';
 import { ACHIEVEMENT_MAP, getUnclaimedAchievements } from './game/achievements';
 import {
@@ -1549,7 +1550,7 @@ export function App() {
                 color: '#ffd6dd',
               }}
             >
-              v13
+              v14
             </span>
           </div>
           <div className="hud-right">
@@ -1694,7 +1695,11 @@ export function App() {
                       return (
                         <div key={pid} className="party-mini-chip">
                           <div className="party-mini-top">
-                            <PixelIcon spriteKey={sp.spriteKey} size={18} />
+                            <PixelIcon
+                              spriteKey={sp.spriteKey}
+                              equipKey={getUnitEquipVisualKey(u, invMap)}
+                              size={18}
+                            />
                             <div style={{ minWidth: 0, flex: 1 }}>
                               <div
                                 style={{
@@ -1737,7 +1742,13 @@ export function App() {
                         className="choice-card stairs-choice"
                         onClick={() => enterDungeonFloor(defaultEntryFloor)}
                       >
-                        <PixelIcon spriteKey="hero" size={26} />
+                        <PixelIcon
+                          spriteKey="hero"
+                          equipKey={
+                            save.roster.hero ? getUnitEquipVisualKey(save.roster.hero, invMap) : ''
+                          }
+                          size={26}
+                        />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 12.5, color: '#eafff0' }}>
                             ⚔ 迷宮へ出撃・{defaultEntryFloor}F〜

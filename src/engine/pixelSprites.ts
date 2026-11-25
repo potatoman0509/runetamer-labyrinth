@@ -12,14 +12,16 @@ export function getSpriteCanvas(
   flipX = false,
   silhouette = false,
   frameIndex = 0,
+  equipKey?: string,
 ): HTMLCanvasElement {
-  return getHdSpriteCanvas(key, scale, flipX, silhouette, frameIndex);
+  return getHdSpriteCanvas(key, scale, flipX, silhouette, frameIndex, equipKey);
 }
 
 export function getSpriteDataUrl(
   key: string,
   scale = 2,
   silhouette = false,
+  equipKey?: string,
 ): string {
-  return getHdSpriteDataUrl(key, scale, silhouette);
+  return getHdSpriteDataUrl(key, scale, silhouette, equipKey);
 }

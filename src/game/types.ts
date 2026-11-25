@@ -272,6 +272,7 @@ export interface BattleUnitState {
   speciesId: string;
   name: string;
   spriteKey: string;
+  equipKey?: string;
   level: number;
   isBoss: boolean;
   isElite: boolean;

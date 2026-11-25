@@ -436,7 +436,7 @@ export function BattlePanel({
               onClick={() => setInspectAllyUid(ally.uid)}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 3, minWidth: 0 }}>
-                <PixelIcon spriteKey={ally.spriteKey} size={18} />
+                <PixelIcon spriteKey={ally.spriteKey} equipKey={ally.equipKey} size={18} />
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div
                     style={{
@@ -803,7 +803,7 @@ export function BattlePanel({
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <PixelIcon spriteKey={ally.spriteKey} size={36} />
+                <PixelIcon spriteKey={ally.spriteKey} equipKey={ally.equipKey} size={36} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 12, color: '#ffe570' }}>
                     {ally.trueEvolved ? '【真】' : ally.evolved ? '【極】' : ''}

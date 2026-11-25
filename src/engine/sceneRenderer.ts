@@ -2,6 +2,7 @@ import { BIOMES } from '../game/data/biomes';
 import type { ExpeditionState } from '../game/expedition';
 import { getSpecies } from '../game/data/monsters';
 import type { GameSave } from '../game/types';
+import { getUnitEquipVisualKey } from './equipVisuals';
 import { ANIM_FRAME_COUNT, getSpriteCanvas } from './pixelSprites';
 
 function drawVillageBackdrop(
@@ -248,16 +249,18 @@ export function renderExpeditionScene(
     ? Math.round(width * 0.5 - ((partyUnits.length - 1) * spacing) / 2)
     : Math.round(width * 0.14);
 
+  const invMap = new Map(save.inventory.map((it) => [it.id, it]));
   const frameMs = isMarching ? 68 : 95;
 
   partyUnits.forEach((unit, idx) => {
     const sp = getSpecies(unit.speciesId);
+    const eqKey = getUnitEquipVisualKey(unit, invMap);
     const drawIdx = exp.inVillage ? idx : partyUnits.length - 1 - idx;
     const cx = startX + drawIdx * spacing;
     const cy = groundY + (idx % 2 === 0 ? -3 : 5);
     const frameIdx = (Math.floor(timeMs / frameMs) + idx * 2) % ANIM_FRAME_COUNT;
 
-    const sprite = getSpriteCanvas(sp.spriteKey, spriteScale, false, false, frameIdx);
+    const sprite = getSpriteCanvas(sp.spriteKey, spriteScale, false, false, frameIdx, eqKey);
     ctx.fillStyle = 'rgba(0,0,0,0.34)';
     ctx.fillRect(
       Math.round(cx - sprite.width * 0.28),
