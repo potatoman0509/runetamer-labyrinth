@@ -683,7 +683,7 @@ export function App() {
     }
 
     const active = findBattleUnit(battle, battle.activeUid);
-    const shouldAutoStep = !active || !active.isAlly || save.settings.autoBattle || autoAdvance;
+    const shouldAutoStep = !active || !active.isAlly || save.settings.autoBattle;
     if (!shouldAutoStep) return;
 
     const delayMs =
@@ -696,7 +696,7 @@ export function App() {
     const timer = window.setTimeout(() => {
       const next = stepEnemyOrAutoTurn(
         battle,
-        save.settings.autoBattle || autoAdvance,
+        save.settings.autoBattle,
         save.settings.battleTactic,
       );
       applyBattleTransition(next);
@@ -705,7 +705,6 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, [
     applyBattleTransition,
-    autoAdvance,
     battle,
     save.settings.autoBattle,
     save.settings.battleSpeed,
@@ -1641,15 +1640,11 @@ export function App() {
           {battle ? (
             <BattlePanel
               battle={battle}
-              settings={{
-                ...save.settings,
-                autoBattle: save.settings.autoBattle || autoAdvance,
-              }}
+              settings={save.settings}
               selectedEnemyUid={effectiveSelectedEnemyUid}
               onSelectEnemy={(uid) => setSelectedEnemyUid(uid)}
               onCommand={handleBattleCommand}
               onToggleAuto={() => {
-                if (autoAdvance) setAutoAdvance(false);
                 setSave((p) => ({
                   ...p,
                   settings: { ...p.settings, autoBattle: !p.settings.autoBattle },
@@ -1848,11 +1843,12 @@ export function App() {
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 3, minWidth: 0 }}>
                         <span
                           className="section-heading"
                           style={{
                             flex: 1,
+                            fontSize: 10.5,
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
@@ -1860,21 +1856,37 @@ export function App() {
                           }}
                         >
                           {expedition.step >= expedition.maxSteps && !expedition.bossDefeated
-                            ? `${expedition.floor}F 階層ボス`
-                            : `ルート選択 ${expedition.step}/${expedition.maxSteps}`}
+                            ? `${expedition.floor}F ボス`
+                            : `ルート ${expedition.step}/${expedition.maxSteps}`}
                         </span>
                         <button
                           id="btn-auto-advance"
                           type="button"
                           className={`rpg-btn sm ${autoAdvance ? 'active-toggle' : ''}`}
+                          style={{ fontSize: 9, padding: '3px 5px' }}
                           onClick={() => setAutoAdvance((v) => !v)}
                         >
-                          {autoAdvance ? '⏹オート中' : '▶オート進行'}
+                          {autoAdvance ? '探索AUTO:ON' : '探索AUTO:OFF'}
+                        </button>
+                        <button
+                          id="btn-explore-battle-auto"
+                          type="button"
+                          className={`rpg-btn sm ${save.settings.autoBattle ? 'active-toggle' : ''}`}
+                          style={{ fontSize: 9, padding: '3px 5px' }}
+                          onClick={() =>
+                            setSave((p) => ({
+                              ...p,
+                              settings: { ...p.settings, autoBattle: !p.settings.autoBattle },
+                            }))
+                          }
+                        >
+                          {save.settings.autoBattle ? '戦闘AUTO:ON' : '戦闘AUTO:OFF'}
                         </button>
                         <button
                           id="btn-return-village"
                           type="button"
                           className="rpg-btn sm"
+                          style={{ fontSize: 9, padding: '3px 5px' }}
                           onClick={() => returnToVillage()}
                         >
                           🏠帰還
@@ -1905,12 +1917,12 @@ export function App() {
                                 handleSelectChoice(ch);
                               }}
                             >
-                              <PixelIcon spriteKey={ch.spriteKey} size={26} />
+                              <PixelIcon spriteKey={ch.spriteKey} size={20} />
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div
                                   style={{
                                     fontFamily: 'var(--font-pixel)',
-                                    fontSize: 11.5,
+                                    fontSize: 10.5,
                                     color: '#fff7e0',
                                     whiteSpace: 'nowrap',
                                     overflow: 'hidden',
@@ -1921,10 +1933,10 @@ export function App() {
                                 </div>
                                 <div
                                   style={{
-                                    fontSize: 9.5,
+                                    fontSize: 8.5,
                                     color: 'var(--text-muted)',
                                     marginTop: 1,
-                                    lineHeight: 1.25,
+                                    lineHeight: 1.2,
                                     overflow: 'hidden',
                                     textOverflow: 'ellipsis',
                                     whiteSpace: 'nowrap',

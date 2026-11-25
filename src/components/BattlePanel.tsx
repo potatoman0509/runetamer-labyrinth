@@ -589,7 +589,7 @@ export function BattlePanel({
           className={`rpg-btn sm ${settings.autoBattle ? 'active-toggle' : ''}`}
           onClick={onToggleAuto}
         >
-          {settings.autoBattle ? 'AUTO:ON' : 'AUTO:OFF'}
+          {settings.autoBattle ? '戦闘AUTO:ON' : '戦闘AUTO:OFF'}
         </button>
         <button
           id="btn-cycle-speed"

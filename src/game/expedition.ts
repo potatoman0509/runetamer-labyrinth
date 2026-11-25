@@ -101,6 +101,64 @@ export function createVillageExpedition(): ExpeditionState {
   };
 }
 
+function buildNormalBattleChoice(
+  biome: DungeonBiomeId,
+  advancesStep: boolean,
+  variantTitle?: string,
+): ExpeditionChoice {
+  const pack = makeEnemyPack(biome, 1, 3);
+  const lead = getSpecies(pack[0]!);
+  return {
+    id: nextChoiceId(),
+    kind: 'battle',
+    title:
+      variantTitle ??
+      `${lead.name}${pack.length > 1 ? `ほか${pack.length - 1}体` : ''}`,
+    subtitle: '経験値・金貨・仲間化',
+    tag: '戦闘',
+    tagColor: '#5c6a85',
+    spriteKey: lead.spriteKey,
+    speciesIds: pack,
+    advancesStep,
+  };
+}
+
+function buildEliteBattleChoice(
+  biome: DungeonBiomeId,
+  advancesStep: boolean,
+  prefix = '★強敵',
+): ExpeditionChoice {
+  const pack = makeElitePack(biome);
+  const lead = getSpecies(pack[0]!);
+  return {
+    id: nextChoiceId(),
+    kind: 'elite',
+    title: `${prefix}：${lead.name}`,
+    subtitle: 'エリート戦・装備・鍛冶石',
+    tag: '★強敵',
+    tagColor: '#c9781c',
+    spriteKey: lead.spriteKey,
+    speciesIds: pack,
+    advancesStep,
+  };
+}
+
+function buildRareChoice(biome: DungeonBiomeId, advancesStep: boolean): ExpeditionChoice {
+  const biomeElites = getBiomeEliteMonsters(biome);
+  const rareSp = pick(biomeElites.length > 0 ? biomeElites : ELITE_MONSTERS);
+  return {
+    id: nextChoiceId(),
+    kind: 'rare_encounter',
+    title: `✦希少：${rareSp.name}`,
+    subtitle: '鍛冶石・金貨・高レア装備',
+    tag: '✦希少',
+    tagColor: '#d99a1e',
+    spriteKey: rareSp.spriteKey,
+    speciesIds: [rareSp.id],
+    advancesStep,
+  };
+}
+
 export function generateStepChoices(
   floor: number,
   step: number,
@@ -112,8 +170,9 @@ export function generateStepChoices(
   const biome = getBiomeForFloor(floor);
   const bossFloor = isBossFloor(floor);
   const normalPool = getBiomeNormalMonsters(biome);
+  const merchantCost = Math.max(40, Math.round((55 + floor * 14) * Math.pow(1.9, worldTier - 1)));
 
-  // Final step: Boss encounter or Stairs Down
+  // Final step: Boss encounter or Stairs Down (10 balanced tactical choices)
   if (step >= maxSteps) {
     if (bossFloor && !bossDefeated) {
       const bossSp = getBossForFloor(floor);
@@ -122,7 +181,7 @@ export function generateStepChoices(
       const escort2 = pick(normalPool).id;
       const bossPack = floor >= 10 ? [escort1, bossId, escort2] : [bossId, escort1];
 
-      const choices: ExpeditionChoice[] = [
+      return [
         {
           id: nextChoiceId(),
           kind: 'boss',
@@ -137,40 +196,57 @@ export function generateStepChoices(
           speciesIds: bossPack,
           advancesStep: false,
         },
-      ];
-
-      if (!restUsedOnFloor) {
-        choices.push({
+        !restUsedOnFloor
+          ? {
+              id: nextChoiceId(),
+              kind: 'rest',
+              title: '焚き火で休む',
+              subtitle: '全員のHP・MPを30%回復',
+              tag: '回復',
+              tagColor: '#3a9c5a',
+              spriteKey: 'fountain',
+              advancesStep: false,
+            }
+          : buildNormalBattleChoice(biome, false),
+        buildEliteBattleChoice(biome, false, '★強敵'),
+        buildEliteBattleChoice(biome, false, '★強敵群'),
+        buildRareChoice(biome, false),
+        buildNormalBattleChoice(biome, false),
+        buildNormalBattleChoice(biome, false),
+        {
           id: nextChoiceId(),
-          kind: 'rest',
-          title: '焚き火で休む',
-          subtitle: '全員のHP・MPを30%回復',
-          tag: '回復',
-          tagColor: '#3a9c5a',
+          kind: 'merchant',
+          title: `行商人・${merchantCost.toLocaleString()}G`,
+          subtitle: '鍛冶石・レア以上装備・回復',
+          tag: '行商人',
+          tagColor: '#3a7ab5',
+          spriteKey: 'merchant',
+          merchantCostGold: merchantCost,
+          advancesStep: false,
+        },
+        {
+          id: nextChoiceId(),
+          kind: 'curse_altar',
+          title: '呪いの祭壇',
+          subtitle: 'HP-25%・敵強化でMF+65%',
+          tag: '呪い祭壇',
+          tagColor: '#9e2e4f',
+          spriteKey: 'curse_altar',
+          advancesStep: false,
+        },
+        {
+          id: nextChoiceId(),
+          kind: 'return_village',
+          title: '始まりの村へ戻る',
+          subtitle: '全回復・秘薬補充',
+          tag: '帰還',
+          tagColor: '#4c658a',
           spriteKey: 'fountain',
           advancesStep: false,
-        });
-      }
-
-      const grindPack = makeElitePack(biome);
-      const grindLead = getSpecies(grindPack[0]!);
-      choices.push({
-        id: nextChoiceId(),
-        kind: 'elite',
-        title: `★強敵：${grindLead.name}ほか`,
-        subtitle: '経験値・装備・鍛冶石',
-        tag: '★強敵',
-        tagColor: '#c98820',
-        spriteKey: grindLead.spriteKey,
-        speciesIds: grindPack,
-        advancesStep: false,
-      });
-
-      return choices;
+        },
+      ];
     }
 
-    const farmPack = makeElitePack(biome);
-    const farmLead = getSpecies(farmPack[0]!);
     return [
       {
         id: nextChoiceId(),
@@ -182,17 +258,35 @@ export function generateStepChoices(
         spriteKey: 'altar',
         advancesStep: true,
       },
+      buildEliteBattleChoice(biome, false, `${floor}F強敵`),
+      buildEliteBattleChoice(biome, false, '★連戦'),
+      buildRareChoice(biome, false),
+      buildNormalBattleChoice(biome, false),
+      buildNormalBattleChoice(biome, false),
+      buildNormalBattleChoice(biome, false),
       {
         id: nextChoiceId(),
-        kind: 'elite',
-        title: `${floor}F強敵：${farmLead.name}ほか`,
-        subtitle: '装備・鍛冶石',
-        tag: '★強敵',
-        tagColor: '#c98820',
-        spriteKey: farmLead.spriteKey,
-        speciesIds: farmPack,
+        kind: 'merchant',
+        title: `行商人・${merchantCost.toLocaleString()}G`,
+        subtitle: '鍛冶石・レア以上装備・回復',
+        tag: '行商人',
+        tagColor: '#3a7ab5',
+        spriteKey: 'merchant',
+        merchantCostGold: merchantCost,
         advancesStep: false,
       },
+      !restUsedOnFloor
+        ? {
+            id: nextChoiceId(),
+            kind: 'rest',
+            title: '焚き火で休む',
+            subtitle: '全員のHP・MPを30%回復',
+            tag: '回復',
+            tagColor: '#3a9c5a',
+            spriteKey: 'fountain',
+            advancesStep: false,
+          }
+        : buildNormalBattleChoice(biome, false),
       {
         id: nextChoiceId(),
         kind: 'return_village',
@@ -206,49 +300,15 @@ export function generateStepChoices(
     ];
   }
 
-  // ===== REGULAR STEP (1 .. maxSteps-1): 3 Rich Tactical Choices =====
-  const normalPack = makeEnemyPack(biome, 1, 3);
-  const normalLead = getSpecies(normalPack[0]!);
+  // ===== REGULAR STEP (1 .. maxSteps-1): 10 Rich Tactical Choices =====
+  const rareHit = Math.random() < 0.25 + (worldTier - 1) * 0.03;
 
-  const elitePack = makeElitePack(biome);
-  const eliteLead = getSpecies(elitePack[0]!);
-
-  // Slot 1: Standard Battle (110 Normals) OR Rare Elite Encounter (30 Elites)
-  const rareRoll = Math.random();
-  let choice1: ExpeditionChoice;
-  if (rareRoll < 0.1 + (worldTier - 1) * 0.015) {
-    const biomeElites = getBiomeEliteMonsters(biome);
-    const rareSp = pick(biomeElites.length > 0 ? biomeElites : ELITE_MONSTERS);
-    choice1 = {
-      id: nextChoiceId(),
-      kind: 'rare_encounter',
-      title: `✦希少：${rareSp.name}`,
-      subtitle: '鍛冶石・金貨・高レア装備',
-      tag: '✦希少',
-      tagColor: '#d99a1e',
-      spriteKey: rareSp.spriteKey,
-      speciesIds: [rareSp.id],
-      advancesStep: true,
-    };
-  } else {
-    choice1 = {
-      id: nextChoiceId(),
-      kind: 'battle',
-      title: `${normalLead.name}${normalPack.length > 1 ? `ほか${normalPack.length - 1}体` : ''}`,
-      subtitle: '経験値・金貨・仲間化',
-      tag: '戦闘',
-      tagColor: '#5c6a85',
-      spriteKey: normalLead.spriteKey,
-      speciesIds: normalPack,
-      advancesStep: true,
-    };
-  }
-
-  // Slot 2: High-Risk / High-Reward (Elite Battle, Gold Chest, Suspicious Chest/Mimic, or Curse Altar!)
-  const riskRoll = Math.random();
-  let choice2: ExpeditionChoice;
-  if (riskRoll < 0.22) {
-    choice2 = {
+  return [
+    buildNormalBattleChoice(biome, true),
+    buildNormalBattleChoice(biome, true),
+    rareHit ? buildRareChoice(biome, true) : buildNormalBattleChoice(biome, true),
+    buildEliteBattleChoice(biome, true, '★強敵'),
+    {
       id: nextChoiceId(),
       kind: 'suspicious_chest',
       title: '怪しい秘宝箱',
@@ -258,20 +318,8 @@ export function generateStepChoices(
       spriteKey: 'mimic',
       speciesIds: ['mimic'],
       advancesStep: true,
-    };
-  } else if (riskRoll < 0.4) {
-    choice2 = {
-      id: nextChoiceId(),
-      kind: 'curse_altar',
-      title: '呪いの祭壇',
-      subtitle: 'HP-25%・敵強化でMF+65%',
-      tag: '呪い祭壇',
-      tagColor: '#9e2e4f',
-      spriteKey: 'curse_altar',
-      advancesStep: true,
-    };
-  } else if (riskRoll < 0.56) {
-    choice2 = {
+    },
+    {
       id: nextChoiceId(),
       kind: 'gold_chest',
       title: '黄金の宝箱',
@@ -280,50 +328,8 @@ export function generateStepChoices(
       tagColor: '#d99a1e',
       spriteKey: 'gold_chest',
       advancesStep: true,
-    };
-  } else {
-    choice2 = {
-      id: nextChoiceId(),
-      kind: 'elite',
-      title: `★強敵：${eliteLead.name}ほか`,
-      subtitle: 'エリート戦・装備・鍛冶石',
-      tag: '★強敵',
-      tagColor: '#c9781c',
-      spriteKey: eliteLead.spriteKey,
-      speciesIds: elitePack,
-      advancesStep: true,
-    };
-  }
-
-  // Slot 3: Discovery / Utility (Wandering Smith, Dungeon Merchant, Chest, Shrines!)
-  const utilRoll = Math.random();
-  let choice3: ExpeditionChoice;
-  if (utilRoll < 0.16) {
-    choice3 = {
-      id: nextChoiceId(),
-      kind: 'wandering_smith',
-      title: '旅の鍛冶師',
-      subtitle: '装備中の武具を無料で+1強化',
-      tag: '無料強化',
-      tagColor: '#c96f28',
-      spriteKey: 'blacksmith',
-      advancesStep: true,
-    };
-  } else if (utilRoll < 0.34) {
-    const cost = Math.max(40, Math.round((55 + floor * 14) * Math.pow(1.9, worldTier - 1)));
-    choice3 = {
-      id: nextChoiceId(),
-      kind: 'merchant',
-      title: `行商人・${cost.toLocaleString()}G`,
-      subtitle: '鍛冶石・レア以上装備・不足時は回復',
-      tag: '行商人',
-      tagColor: '#3a7ab5',
-      spriteKey: 'merchant',
-      merchantCostGold: cost,
-      advancesStep: true,
-    };
-  } else if (utilRoll < 0.56) {
-    choice3 = {
+    },
+    {
       id: nextChoiceId(),
       kind: 'chest',
       title: '宝箱を開ける',
@@ -332,43 +338,72 @@ export function generateStepChoices(
       tagColor: '#b57b2a',
       spriteKey: 'chest',
       advancesStep: true,
-    };
-  } else if (utilRoll < 0.72) {
-    choice3 = {
+    },
+    Math.random() < 0.55
+      ? {
+          id: nextChoiceId(),
+          kind: 'wandering_smith',
+          title: '旅の鍛冶師',
+          subtitle: '装備中の武具を無料で+1強化',
+          tag: '無料強化',
+          tagColor: '#c96f28',
+          spriteKey: 'blacksmith',
+          advancesStep: true,
+        }
+      : {
+          id: nextChoiceId(),
+          kind: 'curse_altar',
+          title: '呪いの祭壇',
+          subtitle: 'HP-25%・敵強化でMF+65%',
+          tag: '呪い祭壇',
+          tagColor: '#9e2e4f',
+          spriteKey: 'curse_altar',
+          advancesStep: true,
+        },
+    {
       id: nextChoiceId(),
-      kind: 'shrine_heal',
-      title: '癒しの祠',
-      subtitle: '全員のHP・MPを全回復',
-      tag: '全回復',
-      tagColor: '#369657',
-      spriteKey: 'shrine',
+      kind: 'merchant',
+      title: `行商人・${merchantCost.toLocaleString()}G`,
+      subtitle: '鍛冶石・レア以上装備・回復',
+      tag: '行商人',
+      tagColor: '#3a7ab5',
+      spriteKey: 'merchant',
+      merchantCostGold: merchantCost,
       advancesStep: true,
-    };
-  } else if (utilRoll < 0.86) {
-    choice3 = {
-      id: nextChoiceId(),
-      kind: 'shrine_power',
-      title: '剛力の祠',
-      subtitle: '探索中の攻撃・魔力+25%',
-      tag: '火力UP',
-      tagColor: '#c94c38',
-      spriteKey: 'shrine',
-      advancesStep: true,
-    };
-  } else {
-    choice3 = {
-      id: nextChoiceId(),
-      kind: 'shrine_fortune',
-      title: '幸運の祠',
-      subtitle: '探索中のトレハン+45%',
-      tag: '幸運UP',
-      tagColor: '#2f8ab5',
-      spriteKey: 'shrine',
-      advancesStep: true,
-    };
-  }
-
-  return [choice1, choice2, choice3];
+    },
+    pick<ExpeditionChoice>([
+      {
+        id: nextChoiceId(),
+        kind: 'shrine_heal',
+        title: '癒しの祠',
+        subtitle: '全員のHP・MPを全回復',
+        tag: '全回復',
+        tagColor: '#369657',
+        spriteKey: 'shrine',
+        advancesStep: true,
+      },
+      {
+        id: nextChoiceId(),
+        kind: 'shrine_power',
+        title: '剛力の祠',
+        subtitle: '探索中の攻撃・魔力+25%',
+        tag: '火力UP',
+        tagColor: '#c94c38',
+        spriteKey: 'shrine',
+        advancesStep: true,
+      },
+      {
+        id: nextChoiceId(),
+        kind: 'shrine_fortune',
+        title: '幸運の祠',
+        subtitle: '探索中のトレハン+45%',
+        tag: '幸運UP',
+        tagColor: '#2f8ab5',
+        spriteKey: 'shrine',
+        advancesStep: true,
+      },
+    ]),
+  ];
 }
 
 export function createDungeonExpedition(floor: number, worldTier: number): ExpeditionState {

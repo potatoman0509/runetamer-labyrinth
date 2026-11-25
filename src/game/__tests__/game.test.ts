@@ -169,21 +169,23 @@ describe('RuneTamer Labyrinth Core & v11 Systems', () => {
     expect(migrated!.discoveredMonsters).toContain('glacier_leviathan');
   });
 
-  it('generates command-choice expedition steps, boss choices, stairs, and auto-advance picks', () => {
+  it('generates 10 command-choice expedition steps, boss choices, stairs, and auto-advance picks', () => {
     const village = createVillageExpedition();
     expect(village.inVillage).toBe(true);
     expect(village.floor).toBe(0);
 
     const floor1 = createDungeonExpedition(1, 1);
     expect(floor1.inVillage).toBe(false);
-    expect(floor1.choices.length).toBe(3);
+    expect(floor1.choices.length).toBe(10);
     expect(pickAutoExpeditionChoice(floor1, 0.9)).not.toBeNull();
 
     const bossStepChoices = generateStepChoices(5, STEPS_PER_FLOOR, STEPS_PER_FLOOR, 1, false, false);
+    expect(bossStepChoices.length).toBe(10);
     expect(bossStepChoices.some((c) => c.kind === 'boss')).toBe(true);
     expect(bossStepChoices.some((c) => c.kind === 'rest')).toBe(true);
 
     const clearedChoices = generateStepChoices(5, STEPS_PER_FLOOR, STEPS_PER_FLOOR, 1, true, false);
+    expect(clearedChoices.length).toBe(10);
     expect(clearedChoices.some((c) => c.kind === 'stairs')).toBe(true);
     expect(clearedChoices.some((c) => c.kind === 'return_village')).toBe(true);
   });
