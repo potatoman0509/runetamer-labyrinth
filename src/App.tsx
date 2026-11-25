@@ -1814,7 +1814,10 @@ export function App() {
                           type="button"
                           className="rpg-btn"
                           style={{ padding: '8px 6px' }}
-                          onClick={() => setActiveTab('gear')}
+                          onClick={() => {
+                            setFocusItemId(null);
+                            setActiveTab('gear');
+                          }}
                         >
                           🔨 装備・鍛冶 {save.inventory.length}
                         </button>
@@ -2038,7 +2041,10 @@ export function App() {
                   id="tab-gear"
                   type="button"
                   className={`tab-btn ${activeTab === 'gear' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('gear')}
+                  onClick={() => {
+                    setFocusItemId(null);
+                    setActiveTab('gear');
+                  }}
                 >
                   <span>🔨</span>
                   <span>装備・鍛冶</span>

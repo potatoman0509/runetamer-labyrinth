@@ -8,6 +8,7 @@ import {
   RARITY_META,
   SET_MAP,
   SLOT_LABELS,
+  UNIQUE_MAP,
 } from '../game/data/equipment';
 import { getSpecies } from '../game/data/monsters';
 import { computeUnitStats } from '../game/stats';
@@ -100,7 +101,7 @@ export function EquipmentPanel({
   }, [save.inventory, slotFilter]);
 
   const selectedItem: EquipmentItem | null =
-    (selectedItemId ? invMap.get(selectedItemId) : null) ?? filteredItems[0] ?? null;
+    selectedItemId ? (invMap.get(selectedItemId) ?? null) : null;
 
   const validAffixIdx =
     selectedItem &&
@@ -309,8 +310,10 @@ export function EquipmentPanel({
                 onClick={() => {
                   setSlotFilter(slot);
                   if (eqItem) {
-                    setSelectedItemId(eqItem.id);
+                    setSelectedItemId((cur) => (cur === eqItem.id ? null : eqItem.id));
                     setSelectedAffixIdx(null);
+                  } else {
+                    setSelectedItemId(null);
                   }
                 }}
               >
@@ -348,6 +351,7 @@ export function EquipmentPanel({
       {/* Selected Item Detail, Blacksmithing (+20 Enhance & 1-Slot Reroll) & Actions */}
       {selectedItem && (
         <div
+          id="gear-item-detail"
           className="rpg-card"
           style={{
             borderColor: RARITY_META[selectedItem.rarity].border,
@@ -387,6 +391,19 @@ export function EquipmentPanel({
                 )}
               </div>
             </div>
+            <button
+              id="btn-close-item-detail"
+              type="button"
+              className="rpg-btn sm"
+              style={{ flexShrink: 0, padding: '2px 6px', fontSize: 10 }}
+              onClick={() => {
+                setSelectedItemId(null);
+                setSelectedAffixIdx(null);
+              }}
+              aria-label="詳細を閉じる"
+            >
+              ✕
+            </button>
           </div>
 
           {!isEquippedBySelectedUnit && statDiffs.length > 0 && (
@@ -470,7 +487,7 @@ export function EquipmentPanel({
           )}
 
           {/* Unique Effect */}
-          {selectedItem.uniqueDesc && (
+          {(selectedItem.uniqueId || selectedItem.uniqueDesc) && (
             <div
               style={{
                 fontSize: 10,
@@ -481,7 +498,7 @@ export function EquipmentPanel({
                 borderRadius: 3,
               }}
             >
-              ★固有：{selectedItem.uniqueDesc}
+              ★固有：{(selectedItem.uniqueId && UNIQUE_MAP[selectedItem.uniqueId]?.desc) || selectedItem.uniqueDesc}
             </div>
           )}
 
@@ -661,7 +678,7 @@ export function EquipmentPanel({
               className={`item-row ${selectedItem?.id === item.id ? 'selected' : ''}`}
               style={{ borderLeft: `3px solid ${rm.border}` }}
               onClick={() => {
-                setSelectedItemId(item.id);
+                setSelectedItemId((cur) => (cur === item.id ? null : item.id));
                 setSelectedAffixIdx(null);
               }}
             >
