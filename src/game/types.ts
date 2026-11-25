@@ -310,6 +310,8 @@ export interface BattleUnitState {
   defBuffTurns: number;
   phoenixUsed: boolean;
   skills: [SkillDef, SkillDef];
+  shiftElement?: ElementType;
+  bossTurnCount?: number;
   lungeUntilMs: number;
   hurtUntilMs: number;
 }
@@ -342,6 +344,7 @@ export interface BattleReward {
   autoSalvagedStones: number;
   recruited: { speciesId: string; isNew: boolean; newAwakening: number }[];
   leveledUpIds: string[];
+  benchLeveledUpIds?: string[];
   worldTierUnlocked: number | null;
   bossRushWaveCleared?: number;
 }
@@ -355,7 +358,7 @@ export interface BattleState {
   isBossBattle: boolean;
   isEliteBattle: boolean;
   isRareBattle: boolean;
-  bossRushWave?: number; // 1..8 if in Boss Rush Arena
+  bossRushWave?: number; // 1..10 if in Boss Rush Arena
   activeTrials: TrialModId[];
   turn: number;
   limitGauge: number; // 0..100
@@ -382,12 +385,42 @@ export interface ActiveShrineBuffs {
   curseEnemyBonus: number;
 }
 
+export type GuildQuestObjective =
+  | 'kills'
+  | 'elites'
+  | 'bosses'
+  | 'biome_kills'
+  | 'trial_boss'
+  | 'boss_rush_wave'
+  | 'enhance';
+
+export interface GuildQuestItem {
+  id: string;
+  category: 'daily' | 'cycle';
+  title: string;
+  objective: GuildQuestObjective;
+  biome?: DungeonBiomeId;
+  target: number;
+  progress: number;
+  rewardGold: number;
+  rewardStones: number;
+  claimed: boolean;
+}
+
+export interface GuildQuestState {
+  dailyDateKey: string;
+  cycleNumber: number;
+  daily: GuildQuestItem[];
+  cycle: GuildQuestItem[];
+}
+
 export interface GameSettings {
   autoBattle: boolean;
   battleSpeed: BattleSpeed;
   battleTactic: BattleTactic;
   autoSell: AutoSellThreshold;
   autoLootMode: AutoLootMode;
+  soundMuted: boolean;
 }
 
 export interface GameStats {
@@ -417,7 +450,9 @@ export interface GameSave {
   partyIds: string[];
   roster: Record<string, UnitInstance>;
   inventory: EquipmentItem[];
+  encounteredMonsters: string[];
   discoveredMonsters: string[];
+  favoriteMonsters: string[];
   discoveredUniques: UniqueEffectId[];
   shopItems: EquipmentItem[];
   shopRefreshedAtTier: number;
@@ -426,6 +461,7 @@ export interface GameSave {
   claimedAchievements: string[];
   bossRushBestWave: number;
   activeTrials: TrialModId[];
+  guildQuests: GuildQuestState;
   settings: GameSettings;
   stats: GameStats;
 }

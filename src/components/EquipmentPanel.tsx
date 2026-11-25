@@ -126,6 +126,33 @@ export function EquipmentPanel({
   const ownerOfSelected = selectedItem ? equippedOwnerMap.get(selectedItem.id) : undefined;
   const isEquippedBySelectedUnit = ownerOfSelected === unit.id;
 
+  const previewStats = useMemo(() => {
+    if (!selectedItem || isEquippedBySelectedUnit) return null;
+    const simulatedUnit = {
+      ...unit,
+      equipped: { ...unit.equipped, [selectedItem.slot]: selectedItem.id },
+    };
+    const simulatedSave = {
+      ...save,
+      roster: { ...save.roster, [unit.id]: simulatedUnit },
+    };
+    return computeUnitStats(simulatedUnit, simulatedSave, shrineBuffs, invMap);
+  }, [selectedItem, isEquippedBySelectedUnit, unit, save, shrineBuffs, invMap]);
+
+  const statDiffs = useMemo(() => {
+    if (!previewStats) return [];
+    const pairs: { label: string; diff: number; suffix?: string }[] = [
+      { label: 'HP', diff: previewStats.maxHp - unitStats.maxHp },
+      { label: 'ATK', diff: previewStats.atk - unitStats.atk },
+      { label: 'MAG', diff: previewStats.mag - unitStats.mag },
+      { label: 'DEF', diff: previewStats.def - unitStats.def },
+      { label: 'SPD', diff: previewStats.spd - unitStats.spd },
+      { label: '会心', diff: previewStats.critRate - unitStats.critRate, suffix: '%' },
+      { label: 'MF', diff: previewStats.magicFind - unitStats.magicFind, suffix: '%' },
+    ];
+    return pairs.filter((p) => p.diff !== 0);
+  }, [previewStats, unitStats]);
+
   const enhanceCost = selectedItem ? getEnhanceCost(selectedItem) : null;
   const rerollCost = selectedItem ? getRerollCost(selectedItem) : null;
   const salvageStones = selectedItem ? getSalvageValue(selectedItem) : 0;
@@ -139,10 +166,11 @@ export function EquipmentPanel({
   const autoModeLabel = save.settings.autoLootMode === 'salvage' ? '自動分解' : '自動売却';
   const autoThresholdLabel =
     AUTO_SELL_OPTIONS.find((o) => o.value === save.settings.autoSell)?.label ?? 'OFF';
+  const bagNearFull = save.inventory.length >= 125;
 
   return (
     <div className="panel-body" style={{ gap: 5 }}>
-      {/* Current Gold & Diamond (Forge Stones) Bar */}
+      {/* Current Gold, Diamond (Forge Stones), & Bag Capacity Bar */}
       <div
         id="gear-currency-bar"
         className="rpg-card-gold"
@@ -157,8 +185,15 @@ export function EquipmentPanel({
           padding: '4px 7px',
         }}
       >
-        <span style={{ fontFamily: 'var(--font-pixel)', fontSize: 10, color: '#fff3c7', flexShrink: 0 }}>
-          所持
+        <span
+          style={{
+            fontFamily: 'var(--font-pixel)',
+            fontSize: 9.5,
+            color: bagNearFull ? '#ff8a8a' : '#fff3c7',
+            flexShrink: 0,
+          }}
+        >
+          🎒{save.inventory.length}/140{bagNearFull ? '!' : ''}
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
           <span
@@ -353,6 +388,28 @@ export function EquipmentPanel({
               </div>
             </div>
           </div>
+
+          {!isEquippedBySelectedUnit && statDiffs.length > 0 && (
+            <div
+              id="gear-stat-diffs"
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '2px 6px',
+                fontSize: 9.5,
+                padding: '2px 5px',
+                borderRadius: 4,
+                background: 'rgba(10, 9, 18, 0.55)',
+              }}
+            >
+              {statDiffs.map((d) => (
+                <span key={d.label} className={d.diff > 0 ? 'stat-diff-pos' : 'stat-diff-neg'}>
+                  {d.label} {d.diff > 0 ? `+${d.diff}` : d.diff}
+                  {d.suffix ?? ''}
+                </span>
+              ))}
+            </div>
+          )}
 
           {/* Set Info */}
           {selectedItem.setId && (

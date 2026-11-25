@@ -1,8 +1,15 @@
 import {
   findBattleUnit,
   getSkillMpCost,
+  getUnitEffectiveElement,
+  isElementalWeakness,
   type PlayerActionCommand,
 } from '../game/battle';
+import {
+  ELEMENT_META,
+  getBossGimmick,
+  getWeaknessElementFor,
+} from '../game/bossGimmicks';
 import { BOSS_RUSH_MAX_WAVE } from '../game/bossRush';
 import { RARITY_META } from '../game/data/equipment';
 import { getSpecies } from '../game/data/monsters';
@@ -122,6 +129,13 @@ export function BattlePanel({
           {r.leveledUpIds.length > 0 && (
             <div style={{ fontSize: 11.5, color: '#82ff9e', fontWeight: 700 }}>
               LEVEL UP {r.leveledUpIds.map((id) => getSpecies(id).name).join(' / ')}
+            </div>
+          )}
+
+          {r.benchLeveledUpIds && r.benchLeveledUpIds.length > 0 && (
+            <div style={{ fontSize: 10, color: '#9cc8ff' }}>
+              控えLV UP: {r.benchLeveledUpIds.slice(0, 4).map((id) => getSpecies(id).name).join('・')}
+              {r.benchLeveledUpIds.length > 4 ? ` ほか${r.benchLeveledUpIds.length - 4}` : ''}
             </div>
           )}
 
@@ -273,16 +287,45 @@ export function BattlePanel({
   }
 
   const chargingEnemy = battle.enemies.find((e) => e.hp > 0 && e.charging);
+  const livingBosses = battle.enemies.filter((e) => e.hp > 0 && e.isBoss);
+  const activeBossGimmick = livingBosses
+    .map((b) => ({ boss: b, gimmick: getBossGimmick(b.speciesId) }))
+    .find((x) => Boolean(x.gimmick));
   const limitPct = Math.max(0, Math.min(100, Math.round(battle.limitGauge)));
   const limitReady = limitPct >= 100;
 
+  const targetEnemy =
+    battle.enemies.find((e) => e.uid === selectedEnemyUid && e.hp > 0) ??
+    battle.enemies.find((e) => e.hp > 0) ??
+    null;
+  const activeAllyElement = activeUnit?.isAlly ? getSpecies(activeUnit.speciesId).element : null;
+  const activeAttackHitsWeak = Boolean(
+    activeAllyElement &&
+      targetEnemy &&
+      isElementalWeakness(activeAllyElement, targetEnemy.speciesId, targetEnemy.shiftElement),
+  );
+
   return (
     <div className="panel-body" style={{ gap: 4 }}>
-      {/* Clickable Enemy Target & Status Strip */}
+      {/* Clickable Enemy Target & Element/Weakness Strip */}
       <div className="battle-enemy-strip">
         {battle.enemies.map((enemy) => {
           const isTargeted = selectedEnemyUid === enemy.uid && enemy.hp > 0;
           const hpPct = Math.max(0, Math.min(100, (enemy.hp / enemy.maxHp) * 100));
+          const effElem = getUnitEffectiveElement(enemy);
+          const elemMeta = ELEMENT_META[effElem];
+          const weakElem = getWeaknessElementFor(effElem);
+          const weakMeta = weakElem ? ELEMENT_META[weakElem] : null;
+          const allyCanWeak = Boolean(
+            enemy.hp > 0 &&
+              activeUnit?.isAlly &&
+              ((activeAllyElement && isElementalWeakness(activeAllyElement, enemy.speciesId, enemy.shiftElement)) ||
+                activeUnit.skills.some(
+                  (sk) =>
+                    (sk.kind === 'damage' || sk.kind === 'drain') &&
+                    isElementalWeakness(sk.element, enemy.speciesId, enemy.shiftElement),
+                )),
+          );
           const statusIcons =
             (enemy.charging ? '⚠' : '') +
             (enemy.freezeTurns > 0 ? '❄' : '') +
@@ -297,7 +340,7 @@ export function BattlePanel({
               disabled={enemy.hp <= 0}
               onClick={() => onSelectEnemy(enemy.uid)}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 3, minWidth: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, minWidth: 0 }}>
                 <span
                   style={{
                     fontSize: 9,
@@ -309,11 +352,22 @@ export function BattlePanel({
                   }}
                 >
                   {isTargeted ? '◎' : ''}
+                  {elemMeta.icon}
                   {enemy.name}
                 </span>
-                {statusIcons && (
-                  <span style={{ fontSize: 8.5, flexShrink: 0 }}>{statusIcons}</span>
-                )}
+                <span style={{ fontSize: 8, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 2 }}>
+                  {weakMeta && (
+                    <span
+                      style={{
+                        color: allyCanWeak ? '#ffe66b' : 'var(--text-muted)',
+                        fontWeight: allyCanWeak ? 800 : 400,
+                      }}
+                    >
+                      {allyCanWeak ? 'WEAK' : `弱${weakMeta.icon}`}
+                    </span>
+                  )}
+                  {statusIcons}
+                </span>
               </div>
               <div className="bar-track" style={{ height: 3 }}>
                 <div className="bar-fill-enemy" style={{ width: `${hpPct}%` }} />
@@ -322,6 +376,41 @@ export function BattlePanel({
           );
         })}
       </div>
+
+      {/* Boss Gimmick Status Bar */}
+      {activeBossGimmick && activeBossGimmick.gimmick && (() => {
+        const b = activeBossGimmick.boss;
+        const g = activeBossGimmick.gimmick;
+        const shiftMeta = b.shiftElement ? ELEMENT_META[b.shiftElement] : null;
+        const shiftWeak = b.shiftElement ? getWeaknessElementFor(b.shiftElement) : null;
+        return (
+          <div
+            id="boss-gimmick-banner"
+            style={{
+              background: 'rgba(66, 26, 92, 0.42)',
+              border: '1px solid #b48cff',
+              borderRadius: 5,
+              padding: '2px 6px',
+              fontSize: 9,
+              color: '#ebd9ff',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 4,
+              minWidth: 0,
+            }}
+          >
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              ⚙ {g.name}・{g.shortDesc}
+            </span>
+            {shiftMeta && shiftWeak && (
+              <span style={{ color: '#ffe570', fontWeight: 700, flexShrink: 0 }}>
+                {shiftMeta.icon}→弱{ELEMENT_META[shiftWeak].icon}
+              </span>
+            )}
+          </div>
+        );
+      })()}
 
       {/* 4 Ally Status Strip */}
       <div className="battle-ally-strip">
@@ -542,11 +631,17 @@ export function BattlePanel({
             id="btn-cmd-attack"
             type="button"
             className="cmd-btn"
+            style={activeAttackHitsWeak ? { borderColor: '#ffe570' } : undefined}
             disabled={!canPlayerAct}
             onClick={() => onCommand({ type: 'attack', targetUid: selectedEnemyUid ?? undefined })}
           >
             <span className="cmd-title">
-              <span>⚔ たたかう</span>
+              <span>
+                ⚔ たたかう
+                {activeAttackHitsWeak && (
+                  <span style={{ color: '#ffe570', fontSize: 8.5, marginLeft: 3 }}>WEAK</span>
+                )}
+              </span>
               <span style={{ fontSize: 9, color: '#9ee8ad', flexShrink: 0 }}>MP0</span>
             </span>
             <span className="cmd-desc">通常攻撃</span>
@@ -555,12 +650,25 @@ export function BattlePanel({
           {activeUnit.skills.map((sk, idx) => {
             const cost = getSkillMpCost(activeUnit, sk);
             const affordable = activeUnit.mp >= cost;
+            const isOffensive = sk.kind === 'damage' || sk.kind === 'drain';
+            const hitsWeak =
+              isOffensive &&
+              (sk.target === 'all_enemies'
+                ? battle.enemies.some(
+                    (e) => e.hp > 0 && isElementalWeakness(sk.element, e.speciesId, e.shiftElement),
+                  )
+                : Boolean(
+                    targetEnemy &&
+                      isElementalWeakness(sk.element, targetEnemy.speciesId, targetEnemy.shiftElement),
+                  ));
+            const sElem = ELEMENT_META[sk.element];
             return (
               <button
                 key={sk.id}
                 id={`btn-cmd-skill-${idx}`}
                 type="button"
                 className="cmd-btn"
+                style={hitsWeak ? { borderColor: '#ffe570' } : undefined}
                 disabled={!canPlayerAct || !affordable}
                 onClick={() =>
                   onCommand({
@@ -571,7 +679,12 @@ export function BattlePanel({
                 }
               >
                 <span className="cmd-title">
-                  <span>✦ {sk.name}</span>
+                  <span>
+                    {sElem.icon} {sk.name}
+                    {hitsWeak && (
+                      <span style={{ color: '#ffe570', fontSize: 8.5, marginLeft: 3 }}>WEAK</span>
+                    )}
+                  </span>
                   <span style={{ fontSize: 9, color: affordable ? '#72d2ff' : '#ff7a7a', flexShrink: 0 }}>
                     MP{cost}
                   </span>

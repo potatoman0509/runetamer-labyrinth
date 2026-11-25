@@ -7,6 +7,7 @@ import {
   resolveBattleVictory,
   stepEnemyOrAutoTurn,
 } from '../battle';
+import { BOSS_GIMMICKS, getBossGimmick } from '../bossGimmicks';
 import { BOSS_RUSH_MAX_WAVE, BOSS_RUSH_WAVES, createBossRushEntity } from '../bossRush';
 import { getBiomeForFloor, isBossFloor } from '../data/biomes';
 import {
@@ -37,6 +38,12 @@ import {
   STEPS_PER_FLOOR,
 } from '../expedition';
 import {
+  applyBattleProgressToQuests,
+  applyEnhanceProgressToQuests,
+  claimGuildQuestReward,
+  refreshDailyQuestsIfNeeded,
+} from '../guildQuests';
+import {
   createInitialSave,
   createUnitInstance,
   deleteSaveSlot,
@@ -49,6 +56,7 @@ import {
   loadGameFromSlot,
   SAVE_STORAGE_KEY,
   saveGameToSlot,
+  trimInventorySafely,
   validateSave,
 } from '../save';
 import {
@@ -631,5 +639,138 @@ describe('RuneTamer Labyrinth Core & v11 Systems', () => {
         value: prevStorage,
       });
     }
+  });
+
+  it('gives every one of the 10 Bosses a unique gimmick and triggers boss turn gimmicks in battle', () => {
+    expect(Object.keys(BOSS_GIMMICKS).length).toBe(10);
+    for (const boss of BOSS_MONSTERS) {
+      expect(getBossGimmick(boss.id)).not.toBeNull();
+    }
+
+    const save = createInitialSave();
+    // Genesis Orrery shifts its effective element on turn start
+    const orreryEnt = {
+      id: 'b_orrery',
+      kind: 'boss' as const,
+      x: 0,
+      y: 0,
+      spriteKey: 'genesis_orrery',
+      name: '創世天球神アルケミア',
+      speciesIds: ['genesis_orrery'],
+      interacted: false,
+    };
+    const b0 = createBattleState(save, orreryEnt, 50);
+    const bossUid = b0.enemies[0]!.uid;
+    const afterBossTurn = executeTurnAction(
+      { ...b0, activeUid: b0.allies[0]!.uid, turnQueue: [bossUid] },
+      { type: 'defend' },
+    );
+    expect(afterBossTurn.enemies[0]!.shiftElement).toBeDefined();
+
+    // Chronos Mantis accelerates its SPD on turn start
+    const mantisEnt = {
+      id: 'b_mantis',
+      kind: 'boss' as const,
+      x: 0,
+      y: 0,
+      spriteKey: 'chronos_mantis',
+      name: '時空鎌王クロノマンティス',
+      speciesIds: ['chronos_mantis'],
+      interacted: false,
+    };
+    const m0 = createBattleState(save, mantisEnt, 40);
+    const spdBefore = m0.enemies[0]!.spd;
+    const mNext = executeTurnAction(
+      { ...m0, activeUid: m0.allies[0]!.uid, turnQueue: [m0.enemies[0]!.uid] },
+      { type: 'defend' },
+    );
+    expect(mNext.enemies[0]!.spd).toBeGreaterThan(spdBefore);
+  });
+
+  it('records defeated enemies in encounteredMonsters and shares 25% EXP with bench monsters', () => {
+    const save = createInitialSave();
+    save.roster.acorn_boar = createUnitInstance('acorn_boar', 1); // bench monster (not in partyIds)
+    const expBefore = save.roster.acorn_boar.exp;
+    const lvBefore = save.roster.acorn_boar.level;
+
+    const ent = {
+      id: 'enc_1',
+      kind: 'enemy' as const,
+      x: 0,
+      y: 0,
+      spriteKey: 'moss_fox',
+      name: 'モスフォックス',
+      speciesIds: ['moss_fox', 'thorn_sprite'],
+      interacted: false,
+    };
+    const b0 = createBattleState(save, ent, 5);
+    const winState = {
+      ...b0,
+      phase: 'victory' as const,
+      enemies: b0.enemies.map((e) => ({ ...e, hp: 0 })),
+    };
+    const { nextSave } = resolveBattleVictory(save, winState);
+    expect(nextSave.encounteredMonsters).toContain('moss_fox');
+    expect(nextSave.encounteredMonsters).toContain('thorn_sprite');
+
+    const benchAfter = nextSave.roster.acorn_boar!;
+    expect(benchAfter.level > lvBefore || benchAfter.exp > expBefore).toBe(true);
+  });
+
+  it('protects equipped, locked, and mythic items when trimming inventory above 140 cap', () => {
+    const save = createInitialSave();
+    const equippedId = save.roster.hero!.equipped.weapon!;
+    const lockedItem = { ...generateEquipment(1, 1, 0, 'normal', 'armor', 'common'), locked: true };
+    const mythicItem = generateEquipment(5, 1, 0, 'boss', 'relic', 'mythic');
+    const junk: ReturnType<typeof generateEquipment>[] = [];
+    for (let i = 0; i < 150; i += 1) {
+      junk.push(generateEquipment(1, 1, 0, 'normal', 'weapon', 'common'));
+    }
+    const trimmed = trimInventorySafely(
+      [...junk, save.inventory[0]!, lockedItem, mythicItem],
+      save.roster,
+      140,
+    );
+    expect(trimmed.length).toBe(140);
+    expect(trimmed.some((i) => i.id === equippedId)).toBe(true);
+    expect(trimmed.some((i) => i.id === lockedItem.id)).toBe(true);
+    expect(trimmed.some((i) => i.id === mythicItem.id)).toBe(true);
+  });
+
+  it('tracks Daily and Repeatable Cycle Guild Quests, awards rewards, and rolls over daily/cycle missions', () => {
+    const save = createInitialSave();
+    expect(save.guildQuests.daily.length).toBe(3);
+    expect(save.guildQuests.cycle.length).toBe(3);
+    expect(save.guildQuests.cycleNumber).toBe(1);
+
+    // Advance progress via battles and enhancements
+    let gq = applyBattleProgressToQuests(
+      save.guildQuests,
+      { kills: 20, elites: 5, bosses: 5, biome: save.guildQuests.daily[0]!.biome ?? 'forest', hasTrials: true, bossRushWave: 10 },
+      1,
+    );
+    gq = applyEnhanceProgressToQuests(gq, 1, 10);
+    let curSave = { ...save, guildQuests: gq };
+
+    // Claim all 3 cycle quests -> should auto-advance to Cycle 2!
+    const cycleIds = curSave.guildQuests.cycle.map((q) => q.id);
+    const goldBefore = curSave.gold;
+    const stonesBefore = curSave.forgeStones;
+    let cycledFlag = false;
+    for (const qid of cycleIds) {
+      const res = claimGuildQuestReward(curSave, qid);
+      expect(res.claimedQuest).not.toBeNull();
+      curSave = res.nextSave;
+      if (res.cycled) cycledFlag = true;
+    }
+    expect(cycledFlag).toBe(true);
+    expect(curSave.guildQuests.cycleNumber).toBe(2);
+    expect(curSave.gold).toBeGreaterThan(goldBefore);
+    expect(curSave.forgeStones).toBeGreaterThan(stonesBefore);
+
+    // Date rollover refreshes daily quests
+    const rolled = refreshDailyQuestsIfNeeded(curSave.guildQuests, 1, '2099-12-31');
+    expect(rolled.dailyDateKey).toBe('2099-12-31');
+    expect(rolled.daily.every((q) => q.progress === 0 && !q.claimed)).toBe(true);
   });
 });

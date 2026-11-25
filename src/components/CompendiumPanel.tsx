@@ -4,6 +4,7 @@ import {
   getClaimedAchievementBonuses,
   getUnclaimedAchievements,
 } from '../game/achievements';
+import { ELEMENT_META, getBossGimmick, getWeaknessElementFor } from '../game/bossGimmicks';
 import { BIOMES } from '../game/data/biomes';
 import { SLOT_LABELS, UNIQUE_TEMPLATES } from '../game/data/equipment';
 import {
@@ -12,9 +13,10 @@ import {
   MONSTER_LIST,
   NORMAL_MONSTERS,
   ROLE_LABELS,
+  TIER_LABELS,
 } from '../game/data/monsters';
 import { getCompendiumBonusPct } from '../game/stats';
-import type { GameSave, MonsterTier } from '../game/types';
+import type { GameSave, MonsterSpecies, MonsterTier } from '../game/types';
 import { PixelIcon } from './PixelIcon';
 
 interface CompendiumPanelProps {
@@ -25,6 +27,13 @@ interface CompendiumPanelProps {
 export function CompendiumPanel({ save, onClaimAchievement }: CompendiumPanelProps) {
   const [subTab, setSubTab] = useState<'monsters' | 'uniques' | 'achievements'>('monsters');
   const [tierFilter, setTierFilter] = useState<'all' | MonsterTier>('all');
+  const [inspectMonster, setInspectMonster] = useState<MonsterSpecies | null>(null);
+
+  const encounteredSet = useMemo(
+    () => new Set([...(save.encounteredMonsters ?? []), ...save.discoveredMonsters]),
+    [save.encounteredMonsters, save.discoveredMonsters],
+  );
+  const capturedSet = useMemo(() => new Set(save.discoveredMonsters), [save.discoveredMonsters]);
 
   const bonus = getCompendiumBonusPct(
     save.discoveredMonsters.length,
@@ -64,7 +73,7 @@ export function CompendiumPanel({ save, onClaimAchievement }: CompendiumPanelPro
           </div>
         </div>
         <div style={{ textAlign: 'right', fontSize: 10, flexShrink: 0 }}>
-          <div>魔物 {save.discoveredMonsters.length}/{MONSTER_LIST.length}</div>
+          <div>👑{capturedSet.size} / 👁{encounteredSet.size}/{MONSTER_LIST.length}</div>
           <div>実績 {claimedSet.size}/{ACHIEVEMENTS.length}</div>
         </div>
       </div>
@@ -76,7 +85,7 @@ export function CompendiumPanel({ save, onClaimAchievement }: CompendiumPanelPro
           className={`rpg-btn sm ${subTab === 'monsters' ? 'primary' : ''}`}
           onClick={() => setSubTab('monsters')}
         >
-          魔物 {save.discoveredMonsters.length}
+          魔物 {encounteredSet.size}
         </button>
         <button
           type="button"
@@ -137,9 +146,11 @@ export function CompendiumPanel({ save, onClaimAchievement }: CompendiumPanelPro
           </div>
           <div className="compendium-grid">
             {filteredMonsters.map((sp) => {
-              const found = save.discoveredMonsters.includes(sp.id);
+              const seen = encounteredSet.has(sp.id);
+              const captured = capturedSet.has(sp.id);
               const owned = save.roster[sp.id];
               const role = ROLE_LABELS[sp.role];
+              const elem = ELEMENT_META[sp.element];
               const biomeName =
                 sp.biome === 'special'
                   ? '希少'
@@ -148,23 +159,31 @@ export function CompendiumPanel({ save, onClaimAchievement }: CompendiumPanelPro
                     : '';
 
               return (
-                <div
+                <button
                   key={sp.id}
+                  id={`comp-card-${sp.id}`}
+                  type="button"
                   className="rpg-card"
+                  disabled={!seen}
+                  onClick={() => {
+                    if (seen) setInspectMonster(sp);
+                  }}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: 5,
-                    opacity: found ? 1 : 0.65,
+                    opacity: seen ? 1 : 0.62,
+                    textAlign: 'left',
+                    cursor: seen ? 'pointer' : 'default',
                     borderColor:
-                      sp.tier === 'boss' && found
+                      sp.tier === 'boss' && seen
                         ? 'var(--border-gold)'
-                        : sp.tier === 'elite' && found
+                        : sp.tier === 'elite' && seen
                           ? '#a865e8'
                           : undefined,
                   }}
                 >
-                  <PixelIcon spriteKey={sp.spriteKey} size={24} silhouette={!found} />
+                  <PixelIcon spriteKey={sp.spriteKey} size={24} silhouette={!seen} />
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div
                       style={{
@@ -174,19 +193,21 @@ export function CompendiumPanel({ save, onClaimAchievement }: CompendiumPanelPro
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         color:
-                          sp.tier === 'boss' && found
+                          sp.tier === 'boss' && seen
                             ? '#ffe570'
-                            : sp.tier === 'elite' && found
+                            : sp.tier === 'elite' && seen
                               ? '#dfb3ff'
                               : 'var(--text-main)',
                       }}
                     >
-                      {found ? sp.name : '？？？'}
+                      {captured ? '👑' : ''}
+                      {seen ? sp.name : '？？？'}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: 1, minWidth: 0 }}>
                       <span className="role-badge" style={{ background: role.color, fontSize: 8.5 }}>
                         {role.label}
                       </span>
+                      {seen && <span style={{ fontSize: 8.5 }}>{elem.icon}</span>}
                       <span
                         style={{
                           fontSize: 8.5,
@@ -205,11 +226,11 @@ export function CompendiumPanel({ save, onClaimAchievement }: CompendiumPanelPro
                         {sp.tier === 'boss' ? '☠' : sp.tier === 'elite' ? '★' : ''}
                       </span>
                     </div>
-                    {found && (
+                    {seen && (
                       <div
                         style={{
                           fontSize: 8.5,
-                          color: '#9ee8ad',
+                          color: captured ? '#9ee8ad' : '#9cc8ff',
                           marginTop: 1,
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -218,14 +239,164 @@ export function CompendiumPanel({ save, onClaimAchievement }: CompendiumPanelPro
                       >
                         {owned
                           ? `${owned.trueEvolved ? '【真】' : owned.evolved ? '【極】' : ''}Lv.${owned.level} ★+${owned.awakening}`
-                          : sp.passiveDesc}
+                          : '遭遇済・タップで詳細'}
                       </div>
                     )}
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
+
+          {inspectMonster && (() => {
+            const sp = inspectMonster;
+            const elem = ELEMENT_META[sp.element];
+            const weak = getWeaknessElementFor(sp.element);
+            const weakMeta = weak ? ELEMENT_META[weak] : null;
+            const role = ROLE_LABELS[sp.role];
+            const tierMeta = TIER_LABELS[sp.tier];
+            const gimmick = getBossGimmick(sp.id);
+            const captured = capturedSet.has(sp.id);
+            const biomeLabel =
+              sp.biome === 'special'
+                ? '怪しい宝箱・希少'
+                : sp.biome !== 'hero'
+                  ? BIOMES[sp.biome].name
+                  : '';
+            return (
+              <div
+                id="compendium-detail-modal"
+                style={{
+                  position: 'fixed',
+                  inset: 0,
+                  background: 'rgba(6, 5, 12, 0.82)',
+                  zIndex: 60,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 12,
+                }}
+                onClick={() => setInspectMonster(null)}
+              >
+                <div
+                  className="rpg-card-gold"
+                  style={{
+                    width: '100%',
+                    maxWidth: 300,
+                    maxHeight: '86vh',
+                    overflowY: 'auto',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6,
+                    padding: 10,
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <PixelIcon spriteKey={sp.spriteKey} size={40} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 12, color: '#ffe570' }}>
+                        {captured ? '👑' : ''}
+                        {sp.name}
+                      </div>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 2, fontSize: 9.5 }}>
+                        <span className="role-badge" style={{ background: tierMeta.color }}>
+                          {tierMeta.label}
+                        </span>
+                        <span className="role-badge" style={{ background: role.color }}>
+                          {role.label}
+                        </span>
+                        <span style={{ color: elem.color }}>
+                          {elem.icon}{elem.label}
+                        </span>
+                        {weakMeta && (
+                          <span style={{ color: '#ff9696' }}>
+                            弱点:{weakMeta.icon}{weakMeta.label}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="muted-text" style={{ fontSize: 9.5 }}>
+                    出現: {biomeLabel} / 状態: {captured ? '👑捕獲済' : '👁遭遇済'}
+                  </div>
+
+                  {gimmick && (
+                    <div
+                      style={{
+                        background: 'rgba(180, 32, 54, 0.25)',
+                        border: '1px solid #ff667a',
+                        borderRadius: 5,
+                        padding: '4px 6px',
+                        fontSize: 9.5,
+                        color: '#ffd1d8',
+                      }}
+                    >
+                      ⚙ ボス特性「{gimmick.name}」: {gimmick.shortDesc}
+                    </div>
+                  )}
+
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                      gap: 4,
+                      fontSize: 9.5,
+                      background: 'rgba(10, 9, 16, 0.55)',
+                      borderRadius: 5,
+                      padding: 6,
+                    }}
+                  >
+                    <div>HP {sp.baseStats.hp} (+{sp.growth.hp})</div>
+                    <div>MP {sp.baseStats.mp} (+{sp.growth.mp})</div>
+                    <div>ATK {sp.baseStats.atk} (+{sp.growth.atk})</div>
+                    <div>MAG {sp.baseStats.mag} (+{sp.growth.mag})</div>
+                    <div>DEF {sp.baseStats.def} (+{sp.growth.def})</div>
+                    <div>SPD {sp.baseStats.spd} (+{sp.growth.spd})</div>
+                  </div>
+
+                  <div style={{ fontSize: 10, color: '#9ee8ad' }}>
+                    ✦ 固有特性「{sp.passiveName}」: {sp.passiveDesc}
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {sp.skills.map((sk) => {
+                      const sElem = ELEMENT_META[sk.element];
+                      return (
+                        <div
+                          key={sk.id}
+                          style={{
+                            background: 'rgba(15, 13, 24, 0.72)',
+                            border: '1px solid var(--border-dim)',
+                            borderRadius: 5,
+                            padding: '4px 6px',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700 }}>
+                            <span>
+                              {sElem.icon} {sk.name}
+                            </span>
+                            <span style={{ color: '#72d2ff' }}>MP{sk.mpCost}</span>
+                          </div>
+                          <div className="muted-text" style={{ fontSize: 9 }}>{sk.description}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    id="btn-close-comp-modal"
+                    type="button"
+                    className="rpg-btn sm primary"
+                    onClick={() => setInspectMonster(null)}
+                  >
+                    閉じる
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </>
       ) : subTab === 'uniques' ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

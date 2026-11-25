@@ -1,12 +1,47 @@
-import { createStarterWeapon } from './data/equipment';
+import { calculateItemScore, createStarterWeapon } from './data/equipment';
 import { HERO_SPECIES, SPECIES_MAP, resolveSpeciesId } from './data/monsters';
+import { createInitialGuildQuests, refreshDailyQuestsIfNeeded } from './guildQuests';
 import { computeUnitStats } from './stats';
 import type { EquipmentItem, GameSave, UnitInstance } from './types';
 import { generateShopInventory } from './worldTier';
 
 export const SAVE_STORAGE_KEY = 'runetamer_labyrinth_save_v1';
 export const ACTIVE_SLOT_STORAGE_KEY = 'runetamer_labyrinth_active_slot_v1';
-export const CURRENT_SAVE_VERSION = 11;
+export const CURRENT_SAVE_VERSION = 12;
+export const MAX_INVENTORY_SIZE = 140;
+
+export function trimInventorySafely(
+  items: EquipmentItem[],
+  roster: Record<string, UnitInstance>,
+  limit = MAX_INVENTORY_SIZE,
+): EquipmentItem[] {
+  if (items.length <= limit) return items;
+  const equippedIds = new Set<string>();
+  for (const u of Object.values(roster)) {
+    if (u.equipped.weapon) equippedIds.add(u.equipped.weapon);
+    if (u.equipped.armor) equippedIds.add(u.equipped.armor);
+    if (u.equipped.relic) equippedIds.add(u.equipped.relic);
+    if (u.equipped.rune) equippedIds.add(u.equipped.rune);
+  }
+  const protectedItems: EquipmentItem[] = [];
+  const disposableItems: EquipmentItem[] = [];
+  for (const it of items) {
+    if (equippedIds.has(it.id) || it.locked || it.rarity === 'mythic' || Boolean(it.uniqueId)) {
+      protectedItems.push(it);
+    } else {
+      disposableItems.push(it);
+    }
+  }
+  const remainingSlots = Math.max(0, limit - protectedItems.length);
+  if (remainingSlots === 0) {
+    return protectedItems.slice(0, Math.max(limit, equippedIds.size));
+  }
+  const keptDisposable = [...disposableItems]
+    .sort((a, b) => calculateItemScore(b) - calculateItemScore(a))
+    .slice(0, remainingSlots);
+  const keptSet = new Set([...protectedItems.map((i) => i.id), ...keptDisposable.map((i) => i.id)]);
+  return items.filter((i) => keptSet.has(i.id));
+}
 
 export type SaveSlotId = 1 | 2 | 3;
 export const SAVE_SLOT_IDS: SaveSlotId[] = [1, 2, 3];
@@ -92,7 +127,9 @@ export function createInitialSave(): GameSave {
       leaf_slime: starterSlime,
     },
     inventory: [starterWeapon],
+    encounteredMonsters: ['leaf_slime'],
     discoveredMonsters: ['leaf_slime'],
+    favoriteMonsters: [],
     discoveredUniques: [],
     shopItems: [],
     shopRefreshedAtTier: 1,
@@ -101,12 +138,14 @@ export function createInitialSave(): GameSave {
     claimedAchievements: [],
     bossRushBestWave: 0,
     activeTrials: [],
+    guildQuests: createInitialGuildQuests(1),
     settings: {
       autoBattle: false,
       battleSpeed: 1,
       battleTactic: 'balanced',
       autoSell: 'none',
       autoLootMode: 'sell',
+      soundMuted: false,
     },
     stats: {
       totalKills: 0,
@@ -428,6 +467,22 @@ export function validateSave(data: unknown): GameSave | null {
     ? s.activeTrials.filter((id): id is GameSave['activeTrials'][number] => validTrialIds.has(String(id)))
     : [];
 
+  const safeDiscovered = Array.isArray(s.discoveredMonsters)
+    ? Array.from(new Set(s.discoveredMonsters.map((id) => resolveSpeciesId(String(id)))))
+    : fallback.discoveredMonsters;
+  const safeEncountered = Array.from(
+    new Set([
+      ...safeDiscovered,
+      ...(Array.isArray(s.encounteredMonsters)
+        ? s.encounteredMonsters.map((id) => resolveSpeciesId(String(id)))
+        : []),
+    ]),
+  );
+  const safeFavorites = Array.isArray(s.favoriteMonsters)
+    ? Array.from(new Set(s.favoriteMonsters.map((id) => resolveSpeciesId(String(id)))))
+    : [];
+  const safeWorldTier = typeof s.worldTier === 'number' && s.worldTier >= 1 ? s.worldTier : 1;
+
   return {
     ...fallback,
     ...s,
@@ -438,7 +493,7 @@ export function validateSave(data: unknown): GameSave | null {
       typeof s.forgeStones === 'number' && Number.isFinite(s.forgeStones)
         ? s.forgeStones
         : fallback.forgeStones,
-    worldTier: typeof s.worldTier === 'number' && s.worldTier >= 1 ? s.worldTier : 1,
+    worldTier: safeWorldTier,
     maxUnlockedTier:
       typeof s.maxUnlockedTier === 'number' && s.maxUnlockedTier >= 1 ? s.maxUnlockedTier : 1,
     partyIds: safeParty.slice(0, 4),
@@ -453,10 +508,12 @@ export function validateSave(data: unknown): GameSave | null {
         ? s.bossRushBestWave
         : 0,
     activeTrials: safeTrials,
+    guildQuests: refreshDailyQuestsIfNeeded(s.guildQuests, safeWorldTier),
     settings: {
       ...fallback.settings,
       ...(s.settings ?? {}),
       autoLootMode: s.settings?.autoLootMode === 'salvage' ? 'salvage' : 'sell',
+      soundMuted: Boolean(s.settings?.soundMuted),
     },
     stats: {
       ...fallback.stats,
@@ -476,9 +533,9 @@ export function validateSave(data: unknown): GameSave | null {
         typeof s.stats?.maxEnhanceReached === 'number' ? s.stats.maxEnhanceReached : 0,
     },
     highestFloorByTier: { ...fallback.highestFloorByTier, ...(s.highestFloorByTier ?? {}) },
-    discoveredMonsters: Array.isArray(s.discoveredMonsters)
-      ? Array.from(new Set(s.discoveredMonsters.map((id) => resolveSpeciesId(String(id)))))
-      : fallback.discoveredMonsters,
+    encounteredMonsters: safeEncountered,
+    discoveredMonsters: safeDiscovered,
+    favoriteMonsters: safeFavorites,
     discoveredUniques: Array.isArray(s.discoveredUniques) ? s.discoveredUniques : [],
     shopItems:
       Array.isArray(s.shopItems) && s.shopItems.length > 0

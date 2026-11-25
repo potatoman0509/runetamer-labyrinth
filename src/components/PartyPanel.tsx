@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { ELEMENT_META } from '../game/bossGimmicks';
 import { getSpecies, ROLE_LABELS } from '../game/data/monsters';
 import {
   ALL_HERO_SKILLS,
@@ -21,13 +22,20 @@ import {
   getTrueEvolutionRequirement,
 } from '../game/stats';
 import { computePartySynergies } from '../game/synergy';
-import type { ActiveShrineBuffs, GameSave } from '../game/types';
+import type {
+  ActiveShrineBuffs,
+  ElementType,
+  GameSave,
+  MonsterRole,
+  MonsterTier,
+} from '../game/types';
 import { PixelIcon } from './PixelIcon';
 
 interface PartyPanelProps {
   save: GameSave;
   shrineBuffs: ActiveShrineBuffs;
   onTogglePartyMember: (unitId: string) => void;
+  onToggleFavorite: (unitId: string) => void;
   onEvolveMonster: (unitId: string) => void;
   onTrueEvolveMonster: (unitId: string) => void;
   onUpgradeSkillNode: (nodeId: string) => void;
@@ -41,6 +49,7 @@ export function PartyPanel({
   save,
   shrineBuffs,
   onTogglePartyMember,
+  onToggleFavorite,
   onEvolveMonster,
   onTrueEvolveMonster,
   onUpgradeSkillNode,
@@ -51,6 +60,12 @@ export function PartyPanel({
 }: PartyPanelProps) {
   const [subTab, setSubTab] = useState<'party' | 'tree'>('party');
   const [branch, setBranch] = useState<SkillBranch>('sword');
+  const [roleFilter, setRoleFilter] = useState<'all' | MonsterRole>('all');
+  const [tierFilter, setTierFilter] = useState<'all' | MonsterTier>('all');
+  const [elemFilter, setElemFilter] = useState<'all' | ElementType>('all');
+  const [favOnly, setFavOnly] = useState(false);
+
+  const favoriteSet = useMemo(() => new Set(save.favoriteMonsters ?? []), [save.favoriteMonsters]);
 
   const invMap = useMemo(
     () => new Map(save.inventory.map((it) => [it.id, it])),
@@ -66,14 +81,25 @@ export function PartyPanel({
   const ownedMonsters = useMemo(() => {
     return Object.values(save.roster)
       .filter((u) => u.id !== 'hero')
+      .filter((u) => {
+        const sp = getSpecies(u.speciesId);
+        if (favOnly && !favoriteSet.has(u.id)) return false;
+        if (roleFilter !== 'all' && sp.role !== roleFilter) return false;
+        if (tierFilter !== 'all' && sp.tier !== tierFilter) return false;
+        if (elemFilter !== 'all' && sp.element !== elemFilter) return false;
+        return true;
+      })
       .sort((a, b) => {
         const aIn = save.partyIds.includes(a.id) ? 1 : 0;
         const bIn = save.partyIds.includes(b.id) ? 1 : 0;
         if (aIn !== bIn) return bIn - aIn;
+        const aFav = favoriteSet.has(a.id) ? 1 : 0;
+        const bFav = favoriteSet.has(b.id) ? 1 : 0;
+        if (aFav !== bFav) return bFav - aFav;
         return computeUnitStats(b, save, shrineBuffs, invMap).powerScore -
           computeUnitStats(a, save, shrineBuffs, invMap).powerScore;
       });
-  }, [save, shrineBuffs, invMap]);
+  }, [save, shrineBuffs, invMap, favOnly, favoriteSet, roleFilter, tierFilter, elemFilter]);
 
   const branchNodes = useMemo(
     () => SKILL_TREE_NODES.filter((n) => n.branch === branch).sort((a, b) => a.tier - b.tier),
@@ -283,14 +309,98 @@ export function PartyPanel({
 
           {/* Monster Ranch Roster */}
           <div className="section-heading" style={{ marginTop: 2 }}>
-            <span>モンスター牧場 {ownedMonsters.length}体</span>
+            <span>モンスター牧場 {ownedMonsters.length}/{Math.max(0, Object.keys(save.roster).length - 1)}体</span>
+            <button
+              id="btn-ranch-fav-filter"
+              type="button"
+              className={`pill-chip ${favOnly ? 'active' : ''}`}
+              style={{ fontSize: 9, padding: '1px 5px' }}
+              onClick={() => setFavOnly((v) => !v)}
+            >
+              ★お気に入り
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 2 }}>
+              {(
+                [
+                  ['all', '全役'],
+                  ['tank', '盾'],
+                  ['striker', '物'],
+                  ['mage', '魔'],
+                  ['support', '支'],
+                ] as const
+              ).map(([val, label]) => (
+                <button
+                  key={val}
+                  id={`btn-ranch-role-${val}`}
+                  type="button"
+                  className={`pill-chip ${roleFilter === val ? 'active' : ''}`}
+                  style={{ textAlign: 'center', fontSize: 9, padding: '2px 2px' }}
+                  onClick={() => setRoleFilter(val)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 2 }}>
+              {(
+                [
+                  ['all', '全格'],
+                  ['normal', 'N'],
+                  ['elite', '★E'],
+                  ['boss', '☠B'],
+                ] as const
+              ).map(([val, label]) => (
+                <button
+                  key={val}
+                  id={`btn-ranch-tier-${val}`}
+                  type="button"
+                  className={`pill-chip ${tierFilter === val ? 'active' : ''}`}
+                  style={{ textAlign: 'center', fontSize: 9, padding: '2px 2px' }}
+                  onClick={() => setTierFilter(val)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 2 }}>
+              {(
+                [
+                  ['all', '全属'],
+                  ['nature', '🌿'],
+                  ['earth', '🪨'],
+                  ['fire', '🔥'],
+                  ['star', '⭐'],
+                  ['holy', '✨'],
+                ] as const
+              ).map(([val, label]) => (
+                <button
+                  key={val}
+                  type="button"
+                  className={`pill-chip ${elemFilter === val ? 'active' : ''}`}
+                  style={{ textAlign: 'center', fontSize: 9, padding: '2px 1px' }}
+                  onClick={() => setElemFilter(val)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {ownedMonsters.length === 0 && (
+              <div className="rpg-card muted-text" style={{ textAlign: 'center', fontSize: 10 }}>
+                条件に一致する仲間がいません
+              </div>
+            )}
             {ownedMonsters.map((u) => {
               const sp = getSpecies(u.speciesId);
               const role = ROLE_LABELS[sp.role];
+              const elem = ELEMENT_META[sp.element];
               const inParty = save.partyIds.includes(u.id);
+              const isFav = favoriteSet.has(u.id);
               const st = computeUnitStats(u, save, shrineBuffs, invMap);
               const evoReq = getEvolutionRequirement(u);
               const canEvo = canEvolveMonster(u, save.forgeStones);
@@ -332,6 +442,7 @@ export function PartyPanel({
                         </span>
                       ) : null}
                       <strong style={{ fontSize: 10.5 }}>{sp.name}</strong>
+                      <span style={{ fontSize: 9 }}>{elem.icon}</span>
                       <span className="role-badge" style={{ background: role.color }}>
                         {role.label}
                       </span>
@@ -353,6 +464,15 @@ export function PartyPanel({
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+                    <button
+                      type="button"
+                      className={`rpg-btn sm ${isFav ? 'primary' : ''}`}
+                      onClick={() => onToggleFavorite(u.id)}
+                      style={{ fontSize: 9.5, padding: '2px 4px' }}
+                      aria-label="お気に入り"
+                    >
+                      {isFav ? '★' : '☆'}
+                    </button>
                     {!u.evolved ? (
                       <button
                         type="button"

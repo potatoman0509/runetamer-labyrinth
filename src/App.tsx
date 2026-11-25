@@ -6,6 +6,7 @@ import { GameCanvas } from './components/GameCanvas';
 import { PartyPanel } from './components/PartyPanel';
 import { PixelIcon } from './components/PixelIcon';
 import { WorldPanel, type WorldSection } from './components/WorldPanel';
+import { soundEngine } from './engine/sound';
 import { ACHIEVEMENT_MAP, getUnclaimedAchievements } from './game/achievements';
 import {
   createBattleState,
@@ -39,6 +40,11 @@ import {
   type ExpeditionState,
 } from './game/expedition';
 import {
+  applyEnhanceProgressToQuests,
+  claimGuildQuestReward,
+  getClaimableGuildQuestCount,
+} from './game/guildQuests';
+import {
   buildSaveFileName,
   createInitialSave,
   deleteSaveSlot,
@@ -50,6 +56,7 @@ import {
   loadGameFromSlot,
   saveGameToSlot,
   setActiveSaveSlot,
+  trimInventorySafely,
   type SaveSlotId,
 } from './game/save';
 import {
@@ -127,6 +134,30 @@ export function App() {
     saveGameToSlot(activeSlot, save);
   }, [activeSlot, save]);
 
+  useEffect(() => {
+    soundEngine.setMuted(Boolean(save.settings.soundMuted));
+  }, [save.settings.soundMuted]);
+
+  useEffect(() => {
+    const unlock = () => soundEngine.unlock();
+    window.addEventListener('pointerdown', unlock, { passive: true });
+    window.addEventListener('keydown', unlock, { passive: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (battle) {
+      soundEngine.setBgm(battle.isBossBattle || battle.bossRushWave ? 'boss' : 'battle');
+    } else if (expedition.inVillage) {
+      soundEngine.setBgm('village');
+    } else {
+      soundEngine.setBgm('dungeon');
+    }
+  }, [battle, expedition.inVillage]);
+
   const invMap = useMemo(
     () => new Map(save.inventory.map((it) => [it.id, it])),
     [save.inventory],
@@ -153,6 +184,7 @@ export function App() {
         return { ...prev, roster: nextRoster };
       });
       if (!silent) {
+        soundEngine.playSfx('heal');
         showToast(
           ratio >= 1
             ? '泉で全員のHP・MPが全回復した'
@@ -240,7 +272,7 @@ export function App() {
     [],
   );
 
-  // Helper to grant chest/event loot with auto-sell / auto-salvage respected
+  // Helper to grant chest/event loot with auto-sell / auto-salvage & safe 140-cap protection
   const grantLootItems = useCallback(
     (items: EquipmentItem[], bonusGold: number, bonusStones: number, isChest: boolean) => {
       const kept: EquipmentItem[] = [];
@@ -260,6 +292,7 @@ export function App() {
           kept.push(it);
         }
       }
+      if (mythics > 0) soundEngine.playSfx('mythic');
 
       setSave((prev) => {
         const uniques = new Set(prev.discoveredUniques);
@@ -270,7 +303,7 @@ export function App() {
           ...prev,
           gold: prev.gold + bonusGold + autoGold,
           forgeStones: prev.forgeStones + bonusStones + autoStones,
-          inventory: [...kept, ...prev.inventory].slice(0, 140),
+          inventory: trimInventorySafely([...kept, ...prev.inventory], prev.roster),
           discoveredUniques: Array.from(uniques),
           stats: {
             ...prev.stats,
@@ -595,6 +628,13 @@ export function App() {
     (next: BattleState) => {
       if (next.phase === 'victory' && !next.reward) {
         const { nextSave, reward } = resolveBattleVictory(save, next, shrineBuffs);
+        if (reward.items.some((it) => it.rarity === 'mythic')) {
+          soundEngine.playSfx('mythic');
+        } else if (reward.leveledUpIds.length > 0) {
+          soundEngine.playSfx('levelup');
+        } else {
+          soundEngine.playSfx('victory');
+        }
         setSave(nextSave);
         setRunPotions({ hp: next.hpPotions, mp: next.mpPotions });
         setBattle({ ...next, reward });
@@ -607,6 +647,28 @@ export function App() {
           );
         }
         return;
+      }
+      if (next.phase === 'defeat') {
+        soundEngine.playSfx('defeat');
+      } else {
+        const lastLog = next.logs[next.logs.length - 1] ?? '';
+        if (lastLog.includes('ブレイク') || lastLog.includes('ルーンユニゾン')) {
+          soundEngine.playSfx('break');
+        } else if (lastLog.includes('魔力を溜めている')) {
+          soundEngine.playSfx('boss_charge');
+        } else if (lastLog.includes('WEAK')) {
+          soundEngine.playSfx('weak');
+        } else if (lastLog.includes('会心')) {
+          soundEngine.playSfx('crit');
+        } else if (lastLog.includes('回復')) {
+          soundEngine.playSfx('heal');
+        } else if (lastLog.includes('バリア') || lastLog.includes('身を固めた')) {
+          soundEngine.playSfx('shield');
+        } else if (lastLog.includes('強化')) {
+          soundEngine.playSfx('buff');
+        } else if (lastLog.includes('ダメージ')) {
+          soundEngine.playSfx('attack');
+        }
       }
       setBattle(next);
     },
@@ -850,11 +912,13 @@ export function App() {
       if (save.forgeStones < cost.stones || save.gold < cost.gold) return;
 
       const { upgraded, isBreakthrough } = enhanceEquipment(target);
+      soundEngine.playSfx(isBreakthrough ? 'levelup' : 'forge');
       setSave((prev) => ({
         ...prev,
         gold: prev.gold - cost.gold,
         forgeStones: prev.forgeStones - cost.stones,
         inventory: prev.inventory.map((i) => (i.id === itemId ? upgraded : i)),
+        guildQuests: applyEnhanceProgressToQuests(prev.guildQuests, prev.worldTier, 1),
         stats: {
           ...prev.stats,
           totalForgeUpgrades: prev.stats.totalForgeUpgrades + 1,
@@ -879,6 +943,7 @@ export function App() {
 
       const rerolled = rerollAffixSlot(target, affixIndex);
       const newAffix = rerolled.affixes[affixIndex];
+      soundEngine.playSfx('forge');
       setSave((prev) => ({
         ...prev,
         gold: prev.gold - cost.gold,
@@ -956,6 +1021,47 @@ export function App() {
       return {
         ...prev,
         partyIds: [...prev.partyIds, unitId],
+      };
+    });
+  }, []);
+
+  const handleToggleFavorite = useCallback((unitId: string) => {
+    setSave((prev) => {
+      const cur = prev.favoriteMonsters ?? [];
+      const exists = cur.includes(unitId);
+      return {
+        ...prev,
+        favoriteMonsters: exists ? cur.filter((id) => id !== unitId) : [...cur, unitId],
+      };
+    });
+  }, []);
+
+  const handleClaimGuildQuest = useCallback(
+    (questId: string) => {
+      const { nextSave, claimedQuest, cycled } = claimGuildQuestReward(save, questId);
+      if (!claimedQuest) return;
+      soundEngine.playSfx('quest_claim');
+      setSave(nextSave);
+      showToast(
+        cycled
+          ? `📜 依頼達成・💎+${claimedQuest.rewardStones}・次の周回依頼を受注`
+          : `📜 依頼達成・💎+${claimedQuest.rewardStones}・${claimedQuest.rewardGold}G`,
+      );
+    },
+    [save, showToast],
+  );
+
+  const handleToggleSoundMute = useCallback(() => {
+    setSave((prev) => {
+      const nextMuted = !prev.settings.soundMuted;
+      soundEngine.setMuted(nextMuted);
+      if (!nextMuted) {
+        soundEngine.unlock();
+        soundEngine.playSfx('click');
+      }
+      return {
+        ...prev,
+        settings: { ...prev.settings, soundMuted: nextMuted },
       };
     });
   }, []);
@@ -1414,6 +1520,7 @@ export function App() {
     highestFloorThisTier >= 6 ? Math.floor((highestFloorThisTier - 1) / 5) * 5 + 1 : 1;
   const availableSp = getAvailableSp(save);
   const unclaimedAchCount = useMemo(() => getUnclaimedAchievements(save).length, [save]);
+  const claimableGuildCount = useMemo(() => getClaimableGuildQuestCount(save), [save]);
 
   const quickCheckpoints: number[] = [1];
   for (let f = 6; f <= highestFloorThisTier; f += 5) {
@@ -1442,7 +1549,7 @@ export function App() {
                 color: '#ffd6dd',
               }}
             >
-              v10
+              v12
             </span>
           </div>
           <div className="hud-right">
@@ -1450,6 +1557,22 @@ export function App() {
               💎{save.forgeStones.toLocaleString()}
             </span>
             <span className="gold-pill">{save.gold.toLocaleString()}G</span>
+            <button
+              id="btn-hud-sound"
+              type="button"
+              className="gold-pill"
+              style={{
+                color: save.settings.soundMuted ? '#ff9cab' : '#ffe570',
+                borderColor: save.settings.soundMuted ? 'rgba(255, 130, 150, 0.45)' : 'rgba(255, 229, 112, 0.45)',
+                cursor: 'pointer',
+                background: 'rgba(24, 20, 36, 0.85)',
+                padding: '1px 4px',
+              }}
+              onClick={handleToggleSoundMute}
+              aria-label="音量切替"
+            >
+              {save.settings.soundMuted ? '🔇' : '🔊'}
+            </button>
             {!battle && (
               <button
                 id="btn-hud-save"
@@ -1696,12 +1819,16 @@ export function App() {
                           🔨 装備・鍛冶 {save.inventory.length}
                         </button>
                         <button
+                          id="btn-village-guild"
                           type="button"
-                          className="rpg-btn primary"
+                          className={`rpg-btn ${claimableGuildCount > 0 ? 'primary' : ''}`}
                           style={{ padding: '8px 6px' }}
-                          onClick={() => setActiveTab('world')}
+                          onClick={() => {
+                            setActiveTab('world');
+                            setWorldSection('guild');
+                          }}
                         >
-                          ✦ 刻印・商店・闘技場
+                          📜 ギルド依頼{claimableGuildCount > 0 ? ` +${claimableGuildCount}` : ''}
                         </button>
                       </div>
                     </div>
@@ -1810,6 +1937,7 @@ export function App() {
                   shrineBuffs={shrineBuffs}
                   inVillage={inVillage}
                   onTogglePartyMember={handleTogglePartyMember}
+                  onToggleFavorite={handleToggleFavorite}
                   onEvolveMonster={handleEvolveMonster}
                   onTrueEvolveMonster={handleTrueEvolveMonster}
                   onUpgradeSkillNode={handleUpgradeSkillNode}
@@ -1877,6 +2005,7 @@ export function App() {
                   onToggleTrialMod={handleToggleTrialMod}
                   onEnterDungeonFloor={enterDungeonFloor}
                   onStartBossRush={handleStartBossRush}
+                  onClaimGuildQuest={handleClaimGuildQuest}
                   onBuyShopItem={handleBuyShopItem}
                   onRefreshShop={handleRefreshShop}
                   onBuyMysteryBox={handleBuyMysteryBox}
@@ -1933,6 +2062,7 @@ export function App() {
                 >
                   <span>✦</span>
                   <span>世界</span>
+                  {claimableGuildCount > 0 && <span className="tab-dot" />}
                 </button>
               </nav>
             </>

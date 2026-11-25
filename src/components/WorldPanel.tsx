@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { BOSS_RUSH_MAX_WAVE, BOSS_RUSH_WAVES } from '../game/bossRush';
 import { RARITY_META, SLOT_LABELS } from '../game/data/equipment';
+import { getClaimableGuildQuestCount } from '../game/guildQuests';
 import {
   exportSaveCode,
   formatSavedAt,
@@ -17,7 +18,7 @@ import {
 } from '../game/worldTier';
 import { PixelIcon } from './PixelIcon';
 
-export type WorldSection = 'altar' | 'arena' | 'shop' | 'save';
+export type WorldSection = 'altar' | 'guild' | 'arena' | 'shop' | 'save';
 
 interface WorldPanelProps {
   save: GameSave;
@@ -37,6 +38,7 @@ interface WorldPanelProps {
   onToggleTrialMod: (id: TrialModId) => void;
   onEnterDungeonFloor: (floor: number) => void;
   onStartBossRush: () => void;
+  onClaimGuildQuest: (questId: string) => void;
   onBuyShopItem: (itemId: string) => void;
   onRefreshShop: () => void;
   onBuyMysteryBox: () => void;
@@ -61,6 +63,7 @@ export function WorldPanel({
   onToggleTrialMod,
   onEnterDungeonFloor,
   onStartBossRush,
+  onClaimGuildQuest,
   onBuyShopItem,
   onRefreshShop,
   onBuyMysteryBox,
@@ -77,6 +80,7 @@ export function WorldPanel({
   const activeMods = getActiveTierModifiers(save.worldTier);
   const trials = computeTrialModifiers(save.activeTrials);
   const highestInActiveTier = save.highestFloorByTier[save.worldTier] ?? 1;
+  const claimableGuildCount = getClaimableGuildQuestCount(save);
 
   const checkpoints: number[] = [1];
   for (let f = 6; f <= highestInActiveTier; f += 5) {
@@ -128,42 +132,159 @@ export function WorldPanel({
 
   return (
     <div className="panel-body">
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 3 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 2 }}>
         <button
           type="button"
           className={`rpg-btn sm ${section === 'altar' ? 'primary' : ''}`}
-          style={{ padding: '4px 2px', fontSize: 10 }}
+          style={{ padding: '4px 1px', fontSize: 9.5 }}
           onClick={() => onChangeSection('altar')}
         >
-          世界ランク
+          ランク
+        </button>
+        <button
+          id="btn-subtab-guild"
+          type="button"
+          className={`rpg-btn sm ${section === 'guild' ? 'primary' : claimableGuildCount > 0 ? 'emerald' : ''}`}
+          style={{ padding: '4px 1px', fontSize: 9.5 }}
+          onClick={() => onChangeSection('guild')}
+        >
+          📜依頼{claimableGuildCount > 0 ? `+${claimableGuildCount}` : ''}
         </button>
         <button
           id="btn-subtab-arena"
           type="button"
           className={`rpg-btn sm ${section === 'arena' ? 'primary' : ''}`}
-          style={{ padding: '4px 2px', fontSize: 10 }}
+          style={{ padding: '4px 1px', fontSize: 9.5 }}
           onClick={() => onChangeSection('arena')}
         >
-          🏟闘技場
+          🏟闘技
         </button>
         <button
           type="button"
           className={`rpg-btn sm ${section === 'shop' ? 'primary' : ''}`}
-          style={{ padding: '4px 2px', fontSize: 10 }}
+          style={{ padding: '4px 1px', fontSize: 9.5 }}
           onClick={() => onChangeSection('shop')}
         >
-          鍛冶商店
+          商店
         </button>
         <button
           id="btn-subtab-save"
           type="button"
           className={`rpg-btn sm ${section === 'save' ? 'primary' : ''}`}
-          style={{ padding: '4px 2px', fontSize: 10 }}
+          style={{ padding: '4px 1px', fontSize: 9.5 }}
           onClick={() => onChangeSection('save')}
         >
           💾記録
         </button>
       </div>
+
+      {section === 'guild' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div className="rpg-card-gold" style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <div className="section-heading">
+              <span>📜 デイリー討伐依頼</span>
+              <span style={{ fontSize: 9.5, color: '#ffe570' }}>{save.guildQuests.dailyDateKey}</span>
+            </div>
+            {save.guildQuests.daily.map((q) => {
+              const pct = Math.min(100, Math.round((q.progress / q.target) * 100));
+              const canClaim = !q.claimed && q.progress >= q.target;
+              return (
+                <div
+                  key={q.id}
+                  className="rpg-card"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    opacity: q.claimed ? 0.6 : 1,
+                    borderColor: canClaim ? 'var(--border-gold)' : undefined,
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: canClaim ? '#ffe570' : undefined }}>
+                      {q.claimed ? '✓ ' : canClaim ? '★ ' : ''}
+                      {q.title}
+                    </div>
+                    <div className="muted-text" style={{ fontSize: 9 }}>
+                      {Math.min(q.progress, q.target)}/{q.target} ・ 💎+{q.rewardStones} / {q.rewardGold}G
+                    </div>
+                    <div className="bar-track" style={{ marginTop: 3, height: 4 }}>
+                      <div className={canClaim || q.claimed ? 'bar-fill-hp' : 'bar-fill-exp'} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                  {canClaim ? (
+                    <button
+                      id={`btn-claim-quest-${q.id}`}
+                      type="button"
+                      className="rpg-btn sm primary"
+                      style={{ flexShrink: 0, fontSize: 9.5, padding: '4px 6px' }}
+                      onClick={() => onClaimGuildQuest(q.id)}
+                    >
+                      受取
+                    </button>
+                  ) : (
+                    <span style={{ fontSize: 9, color: q.claimed ? '#82ff9e' : 'var(--text-dim)', flexShrink: 0 }}>
+                      {q.claimed ? '済' : `${pct}%`}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="rpg-card" style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <div className="section-heading">
+              <span>🔁 周回討伐依頼</span>
+              <span style={{ fontSize: 9.5, color: '#8ae8ff' }}>第{save.guildQuests.cycleNumber}周</span>
+            </div>
+            {save.guildQuests.cycle.map((q) => {
+              const pct = Math.min(100, Math.round((q.progress / q.target) * 100));
+              const canClaim = !q.claimed && q.progress >= q.target;
+              return (
+                <div
+                  key={q.id}
+                  className="rpg-card"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    opacity: q.claimed ? 0.6 : 1,
+                    borderColor: canClaim ? '#8ae8ff' : undefined,
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: canClaim ? '#8ae8ff' : undefined }}>
+                      {q.claimed ? '✓ ' : canClaim ? '★ ' : ''}
+                      {q.title}
+                    </div>
+                    <div className="muted-text" style={{ fontSize: 9 }}>
+                      {Math.min(q.progress, q.target)}/{q.target} ・ 💎+{q.rewardStones} / {q.rewardGold}G
+                    </div>
+                    <div className="bar-track" style={{ marginTop: 3, height: 4 }}>
+                      <div className={canClaim || q.claimed ? 'bar-fill-hp' : 'bar-fill-exp'} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                  {canClaim ? (
+                    <button
+                      id={`btn-claim-quest-${q.id}`}
+                      type="button"
+                      className="rpg-btn sm emerald"
+                      style={{ flexShrink: 0, fontSize: 9.5, padding: '4px 6px' }}
+                      onClick={() => onClaimGuildQuest(q.id)}
+                    >
+                      受取
+                    </button>
+                  ) : (
+                    <span style={{ fontSize: 9, color: q.claimed ? '#82ff9e' : 'var(--text-dim)', flexShrink: 0 }}>
+                      {q.claimed ? '済' : `${pct}%`}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {section === 'altar' && (
         <>

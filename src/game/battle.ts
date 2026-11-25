@@ -1,8 +1,10 @@
+import { getBossGimmick, SHIFT_ELEMENTS } from './bossGimmicks';
 import { BOSS_RUSH_MAX_WAVE, getBossRushWave } from './bossRush';
 import { getBiomeForFloor } from './data/biomes';
 import { generateEquipment, getSalvageValue, RARITY_META } from './data/equipment';
 import { getSpecies } from './data/monsters';
-import { createUnitInstance } from './save';
+import { applyBattleProgressToQuests } from './guildQuests';
+import { createUnitInstance, trimInventorySafely } from './save';
 import { getHeroEquippedSkills } from './skillTree';
 import { computeUnitStats, expForNextLevel, getPartyAggregatedLootBonuses } from './stats';
 import { computePartySynergies } from './synergy';
@@ -40,11 +42,16 @@ const WEAKNESS_MAP: Partial<Record<ElementType, ElementType>> = {
   holy: 'fire',
 };
 
+export function getUnitEffectiveElement(unit: Pick<BattleUnitState, 'speciesId' | 'shiftElement'>): ElementType {
+  return unit.shiftElement ?? getSpecies(unit.speciesId).element;
+}
+
 export function isElementalWeakness(
   attackElement: ElementType,
   defenderSpeciesId: string,
+  overrideElement?: ElementType,
 ): boolean {
-  const defElem = getSpecies(defenderSpeciesId).element;
+  const defElem = overrideElement ?? getSpecies(defenderSpeciesId).element;
   return WEAKNESS_MAP[attackElement] === defElem;
 }
 
@@ -505,6 +512,10 @@ function applyDamage(
   if (defender.uniqueEffects.includes('abyssal_carapace') && isTargetAfflicted(attacker)) {
     dmgMult *= 0.88;
   }
+  // Boss Gimmick: Rune Golem takes -20% damage while shield holds
+  if (!defender.isAlly && defender.speciesId === 'rune_golem' && defender.shield > 0) {
+    dmgMult *= 0.8;
+  }
   let dmg = Math.max(1, Math.round(rawDamage * dmgMult));
   if (defender.defending) {
     dmg = Math.max(1, Math.round(dmg * 0.45));
@@ -543,6 +554,15 @@ function applyDamage(
       isCrit: true,
       createdAt: now,
     });
+    // Boss Gimmick: Ancient Treant gains bark barrier & DEF UP on enrage
+    if (defender.speciesId === 'ancient_treant') {
+      defender.defBuffTurns = Math.max(defender.defBuffTurns, 3);
+      defender.shield = Math.min(
+        Math.round(defender.maxHp * 0.35),
+        defender.shield + Math.round(defender.maxHp * 0.12),
+      );
+      state.logs.push(`🌳 ${defender.name}の根絡み障壁が展開`);
+    }
   }
 
   if (
@@ -591,6 +611,24 @@ function applyDamage(
     createdAt: now,
   });
 
+  // Boss on-hit gimmicks when hitting allies
+  if (!attacker.isAlly && defender.isAlly && defender.hp > 0 && totalDealt > 0) {
+    if (attacker.speciesId === 'ancient_treant') {
+      applyStatusEffect(state, defender, 'poison', 0.3, 3);
+    }
+    if (attacker.speciesId === 'star_devourer' && defender.mp > 0) {
+      const drained = Math.min(defender.mp, 10);
+      defender.mp -= drained;
+      state.floatingTexts.push({
+        id: nextEffectId(),
+        targetUid: defender.uid,
+        text: `MP-${drained}`,
+        color: '#b48cff',
+        createdAt: now,
+      });
+    }
+  }
+
   if (attacker.lifesteal > 0 && attacker.hp > 0 && totalDealt > 0) {
     const drain = Math.max(1, Math.round((totalDealt * attacker.lifesteal) / 100));
     applyHealing(
@@ -615,6 +653,25 @@ function applyDamage(
       targetUid: attacker.uid,
       text: `反射${reflect}`,
       color: '#ff964f',
+      createdAt: now,
+    });
+  }
+
+  // Boss Gimmick: Rune Golem reflects 14% damage while barrier absorbed damage
+  if (
+    !defender.isAlly &&
+    defender.speciesId === 'rune_golem' &&
+    absorbed > 0 &&
+    attacker.isAlly &&
+    attacker.hp > 0
+  ) {
+    const reflect = Math.max(2, Math.round(totalDealt * 0.14));
+    attacker.hp = Math.max(1, attacker.hp - reflect);
+    state.floatingTexts.push({
+      id: nextEffectId(),
+      targetUid: attacker.uid,
+      text: `障壁反射${reflect}`,
+      color: '#7ce8ff',
       createdAt: now,
     });
   }
@@ -663,6 +720,23 @@ function calcDamageNumber(
     dmg *= 0.86;
   }
 
+  // Boss offensive gimmicks
+  if (!attacker.isAlly && attacker.isBoss) {
+    if (attacker.speciesId === 'crimson_wyrm' && defender.burnTurns > 0) {
+      dmg *= 1.2;
+    }
+    if (attacker.speciesId === 'glacier_leviathan' && defender.freezeTurns > 0) {
+      dmg *= 1.25;
+    }
+    if (attacker.speciesId === 'abyss_kraken' && isTargetAfflicted(defender)) {
+      dmg *= 1.22;
+    }
+    if (attacker.speciesId === 'asura_emperor') {
+      const missingRatio = Math.max(0, 1 - attacker.hp / attacker.maxHp);
+      dmg *= 1 + missingRatio * 0.45;
+    }
+  }
+
   if (attacker.burnTurns > 0) {
     dmg *= 0.88;
   }
@@ -684,7 +758,7 @@ function calcDamageNumber(
     dmg *= 1.16;
   }
 
-  const isWeak = isElementalWeakness(element, defender.speciesId);
+  const isWeak = isElementalWeakness(element, defender.speciesId, defender.shiftElement);
   if (isWeak) {
     dmg *= 1.4 + attacker.weaknessBonusPct / 100;
   }
@@ -746,6 +820,118 @@ function calcDamageNumber(
   return { amount: Math.max(1, Math.round(dmg)), isCrit, isWeak };
 }
 
+function triggerBossTurnGimmick(state: BattleState, boss: BattleUnitState): void {
+  if (boss.isAlly || !boss.isBoss || boss.hp <= 0) return;
+  const g = getBossGimmick(boss.speciesId);
+  if (!g) return;
+  const turnNo = (boss.bossTurnCount ?? 0) + 1;
+  boss.bossTurnCount = turnNo;
+  const livingAllies = state.allies.filter((a) => a.hp > 0);
+  const now = Date.now();
+
+  switch (boss.speciesId) {
+    case 'ancient_treant': {
+      if (boss.hp < boss.maxHp) {
+        const heal = Math.max(5, Math.round(boss.maxHp * 0.04));
+        applyHealing(state, boss, heal, false, false);
+      }
+      break;
+    }
+    case 'rune_golem': {
+      if (turnNo % 2 === 1) {
+        const sh = Math.round(boss.maxHp * 0.12);
+        boss.shield = Math.min(Math.round(boss.maxHp * 0.3), boss.shield + sh);
+        state.logs.push(`⚙ ${boss.name}の魔導障壁・盾+${sh}`);
+        state.vfx.push({ id: nextEffectId(), targetUid: boss.uid, element: 'shield', createdAt: now });
+      }
+      break;
+    }
+    case 'crimson_wyrm': {
+      let hit = false;
+      for (const a of livingAllies) {
+        if (applyStatusEffect(state, a, 'burn', 0.25, 2)) hit = true;
+      }
+      if (hit) state.logs.push(`🔥 ${boss.name}の灼熱鱗が火傷を撒く`);
+      break;
+    }
+    case 'star_devourer': {
+      boss.atkBuffTurns = Math.max(boss.atkBuffTurns, 2);
+      state.floatingTexts.push({
+        id: nextEffectId(),
+        targetUid: boss.uid,
+        text: '虚無増幅',
+        color: '#b48cff',
+        createdAt: now,
+      });
+      break;
+    }
+    case 'glacier_leviathan': {
+      if (turnNo % 2 === 0) {
+        let froze = false;
+        for (const a of livingAllies) {
+          if (applyStatusEffect(state, a, 'freeze', 0.25, 1)) froze = true;
+        }
+        state.logs.push(
+          froze ? `❄ ${boss.name}の絶対零度波で凍結発生` : `❄ ${boss.name}が絶対零度波を放った`,
+        );
+      }
+      break;
+    }
+    case 'seraph_omega': {
+      if (turnNo % 3 === 0) {
+        boss.poisonTurns = 0;
+        boss.burnTurns = 0;
+        boss.defBreakTurns = 0;
+        const sh = Math.round(boss.maxHp * 0.1);
+        boss.shield = Math.min(Math.round(boss.maxHp * 0.3), boss.shield + sh);
+        for (const a of livingAllies) {
+          applyStatusEffect(state, a, 'def_break', 0.45, 2);
+        }
+        state.logs.push(`✨ ${boss.name}の聖光審判・異常浄化＆全体防低下`);
+      }
+      break;
+    }
+    case 'abyss_kraken': {
+      let afflicted = false;
+      for (const a of livingAllies) {
+        if (applyStatusEffect(state, a, 'poison', 0.3, 3)) afflicted = true;
+        if (applyStatusEffect(state, a, 'def_break', 0.25, 2)) afflicted = true;
+      }
+      if (afflicted) state.logs.push(`🐙 ${boss.name}の墨汁呪縛がパーティを蝕む`);
+      break;
+    }
+    case 'chronos_mantis': {
+      boss.spd += 4;
+      state.floatingTexts.push({
+        id: nextEffectId(),
+        targetUid: boss.uid,
+        text: '時空加速',
+        color: '#7ce8ff',
+        createdAt: now,
+      });
+      break;
+    }
+    case 'asura_emperor': {
+      if (turnNo % 2 === 1) {
+        boss.atkBuffTurns = Math.max(boss.atkBuffTurns, 3);
+        state.logs.push(`⚔ ${boss.name}の修羅闘気が高まる`);
+      }
+      break;
+    }
+    case 'genesis_orrery': {
+      const nextElem = SHIFT_ELEMENTS[turnNo % SHIFT_ELEMENTS.length]!;
+      boss.shiftElement = nextElem;
+      if (turnNo % 2 === 0) {
+        const sh = Math.round(boss.maxHp * 0.12);
+        boss.shield = Math.min(Math.round(boss.maxHp * 0.32), boss.shield + sh);
+      }
+      state.logs.push(`🌌 ${boss.name}の万象反転・属性シフト発動`);
+      state.vfx.push({ id: nextEffectId(), targetUid: boss.uid, element: nextElem, createdAt: now });
+      break;
+    }
+  }
+}
+
 function startUnitTurnPassives(state: BattleState, actor: BattleUnitState): void {
   actor.defending = false;
   if (actor.atkBuffTurns > 0) actor.atkBuffTurns -= 1;
@@ -799,6 +985,8 @@ function startUnitTurnPassives(state: BattleState, actor: BattleUnitState): void
     const amt = Math.max(1, Math.round((actor.maxHp * totalRegenPct) / 100));
     applyHealing(state, actor, amt, actor.uniqueEffects.includes('crimson_chalice'), false, actor);
   }
+
+  triggerBossTurnGimmick(state, actor);
 }
 
 export type PlayerActionCommand =
@@ -900,8 +1088,8 @@ export function chooseAutoAction(
 
     if (candidates.length > 0) {
       candidates.sort((a, b) => {
-        const aWeak = isElementalWeakness(a.sk.element, targetEnemy.speciesId) ? 1.45 : 1;
-        const bWeak = isElementalWeakness(b.sk.element, targetEnemy.speciesId) ? 1.45 : 1;
+        const aWeak = isElementalWeakness(a.sk.element, targetEnemy.speciesId, targetEnemy.shiftElement) ? 1.45 : 1;
+        const bWeak = isElementalWeakness(b.sk.element, targetEnemy.speciesId, targetEnemy.shiftElement) ? 1.45 : 1;
         const aScore =
           (a.sk.target === 'all_enemies' && livingEnemies.length >= 2
             ? a.sk.power * livingEnemies.length * 0.85
@@ -1115,7 +1303,7 @@ export function executeTurnAction(
     actor.charging = false;
     actor.lungeUntilMs = now + 380;
     let totalDmg = 0;
-    const elem = getSpecies(actor.speciesId).element;
+    const elem = actor.shiftElement ?? getSpecies(actor.speciesId).element;
     for (const t of livingFoes) {
       const { amount, isCrit, isWeak } = calcDamageNumber(
         actor,
@@ -1136,6 +1324,13 @@ export function executeTurnAction(
         } else {
           applyStatusEffect(state, t, 'poison', 0.45, 3);
         }
+      }
+    }
+    // Boss Gimmick: Chronos Mantis freezes 1 living ally (Time Stop) on ultimate
+    if (actor.speciesId === 'chronos_mantis') {
+      const targetFreeze = state.allies.find((a) => a.hp > 0);
+      if (targetFreeze) {
+        applyStatusEffect(state, targetFreeze, 'freeze', 1, 1);
       }
     }
     state.logs.push(`💥 ${actor.name}の奥義が炸裂・計${totalDmg}ダメージ`);
@@ -1197,7 +1392,9 @@ export function executeTurnAction(
       }
 
       const extraChance =
-        actor.doubleHit + (actor.uniqueEffects.includes('twin_fang_strike') ? 18 : 0);
+        actor.doubleHit +
+        (actor.uniqueEffects.includes('twin_fang_strike') ? 18 : 0) +
+        (!actor.isAlly && actor.speciesId === 'asura_emperor' ? 30 : 0);
       if (target.hp > 0 && Math.random() * 100 < extraChance) {
         const extra = calcDamageNumber(actor, target, 0.68, 'atk', elem, false, false);
         const xDealt = applyDamage(state, actor, target, extra.amount, 'physical', extra.isCrit, extra.isWeak);
@@ -1383,13 +1580,10 @@ export function executeTurnAction(
         }
       }
 
-      if (
-        actor.uniqueEffects.includes('twin_fang_strike') &&
-        skill.statScale === 'atk' &&
-        targets[0] &&
-        targets[0].hp > 0 &&
-        Math.random() < 0.18
-      ) {
+      const skillFollowup =
+        (actor.uniqueEffects.includes('twin_fang_strike') && skill.statScale === 'atk' && Math.random() < 0.18) ||
+        (!actor.isAlly && actor.speciesId === 'asura_emperor' && Math.random() < 0.3);
+      if (skillFollowup && targets[0] && targets[0].hp > 0) {
         const extra = calcDamageNumber(actor, targets[0], 0.68, 'atk', skill.element, false, false);
         const xDealt = applyDamage(
           state,
@@ -1422,14 +1616,18 @@ export function executeTurnAction(
     return state;
   }
 
-  if (
-    !actor.isAlly &&
-    actor.isBoss &&
-    actor.enraged &&
-    actor.hp > 0 &&
-    action.type !== 'enemy_charge' &&
-    Math.random() < 0.38
-  ) {
+  const doubleActChance =
+    !actor.isAlly && actor.isBoss && actor.hp > 0 && action.type !== 'enemy_charge'
+      ? actor.speciesId === 'chronos_mantis'
+        ? actor.enraged
+          ? 0.5
+          : 0.35
+        : actor.enraged
+          ? 0.38
+          : 0
+      : 0;
+
+  if (doubleActChance > 0 && Math.random() < doubleActChance) {
     state.turnQueue.unshift(actor.uid);
     state.logs.push(`🔥 ${actor.name}の2回行動`);
   }
@@ -1555,6 +1753,8 @@ export function resolveBattleVictory(
 
   const roster = { ...save.roster };
   const leveledUpIds: string[] = [];
+  const benchLeveledUpIds: string[] = [];
+  const activeAllyIds = new Set(battle.allies.map((a) => a.speciesId));
 
   for (const allyState of battle.allies) {
     const unitId = allyState.speciesId;
@@ -1576,6 +1776,26 @@ export function resolveBattleVictory(
     }
     if (leveled) {
       leveledUpIds.push(unitId);
+    }
+    roster[unitId] = updated;
+  }
+
+  // Share 25% EXP with non-party bench monsters so roster members stay viable
+  const benchExp = Math.max(1, Math.round(exp * 0.25));
+  for (const [unitId, existing] of Object.entries(roster)) {
+    if (unitId === 'hero' || activeAllyIds.has(unitId)) continue;
+    const updated = {
+      ...existing,
+      exp: existing.exp + benchExp,
+    };
+    let leveled = false;
+    while (updated.exp >= expForNextLevel(updated.level)) {
+      updated.exp -= expForNextLevel(updated.level);
+      updated.level += 1;
+      leveled = true;
+    }
+    if (leveled) {
+      benchLeveledUpIds.push(unitId);
     }
     roster[unitId] = updated;
   }
@@ -1640,6 +1860,7 @@ export function resolveBattleVictory(
     }
   }
 
+  const encounteredMonsters = new Set(save.encounteredMonsters ?? save.discoveredMonsters);
   const discoveredMonsters = new Set(save.discoveredMonsters);
   const recruited: BattleReward['recruited'] = [];
   const partyIds = [...save.partyIds];
@@ -1647,6 +1868,7 @@ export function resolveBattleVictory(
 
   const uniqueEnemySpecies = Array.from(new Set(battle.enemies.map((e) => e.speciesId)));
   for (const spId of uniqueEnemySpecies) {
+    encounteredMonsters.add(spId);
     const sp = getSpecies(spId);
     const isAlreadyOwned = Boolean(roster[spId]);
     const chance = isAlreadyOwned ? sp.recruitRate * 0.35 : Math.min(0.65, sp.recruitRate * 1.1);
@@ -1692,10 +1914,25 @@ export function resolveBattleVictory(
         ),
       };
 
-  const nextInventory = [...keptItems, ...save.inventory].slice(0, 140);
+  const nextInventory = trimInventorySafely([...keptItems, ...save.inventory], roster);
   const nextBossRushBest = battle.bossRushWave
     ? Math.max(save.bossRushBestWave, battle.bossRushWave)
     : save.bossRushBestWave;
+
+  const eliteKills = battle.enemies.filter((e) => e.isElite).length;
+  const bossKills = battle.enemies.filter((e) => e.isBoss).length;
+  const nextGuildQuests = applyBattleProgressToQuests(
+    save.guildQuests,
+    {
+      kills: battle.enemies.length,
+      elites: eliteKills,
+      bosses: bossKills,
+      biome: battle.biome,
+      hasTrials: battle.activeTrials.length > 0,
+      bossRushWave: battle.bossRushWave,
+    },
+    battle.worldTier,
+  );
 
   const nextSave: GameSave = {
     ...save,
@@ -1707,8 +1944,10 @@ export function resolveBattleVictory(
     partyIds,
     roster,
     inventory: nextInventory,
+    encounteredMonsters: Array.from(encounteredMonsters),
     discoveredMonsters: Array.from(discoveredMonsters),
     discoveredUniques: Array.from(discoveredUniques),
+    guildQuests: nextGuildQuests,
     stats: {
       ...save.stats,
       totalKills: save.stats.totalKills + battle.enemies.length,
@@ -1726,7 +1965,11 @@ export function resolveBattleVictory(
     },
   };
 
-  for (const id of [...leveledUpIds, ...recruited.filter((r) => r.isNew).map((r) => r.speciesId)]) {
+  for (const id of [
+    ...leveledUpIds,
+    ...benchLeveledUpIds,
+    ...recruited.filter((r) => r.isNew).map((r) => r.speciesId),
+  ]) {
     const u = nextSave.roster[id];
     if (u) {
       const st = computeUnitStats(u, nextSave, shrineBuffs);
@@ -1751,6 +1994,7 @@ export function resolveBattleVictory(
       autoSalvagedStones,
       recruited,
       leveledUpIds,
+      benchLeveledUpIds,
       worldTierUnlocked,
       bossRushWaveCleared: battle.bossRushWave,
     },
