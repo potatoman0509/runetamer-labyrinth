@@ -314,6 +314,32 @@ export interface BattleUnitState {
   bossTurnCount?: number;
   lungeUntilMs: number;
   hurtUntilMs: number;
+  activeMotion?: BattleUnitMotion;
+}
+
+export interface BattleUnitMotion {
+  speciesId: string;
+  skillId: string;
+  skillName?: string;
+  element: ElementType;
+  kind: SkillDef['kind'] | 'attack' | 'defend' | 'ultimate' | 'limit_break' | 'charge';
+  hits?: number;
+  isAoE?: boolean;
+  startedAt: number;
+  durationMs: number;
+  targetUids: string[];
+}
+
+export interface BattleCinematic {
+  id: string;
+  actorUid: string;
+  speciesId: string;
+  skillId: string;
+  title: string;
+  element: ElementType;
+  startedAt: number;
+  durationMs: number;
+  targetUids: string[];
 }
 
 export interface BattleFloatingText {
@@ -329,6 +355,9 @@ export interface BattleFloatingText {
 export interface BattleVfx {
   id: string;
   targetUid: string;
+  attackerUid?: string;
+  speciesId?: string;
+  skillId?: string;
   element: ElementType | 'heal' | 'shield' | 'buff' | 'ultimate' | 'limit_break' | 'freeze' | 'burn';
   createdAt: number;
 }
@@ -372,6 +401,7 @@ export interface BattleState {
   logs: string[];
   floatingTexts: BattleFloatingText[];
   vfx: BattleVfx[];
+  activeCinematic?: BattleCinematic | null;
   shakeUntilMs: number;
   reward: BattleReward | null;
 }

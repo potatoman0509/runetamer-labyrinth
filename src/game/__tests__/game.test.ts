@@ -21,6 +21,11 @@ import {
   SET_LIST,
   UNIQUE_TEMPLATES,
 } from '../data/equipment';
+import {
+  computeUnitMotionTransform,
+  getSignatureStyle,
+  resolveMotionRecipe,
+} from '../../engine/battleMotions';
 import { paintSprite } from '../../engine/hdSprites';
 import {
   BOSS_MONSTERS,
@@ -60,6 +65,7 @@ import {
   validateSave,
 } from '../save';
 import {
+  ALL_HERO_SKILLS,
   canUpgradeSkillNode,
   getAvailableSp,
   getHeroEquippedSkills,
@@ -772,5 +778,110 @@ describe('RuneTamer Labyrinth Core & v11 Systems', () => {
     const rolled = refreshDailyQuestsIfNeeded(curSave.guildQuests, 1, '2099-12-31');
     expect(rolled.dailyDateKey).toBe('2099-12-31');
     expect(rolled.daily.every((q) => q.progress === 0 && !q.claimed)).toBe(true);
+  });
+
+  it('produces 501+ unique per-(monster x skill) motion recipes and bespoke signatures for all 10 Hero skills, Limit Break, and all 10 Bosses', () => {
+    const keys = new Set<string>();
+
+    // 1. All 150 monsters x 2 skills (300) + 150 monster basic attacks (150) + 40 Boss/Elite ultimates (40)
+    for (const sp of MONSTER_LIST) {
+      for (const sk of sp.skills) {
+        const rec = resolveMotionRecipe(sp.id, sk.id, { skill: sk });
+        keys.add(rec.signatureKey);
+        if (sp.isBoss) {
+          expect(getSignatureStyle(sp.id, sk.id)).toBeDefined();
+        }
+      }
+      const basicRec = resolveMotionRecipe(sp.id, 'basic_attack', {
+        element: sp.element,
+        kind: 'attack',
+      });
+      keys.add(basicRec.signatureKey);
+
+      if (sp.isBoss || sp.tier === 'elite') {
+        const ultRec = resolveMotionRecipe(sp.id, 'enemy_ultimate', {
+          element: sp.element,
+          kind: 'ultimate',
+          isAoE: true,
+        });
+        keys.add(ultRec.signatureKey);
+        if (sp.isBoss) {
+          expect(getSignatureStyle(sp.id, 'enemy_ultimate')).toBeDefined();
+        }
+      }
+    }
+
+    // 2. Hero x 10 skills (10) + Hero basic attack (1) + Limit Break (1)
+    const heroSkillList = Object.values(ALL_HERO_SKILLS);
+    expect(heroSkillList.length).toBe(10);
+    for (const sk of heroSkillList) {
+      expect(getSignatureStyle('hero', sk.id)).toBeDefined();
+      keys.add(resolveMotionRecipe('hero', sk.id, { skill: sk }).signatureKey);
+    }
+    keys.add(
+      resolveMotionRecipe('hero', 'basic_attack', { element: 'holy', kind: 'attack' }).signatureKey,
+    );
+    expect(getSignatureStyle('hero', 'limit_break')).toBe('hero_limit_break');
+    keys.add(
+      resolveMotionRecipe('hero', 'limit_break', { element: 'holy', kind: 'limit_break', isAoE: true })
+        .signatureKey,
+    );
+
+    // 300 + 150 + 40 + 10 + 1 + 1 = 502 completely unique (species x skill) signatures
+    expect(keys.size).toBe(502);
+  });
+
+  it('sets activeMotion, extended VFX metadata, and Hero/Boss signature activeCinematic on battle actions', () => {
+    const save = createInitialSave();
+    const bossEnt = createBossRushEntity(10); // genesis_orrery
+    const b0 = createBattleState(save, bossEnt, 46, { initialLimitGauge: 100 });
+
+    const hero = b0.allies.find((a) => a.speciesId === 'hero')!;
+    const boss = b0.enemies[0]!;
+
+    // Hero skill -> activeMotion + signature activeCinematic + skillId on VFX
+    const heroTurn = { ...b0, activeUid: hero.uid };
+    const afterHeroSkill = executeTurnAction(heroTurn, {
+      type: 'skill',
+      skillIndex: 0,
+      targetUid: boss.uid,
+    });
+    const heroAfter = afterHeroSkill.allies.find((a) => a.uid === hero.uid)!;
+    expect(heroAfter.activeMotion?.speciesId).toBe('hero');
+    expect(heroAfter.activeMotion?.skillId).toBe(hero.skills[0].id);
+    expect(afterHeroSkill.activeCinematic?.skillId).toBe(hero.skills[0].id);
+    expect(afterHeroSkill.vfx.some((v) => v.skillId === hero.skills[0].id && v.attackerUid === hero.uid)).toBe(
+      true,
+    );
+
+    // Transform helper yields non-neutral motion offset / glow mid-animation
+    const tx = computeUnitMotionTransform(
+      heroAfter,
+      heroAfter.activeMotion!.startedAt + 120,
+      { x: 240, y: 120 },
+      { x: 80, y: 120 },
+    );
+    expect(tx.glowColor).not.toBeNull();
+    expect(Math.abs(tx.offsetX) + Math.abs(tx.offsetY) + Math.abs(tx.rotation)).toBeGreaterThan(0);
+
+    // Limit Break -> signature cinematic + all living allies get activeMotion
+    const afterLb = executeTurnAction(heroTurn, { type: 'limit_break' });
+    expect(afterLb.activeCinematic?.skillId).toBe('limit_break');
+    expect(afterLb.allies.filter((a) => a.hp > 0).every((a) => a.activeMotion?.skillId === 'limit_break')).toBe(
+      true,
+    );
+
+    // Boss ultimate -> boss activeMotion + boss signature cinematic
+    const bossTurn = {
+      ...b0,
+      activeUid: boss.uid,
+      enemies: b0.enemies.map((e, i) => (i === 0 ? { ...e, charging: true } : e)),
+    };
+    const afterBossUlt = executeTurnAction(bossTurn, { type: 'enemy_ultimate' });
+    const bossAfter = afterBossUlt.enemies[0]!;
+    expect(bossAfter.activeMotion?.speciesId).toBe('genesis_orrery');
+    expect(bossAfter.activeMotion?.skillId).toBe('enemy_ultimate');
+    expect(afterBossUlt.activeCinematic?.speciesId).toBe('genesis_orrery');
+    expect(afterBossUlt.activeCinematic?.skillId).toBe('enemy_ultimate');
   });
 });

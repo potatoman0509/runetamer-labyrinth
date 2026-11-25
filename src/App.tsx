@@ -1549,7 +1549,7 @@ export function App() {
                 color: '#ffd6dd',
               }}
             >
-              v12
+              v13
             </span>
           </div>
           <div className="hud-right">

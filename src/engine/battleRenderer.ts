@@ -1,5 +1,10 @@
 import { BIOMES } from '../game/data/biomes';
 import type { BattleState, BattleUnitState, DungeonBiomeId } from '../game/types';
+import {
+  computeUnitMotionTransform,
+  drawSignatureCinematic,
+  drawSkillTrajectoryVfx,
+} from './battleMotions';
 import { ANIM_FRAME_COUNT, getSpriteCanvas } from './pixelSprites';
 
 function drawBattleBackdrop(
@@ -386,14 +391,36 @@ export function renderBattleScene(
         ? 0
         : (Math.floor(timeMs / frameInterval) + frameSeed) % ANIM_FRAME_COUNT;
 
-    // Smooth parabolic attack lunge curve!
-    let lungeOffset = 0;
-    let lungeProgress = 0;
-    if (now < unit.lungeUntilMs) {
-      lungeProgress = 1 - (unit.lungeUntilMs - now) / 340; // 0..1
-      const arc = Math.sin(lungeProgress * Math.PI);
-      lungeOffset = Math.round((unit.isAlly ? -28 : 28) * arc);
+    // Compute average target position for targeted body motion (dash, leap, swoop, whip, etc.)
+    let targetPos: { x: number; y: number } | null = null;
+    if (unit.activeMotion && unit.activeMotion.targetUids.length > 0) {
+      let sx = 0;
+      let sy = 0;
+      let count = 0;
+      for (const tuid of unit.activeMotion.targetUids) {
+        const pt = anchors.get(tuid);
+        if (pt) {
+          sx += pt.x;
+          sy += pt.y;
+          count += 1;
+        }
+      }
+      if (count > 0) {
+        targetPos = { x: sx / count, y: sy / count };
+      }
     }
+
+    const motionTx = isDead
+      ? {
+          offsetX: 0,
+          offsetY: 0,
+          scaleX: 1,
+          scaleY: 1,
+          rotation: 0,
+          afterimageOffsets: [],
+          glowColor: null,
+        }
+      : computeUnitMotionTransform(unit, now, pos, targetPos);
 
     const isHurt = now < unit.hurtUntilMs;
     const hurtShakeX = isHurt ? Math.round(Math.sin(timeMs * 0.08) * 5) : 0;
@@ -403,17 +430,30 @@ export function renderBattleScene(
     const sw = sprite.width;
     const sh = sprite.height;
 
-    const cx = pos.x + lungeOffset + hurtShakeX;
-    const cy = pos.y;
+    const cx = pos.x + motionTx.offsetX + hurtShakeX;
+    const cy = pos.y + motionTx.offsetY;
 
-    // Ground shadow
+    // Ground shadow (stays grounded and shrinks slightly when leaping)
+    const leapShrink = Math.max(0.55, 1 + Math.min(0, motionTx.offsetY) / 90);
+    const shadowW = Math.round(sw * 0.6 * leapShrink);
     ctx.fillStyle = 'rgba(0, 0, 0, 0.36)';
     ctx.fillRect(
-      Math.round(cx - sw * 0.3),
+      Math.round(cx - shadowW * 0.5),
       Math.round(pos.y + sh * 0.38),
-      Math.round(sw * 0.6),
+      shadowW,
       5,
     );
+
+    // Subtle casting aura glow when unit is actively executing a skill/motion
+    if (!isDead && motionTx.glowColor) {
+      ctx.save();
+      ctx.globalAlpha = 0.28;
+      ctx.fillStyle = motionTx.glowColor;
+      ctx.beginPath();
+      ctx.arc(cx, cy, sw * 0.48, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
 
     // True Evolution prism double halo OR Extreme Evolution golden halo
     if (!isDead && unit.trueEvolved) {
@@ -491,13 +531,17 @@ export function renderBattleScene(
       ctx.fill();
     }
 
-    // Motion-blur pixel afterimages during attack lunge (DQ6 speed trail!)
-    if (!isDead && Math.abs(lungeOffset) > 5) {
+    // Articulated motion-blur pixel afterimages
+    if (!isDead && motionTx.afterimageOffsets.length > 0) {
       ctx.save();
-      ctx.globalAlpha = 0.28;
-      ctx.drawImage(sprite, Math.round(pos.x + lungeOffset * 0.5 - sw / 2), Math.round(cy - sh / 2));
-      ctx.globalAlpha = 0.14;
-      ctx.drawImage(sprite, Math.round(pos.x - sw / 2), Math.round(cy - sh / 2));
+      for (const ai of motionTx.afterimageOffsets) {
+        ctx.globalAlpha = ai.alpha;
+        ctx.drawImage(
+          sprite,
+          Math.round(pos.x + ai.dx - sw / 2),
+          Math.round(pos.y + ai.dy - sh / 2),
+        );
+      }
       ctx.restore();
     }
 
@@ -507,7 +551,16 @@ export function renderBattleScene(
     } else if (isHurt && Math.floor(timeMs / 45) % 2 === 0) {
       ctx.globalAlpha = 0.55;
     }
-    ctx.drawImage(sprite, Math.round(cx - sw / 2), Math.round(cy - sh / 2));
+    ctx.save();
+    ctx.translate(Math.round(cx), Math.round(cy));
+    if (motionTx.rotation !== 0) {
+      ctx.rotate(motionTx.rotation);
+    }
+    if (motionTx.scaleX !== 1 || motionTx.scaleY !== 1) {
+      ctx.scale(motionTx.scaleX, motionTx.scaleY);
+    }
+    ctx.drawImage(sprite, -Math.round(sw / 2), -Math.round(sh / 2));
+    ctx.restore();
 
     // Evolved / True Evolved rising sparkles
     if (!isDead && (unit.evolved || unit.trueEvolved)) {
@@ -600,13 +653,23 @@ export function renderBattleScene(
     }
   }
 
-  // Render Multi-Stage Pixel VFX
+  // Render Per-(Species x Skill) Trajectory VFX (with legacy elemental fallback)
   for (const fx of state.vfx) {
     const elapsed = now - fx.createdAt;
-    if (elapsed > 460) continue;
+    if (elapsed > 560) continue;
     const anchor = anchors.get(fx.targetUid);
     if (!anchor) continue;
-    drawVfxEffect(ctx, anchor.x, anchor.y, fx.element, elapsed / 460);
+    const attackerAnchor = fx.attackerUid ? (anchors.get(fx.attackerUid) ?? null) : null;
+    const progress = elapsed / 560;
+    const drawn = drawSkillTrajectoryVfx(ctx, fx, anchor, attackerAnchor, progress);
+    if (!drawn) {
+      drawVfxEffect(ctx, anchor.x, anchor.y, fx.element, Math.min(1, elapsed / 460));
+    }
+  }
+
+  // Render Bespoke Hero & 10-Boss Signature Screen Cinematics
+  if (state.activeCinematic) {
+    drawSignatureCinematic(ctx, width, height, state.activeCinematic, anchors, now);
   }
 
   // Render Crisp Outlined Floating Numbers

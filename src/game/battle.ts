@@ -1,3 +1,4 @@
+import { getSignatureStyle } from '../engine/battleMotions';
 import { getBossGimmick, SHIFT_ELEMENTS } from './bossGimmicks';
 import { BOSS_RUSH_MAX_WAVE, getBossRushWave } from './bossRush';
 import { getBiomeForFloor } from './data/biomes';
@@ -453,6 +454,12 @@ function applyStatusEffect(
   return true;
 }
 
+interface VfxMeta {
+  attackerUid?: string;
+  speciesId?: string;
+  skillId?: string;
+}
+
 function applyHealing(
   state: BattleState,
   target: BattleUnitState,
@@ -460,6 +467,7 @@ function applyHealing(
   allowOverhealShield: boolean,
   cleanseStatus = false,
   caster?: BattleUnitState,
+  vfxMeta?: VfxMeta,
 ): number {
   if (target.hp <= 0) return 0;
   const trials = computeTrialModifiers(state.activeTrials);
@@ -493,6 +501,7 @@ function applyHealing(
     targetUid: target.uid,
     element: 'heal',
     createdAt: Date.now(),
+    ...vfxMeta,
   });
   return healed;
 }
@@ -505,6 +514,7 @@ function applyDamage(
   element: BattleState['vfx'][number]['element'],
   isCrit: boolean,
   isWeak = false,
+  vfxMeta?: VfxMeta,
 ): number {
   if (defender.hp <= 0) return 0;
   const now = Date.now();
@@ -609,6 +619,7 @@ function applyDamage(
     targetUid: defender.uid,
     element,
     createdAt: now,
+    ...vfxMeta,
   });
 
   // Boss on-hit gimmicks when hitting allies
@@ -1149,7 +1160,11 @@ export function executeTurnAction(
     turnQueue: [...prev.turnQueue],
     logs: [...prev.logs].slice(-12),
     floatingTexts: prev.floatingTexts.filter((f) => now - f.createdAt < 1100),
-    vfx: prev.vfx.filter((v) => now - v.createdAt < 550),
+    vfx: prev.vfx.filter((v) => now - v.createdAt < 700),
+    activeCinematic:
+      prev.activeCinematic && now - prev.activeCinematic.startedAt < prev.activeCinematic.durationMs
+        ? prev.activeCinematic
+        : undefined,
   };
 
   // ===== SWIFT FREE ACTIONS: POTIONS & LIMIT BREAK (Do NOT consume actor's turn!) =====
@@ -1197,10 +1212,21 @@ export function executeTurnAction(
     state.shakeUntilMs = now + 460;
     const livingAllies = state.allies.filter((a) => a.hp > 0);
     const livingEnemies = state.enemies.filter((e) => e.hp > 0);
+    const enemyUids = livingEnemies.map((e) => e.uid);
     const totalPower = livingAllies.reduce((sum, a) => sum + Math.max(a.atk, a.mag), 0);
 
     for (const a of livingAllies) {
-      a.lungeUntilMs = now + 380;
+      a.lungeUntilMs = now + 420;
+      a.activeMotion = {
+        speciesId: a.speciesId,
+        skillId: 'limit_break',
+        kind: 'limit_break',
+        element: 'holy',
+        isAoE: true,
+        targetUids: enemyUids,
+        startedAt: now,
+        durationMs: 680,
+      };
       applyHealing(state, a, Math.round(a.maxHp * 0.18), false, true);
       a.shield = Math.min(Math.round(a.maxHp * 0.55), a.shield + Math.round(a.maxHp * 0.12));
     }
@@ -1208,6 +1234,22 @@ export function executeTurnAction(
     let totalDmg = 0;
     let brokeCount = 0;
     const leadAlly = livingAllies[0] ?? state.allies[0]!;
+    const lbVfxMeta: VfxMeta = {
+      attackerUid: leadAlly.uid,
+      speciesId: leadAlly.speciesId,
+      skillId: 'limit_break',
+    };
+    state.activeCinematic = {
+      id: nextEffectId(),
+      title: 'ルーンユニゾン',
+      actorUid: leadAlly.uid,
+      speciesId: leadAlly.speciesId,
+      skillId: 'limit_break',
+      targetUids: enemyUids,
+      element: 'holy',
+      startedAt: now,
+      durationMs: 680,
+    };
     for (const e of livingEnemies) {
       if (e.charging) {
         e.charging = false;
@@ -1223,7 +1265,7 @@ export function executeTurnAction(
       }
       const mitigation = 100 / (100 + e.def * 0.8);
       const raw = totalPower * 1.48 * mitigation;
-      totalDmg += applyDamage(state, leadAlly, e, raw, 'limit_break', true, false);
+      totalDmg += applyDamage(state, leadAlly, e, raw, 'limit_break', true, false, lbVfxMeta);
     }
 
     state.logs.push(
@@ -1262,15 +1304,28 @@ export function executeTurnAction(
   }
 
   if (action.type === 'defend') {
+    const actorElem = actor.shiftElement ?? getSpecies(actor.speciesId).element;
     actor.defending = true;
     actor.poisonTurns = 0;
     actor.burnTurns = 0;
     actor.mp = Math.min(actor.maxMp, actor.mp + 10);
+    actor.activeMotion = {
+      speciesId: actor.speciesId,
+      skillId: 'defend',
+      kind: 'defend',
+      element: actorElem,
+      targetUids: [actor.uid],
+      startedAt: now,
+      durationMs: 360,
+    };
     if (actor.isAlly) addLimitGauge(state, 14);
     state.logs.push(`${actor.name}は身を固めた`);
     state.vfx.push({
       id: nextEffectId(),
       targetUid: actor.uid,
+      attackerUid: actor.uid,
+      speciesId: actor.speciesId,
+      skillId: 'defend',
       element: 'shield',
       createdAt: now,
     });
@@ -1279,7 +1334,17 @@ export function executeTurnAction(
   }
 
   if (action.type === 'enemy_charge' && !actor.isAlly) {
+    const actorElem = actor.shiftElement ?? getSpecies(actor.speciesId).element;
     actor.charging = true;
+    actor.activeMotion = {
+      speciesId: actor.speciesId,
+      skillId: 'charge',
+      kind: 'charge',
+      element: actorElem,
+      targetUids: [actor.uid],
+      startedAt: now,
+      durationMs: 440,
+    };
     state.logs.push(`⚠ ${actor.name}が凄まじい魔力を溜めている`);
     state.floatingTexts.push({
       id: nextEffectId(),
@@ -1292,6 +1357,9 @@ export function executeTurnAction(
     state.vfx.push({
       id: nextEffectId(),
       targetUid: actor.uid,
+      attackerUid: actor.uid,
+      speciesId: actor.speciesId,
+      skillId: 'charge',
       element: 'buff',
       createdAt: now,
     });
@@ -1301,9 +1369,38 @@ export function executeTurnAction(
 
   if (action.type === 'enemy_ultimate' && !actor.isAlly) {
     actor.charging = false;
-    actor.lungeUntilMs = now + 380;
+    actor.lungeUntilMs = now + 420;
     let totalDmg = 0;
     const elem = actor.shiftElement ?? getSpecies(actor.speciesId).element;
+    const targetUids = livingFoes.map((t) => t.uid);
+    const ultMeta: VfxMeta = {
+      attackerUid: actor.uid,
+      speciesId: actor.speciesId,
+      skillId: 'enemy_ultimate',
+    };
+    actor.activeMotion = {
+      speciesId: actor.speciesId,
+      skillId: 'enemy_ultimate',
+      kind: 'ultimate',
+      element: elem,
+      isAoE: true,
+      targetUids,
+      startedAt: now,
+      durationMs: 640,
+    };
+    if (getSignatureStyle(actor.speciesId, 'enemy_ultimate')) {
+      state.activeCinematic = {
+        id: nextEffectId(),
+        title: `${actor.name}・奥義`,
+        actorUid: actor.uid,
+        speciesId: actor.speciesId,
+        skillId: 'enemy_ultimate',
+        targetUids,
+        element: elem,
+        startedAt: now,
+        durationMs: 680,
+      };
+    }
     for (const t of livingFoes) {
       const { amount, isCrit, isWeak } = calcDamageNumber(
         actor,
@@ -1315,7 +1412,7 @@ export function executeTurnAction(
         true,
         14,
       );
-      totalDmg += applyDamage(state, actor, t, amount, 'ultimate', isCrit, isWeak);
+      totalDmg += applyDamage(state, actor, t, amount, 'ultimate', isCrit, isWeak, ultMeta);
       if (t.hp > 0) {
         if (elem === 'fire') {
           applyStatusEffect(state, t, 'burn', 0.45, 3);
@@ -1353,6 +1450,20 @@ export function executeTurnAction(
     const target = livingFoes.find((f) => f.uid === action.targetUid) ?? livingFoes[0];
     if (target) {
       const elem = actor.isAlly ? getSpecies(actor.speciesId).element : 'physical';
+      const atkMeta: VfxMeta = {
+        attackerUid: actor.uid,
+        speciesId: actor.speciesId,
+        skillId: 'basic_attack',
+      };
+      actor.activeMotion = {
+        speciesId: actor.speciesId,
+        skillId: 'basic_attack',
+        kind: 'attack',
+        element: elem,
+        targetUids: [target.uid],
+        startedAt: now,
+        durationMs: 400,
+      };
       const { amount, isCrit, isWeak } = calcDamageNumber(
         actor,
         target,
@@ -1362,7 +1473,7 @@ export function executeTurnAction(
         false,
         false,
       );
-      const dealt = applyDamage(state, actor, target, amount, 'physical', isCrit, isWeak);
+      const dealt = applyDamage(state, actor, target, amount, 'physical', isCrit, isWeak, atkMeta);
       state.logs.push(
         `${actor.name}の攻撃・${target.name}に${dealt}ダメージ${isWeak ? ' WEAK' : isCrit ? ' 会心' : ''}`,
       );
@@ -1397,7 +1508,16 @@ export function executeTurnAction(
         (!actor.isAlly && actor.speciesId === 'asura_emperor' ? 30 : 0);
       if (target.hp > 0 && Math.random() * 100 < extraChance) {
         const extra = calcDamageNumber(actor, target, 0.68, 'atk', elem, false, false);
-        const xDealt = applyDamage(state, actor, target, extra.amount, 'physical', extra.isCrit, extra.isWeak);
+        const xDealt = applyDamage(
+          state,
+          actor,
+          target,
+          extra.amount,
+          'physical',
+          extra.isCrit,
+          extra.isWeak,
+          atkMeta,
+        );
         state.logs.push(`${actor.name}の追撃・${target.name}に${xDealt}ダメージ`);
       }
     }
@@ -1411,6 +1531,41 @@ export function executeTurnAction(
       actor.mp -= cost;
     }
 
+    const isSignature = Boolean(getSignatureStyle(actor.speciesId, skill.id));
+    const motionDuration = isSignature ? 620 : 460;
+    const skillVfxMeta: VfxMeta = {
+      attackerUid: actor.uid,
+      speciesId: actor.speciesId,
+      skillId: skill.id,
+    };
+
+    const setSkillMotionAndCinematic = (targetUids: string[], isAoE: boolean) => {
+      actor.activeMotion = {
+        speciesId: actor.speciesId,
+        skillId: skill.id,
+        kind: skill.kind,
+        element: skill.element,
+        hits: skill.hits,
+        isAoE,
+        targetUids,
+        startedAt: now,
+        durationMs: motionDuration,
+      };
+      if (isSignature) {
+        state.activeCinematic = {
+          id: nextEffectId(),
+          title: skill.name,
+          actorUid: actor.uid,
+          speciesId: actor.speciesId,
+          skillId: skill.id,
+          targetUids,
+          element: skill.element,
+          startedAt: now,
+          durationMs: 640,
+        };
+      }
+    };
+
     if (skill.kind === 'heal') {
       const targets =
         skill.target === 'all_allies'
@@ -1419,6 +1574,10 @@ export function executeTurnAction(
               [...livingFriends].sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0] ??
                 actor,
             ];
+      setSkillMotionAndCinematic(
+        targets.map((t) => t.uid),
+        skill.target === 'all_allies',
+      );
       const baseHeal = Math.max(
         16,
         actor.mag * skill.power * (actor.isAlly ? 0.94 : 1.15) * (1 + actor.skillPowerBonusPct / 100),
@@ -1431,11 +1590,16 @@ export function executeTurnAction(
           actor.uniqueEffects.includes('crimson_chalice'),
           true,
           actor,
+          skillVfxMeta,
         );
       }
       state.logs.push(`${actor.name}の「${skill.name}」・味方を回復`);
     } else if (skill.kind === 'shield') {
       const targets = skill.target === 'all_allies' ? livingFriends : [actor];
+      setSkillMotionAndCinematic(
+        targets.map((t) => t.uid),
+        skill.target === 'all_allies',
+      );
       const seraphMult = actor.activeSetIds4pc.includes('seraph_radiance') ? 1.14 : 1;
       const shieldAmt = Math.max(
         20,
@@ -1461,11 +1625,16 @@ export function executeTurnAction(
           targetUid: t.uid,
           element: 'shield',
           createdAt: now,
+          ...skillVfxMeta,
         });
       }
       state.logs.push(`${actor.name}の「${skill.name}」・バリア展開`);
     } else if (skill.kind === 'buff_atk' || skill.kind === 'buff_def') {
       const targets = skill.target === 'all_allies' ? livingFriends : [actor];
+      setSkillMotionAndCinematic(
+        targets.map((t) => t.uid),
+        skill.target === 'all_allies',
+      );
       const seraphMult = actor.activeSetIds4pc.includes('seraph_radiance') ? 1.14 : 1;
       for (const t of targets) {
         if (skill.kind === 'buff_atk') {
@@ -1490,6 +1659,7 @@ export function executeTurnAction(
           targetUid: t.uid,
           element: 'buff',
           createdAt: now,
+          ...skillVfxMeta,
         });
       }
       state.logs.push(`${actor.name}の「${skill.name}」・味方を強化`);
@@ -1498,6 +1668,10 @@ export function executeTurnAction(
       const targets = isAoE
         ? livingFoes
         : [livingFoes.find((f) => f.uid === action.targetUid) ?? livingFoes[0]!].filter(Boolean);
+      setSkillMotionAndCinematic(
+        targets.map((t) => t.uid),
+        isAoE,
+      );
       const hits = skill.hits ?? 1;
       let totalDmg = 0;
       let hadCrit = false;
@@ -1520,7 +1694,7 @@ export function executeTurnAction(
           );
           if (isCrit) hadCrit = true;
           if (isWeak) hadWeak = true;
-          const dealt = applyDamage(state, actor, t, amount, skill.element, isCrit, isWeak);
+          const dealt = applyDamage(state, actor, t, amount, skill.element, isCrit, isWeak, skillVfxMeta);
           totalDmg += dealt;
 
           if (t.hp > 0 && skill.statusEffect) {
