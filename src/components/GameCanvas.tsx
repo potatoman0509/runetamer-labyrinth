@@ -25,10 +25,42 @@ export function GameCanvas({
     new Map(),
   );
 
+  const propsRef = useRef({ expedition, save, battle, selectedEnemyUid });
+  useEffect(() => {
+    propsRef.current = { expedition, save, battle, selectedEnemyUid };
+  }, [expedition, save, battle, selectedEnemyUid]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     let rafId = 0;
+    let initialized = false;
+
+    const drawFrame = (timeMs: number) => {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      const cur = propsRef.current;
+      if (cur.battle) {
+        battleAnchorsRef.current = renderBattleScene(
+          ctx,
+          canvas.width,
+          canvas.height,
+          cur.battle,
+          timeMs,
+          cur.selectedEnemyUid,
+        );
+      } else {
+        renderExpeditionScene(
+          ctx,
+          canvas.width,
+          canvas.height,
+          cur.expedition,
+          cur.save,
+          timeMs,
+          scrollRef.current,
+        );
+      }
+    };
 
     const resize = () => {
       const parent = canvas.parentElement;
@@ -36,9 +68,13 @@ export function GameCanvas({
       const rect = parent.getBoundingClientRect();
       const targetW = Math.max(200, Math.floor(rect.width));
       const targetH = Math.max(140, Math.floor(rect.height));
-      if (canvas.width !== targetW || canvas.height !== targetH) {
+      const deltaW = Math.abs(canvas.width - targetW);
+      const deltaH = Math.abs(canvas.height - targetH);
+      if (!initialized || deltaW >= 2 || deltaH >= 2) {
         canvas.width = targetW;
         canvas.height = targetH;
+        initialized = true;
+        drawFrame(performance.now());
       }
     };
 
@@ -47,29 +83,7 @@ export function GameCanvas({
     if (canvas.parentElement) ro.observe(canvas.parentElement);
 
     const frame = (timeMs: number) => {
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        if (battle) {
-          battleAnchorsRef.current = renderBattleScene(
-            ctx,
-            canvas.width,
-            canvas.height,
-            battle,
-            timeMs,
-            selectedEnemyUid,
-          );
-        } else {
-          renderExpeditionScene(
-            ctx,
-            canvas.width,
-            canvas.height,
-            expedition,
-            save,
-            timeMs,
-            scrollRef.current,
-          );
-        }
-      }
+      drawFrame(timeMs);
       rafId = requestAnimationFrame(frame);
     };
 
@@ -78,7 +92,7 @@ export function GameCanvas({
       cancelAnimationFrame(rafId);
       ro.disconnect();
     };
-  }, [battle, expedition, save, selectedEnemyUid]);
+  }, []);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!battle) return;
