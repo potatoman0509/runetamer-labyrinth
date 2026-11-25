@@ -1,7 +1,9 @@
 /**
- * 16-bit Chiptune Web Audio Synthesizer Engine (Zero External Assets)
- * Provides crisp SFC/DQ-style sound effects and subtle looping BGM tracks
- * with safe browser autoplay handling and instant mute toggle.
+ * Symphonic Orchestra Web Audio Synthesizer Engine (Zero External Assets)
+ * Renders lush multi-section orchestral BGM (Strings Ensemble, Solo Violin with vibrato,
+ * French Horn/Trumpet Brass, Concert Flute/Woodwind, Concert Harp, Contrabass,
+ * Pitched Timpani, Orchestral Snare & Cymbal) through a Concert Hall ambience bus,
+ * plus crisp RPG sound effects with safe browser autoplay handling and instant mute toggle.
  */
 
 export type BgmTrack = 'none' | 'village' | 'dungeon' | 'battle' | 'boss';
@@ -23,52 +25,275 @@ export type SfxKind =
   | 'forge'
   | 'quest_claim';
 
-interface TrackDef {
+export type OrchestraInstrument =
+  | 'strings'
+  | 'violin'
+  | 'brass'
+  | 'woodwind'
+  | 'harp'
+  | 'contrabass'
+  | 'timpani'
+  | 'percussion';
+
+export interface OrchestraTrackDef {
+  title: string;
+  style: 'orchestra';
+  instruments: OrchestraInstrument[];
   tempoMs: number;
-  leadWave: OscillatorType;
-  bassWave: OscillatorType;
+  steps: number;
+  leadKind: 'woodwind' | 'violin' | 'brass';
   leadVol: number;
+  lead: number[]; // MIDI note per step (0 = rest)
+  counterKind?: 'violin' | 'brass' | 'woodwind';
+  counterVol?: number;
+  counter?: number[];
+  chords: Record<number, number[]>; // step -> chord MIDI notes for Strings Ensemble
+  chordVol: number;
+  chordSteps: number; // how many steps each chord sustains
+  harp?: number[]; // Concert Harp arpeggio MIDI notes
+  harpVol?: number;
+  bass: number[]; // Cello / Contrabass MIDI notes
   bassVol: number;
-  lead: number[]; // MIDI notes (0 = rest)
-  bass: number[];
+  timpani?: number[]; // Pitched Timpani MIDI notes
+  timpaniVol?: number;
+  snare?: number[]; // 1 = accent, 0.5 = light hit
+  cymbal?: number[]; // 1 = suspended cymbal crash
 }
 
-const TRACKS: Record<Exclude<BgmTrack, 'none'>, TrackDef> = {
+export const ORCHESTRA_TRACKS: Record<Exclude<BgmTrack, 'none'>, OrchestraTrackDef> = {
+  // 始まりの村：牧歌的な弦楽合奏＋フルート＋コンサートハープのワルツ風オーケストラ
   village: {
-    tempoMs: 280,
-    leadWave: 'triangle',
-    bassWave: 'sine',
-    leadVol: 0.045,
-    bassVol: 0.035,
-    lead: [64, 67, 72, 71, 69, 67, 64, 0, 62, 65, 69, 67, 65, 64, 62, 0],
-    bass: [48, 0, 55, 0, 53, 0, 48, 0, 50, 0, 55, 0, 53, 0, 55, 0],
+    title: '始まりの村・弦楽とフルートの調べ',
+    style: 'orchestra',
+    instruments: ['strings', 'woodwind', 'violin', 'harp', 'contrabass'],
+    tempoMs: 255,
+    steps: 32,
+    leadKind: 'woodwind',
+    leadVol: 0.062,
+    lead: [
+      72, 0, 76, 79, 76, 0, 74, 72,
+      69, 0, 72, 76, 74, 0, 0, 0,
+      77, 0, 76, 74, 72, 0, 74, 76,
+      74, 0, 71, 67, 72, 0, 0, 0,
+    ],
+    counterKind: 'violin',
+    counterVol: 0.036,
+    counter: [
+      0, 0, 0, 0, 64, 0, 67, 0,
+      69, 0, 67, 0, 65, 0, 67, 0,
+      69, 0, 72, 0, 67, 0, 64, 0,
+      65, 0, 62, 0, 64, 0, 0, 0,
+    ],
+    chords: {
+      0: [60, 64, 67], // C
+      4: [59, 64, 67], // Em/B
+      8: [57, 60, 64], // Am
+      12: [55, 59, 62], // G
+      16: [53, 57, 60], // F
+      20: [52, 55, 60], // C/E
+      24: [50, 53, 57], // Dm
+      28: [55, 59, 62, 65], // G7
+    },
+    chordVol: 0.028,
+    chordSteps: 4,
+    harp: [
+      60, 64, 67, 72, 59, 64, 67, 71,
+      57, 60, 64, 69, 55, 59, 62, 67,
+      53, 57, 60, 65, 52, 55, 60, 64,
+      50, 53, 57, 62, 55, 59, 62, 67,
+    ],
+    harpVol: 0.036,
+    bass: [
+      48, 0, 0, 0, 47, 0, 0, 0,
+      45, 0, 0, 0, 43, 0, 0, 0,
+      41, 0, 0, 0, 40, 0, 0, 0,
+      38, 0, 0, 0, 43, 0, 43, 0,
+    ],
+    bassVol: 0.068,
   },
+
+  // 迷宮探索：神秘的な弦楽＋ホルンの呼びかけ＋ハープとティンパニの鼓動
   dungeon: {
-    tempoMs: 240,
-    leadWave: 'triangle',
-    bassWave: 'triangle',
-    leadVol: 0.04,
-    bassVol: 0.04,
-    lead: [57, 0, 60, 62, 64, 0, 62, 60, 59, 0, 57, 55, 57, 0, 0, 0],
-    bass: [45, 45, 0, 48, 45, 0, 43, 0, 40, 40, 0, 43, 45, 0, 40, 0],
+    title: '迷宮の深淵・弦楽とホルンの夜想曲',
+    style: 'orchestra',
+    instruments: ['strings', 'violin', 'brass', 'harp', 'contrabass', 'timpani'],
+    tempoMs: 230,
+    steps: 32,
+    leadKind: 'violin',
+    leadVol: 0.056,
+    lead: [
+      69, 0, 72, 74, 76, 0, 74, 72,
+      71, 0, 69, 67, 69, 0, 0, 0,
+      65, 0, 69, 72, 71, 0, 69, 68,
+      69, 0, 72, 71, 69, 0, 0, 0,
+    ],
+    counterKind: 'brass',
+    counterVol: 0.042,
+    counter: [
+      0, 0, 0, 0, 57, 0, 0, 0,
+      0, 0, 0, 0, 55, 57, 59, 0,
+      0, 0, 0, 0, 53, 0, 52, 0,
+      0, 0, 57, 59, 60, 0, 59, 0,
+    ],
+    chords: {
+      0: [57, 60, 64], // Am
+      4: [53, 57, 60, 64], // Fmaj7
+      8: [50, 53, 57], // Dm
+      12: [52, 56, 59], // E
+      16: [53, 57, 60], // F
+      20: [55, 59, 62], // G
+      24: [57, 60, 64], // Am
+      28: [52, 56, 59, 62], // E7
+    },
+    chordVol: 0.03,
+    chordSteps: 4,
+    harp: [
+      57, 0, 64, 60, 53, 0, 60, 57,
+      50, 0, 57, 53, 52, 0, 59, 56,
+      53, 0, 60, 57, 55, 0, 62, 59,
+      57, 0, 64, 60, 52, 0, 59, 56,
+    ],
+    harpVol: 0.028,
+    bass: [
+      45, 0, 0, 45, 41, 0, 0, 41,
+      38, 0, 0, 38, 40, 0, 43, 0,
+      41, 0, 0, 41, 43, 0, 0, 43,
+      45, 0, 40, 0, 40, 0, 0, 0,
+    ],
+    bassVol: 0.072,
+    timpani: [
+      45, 0, 0, 0, 0, 0, 0, 0,
+      38, 0, 0, 0, 40, 0, 0, 0,
+      41, 0, 0, 0, 43, 0, 0, 0,
+      45, 0, 0, 0, 40, 0, 40, 0,
+    ],
+    timpaniVol: 0.055,
   },
+
+  // 通常戦闘：勇壮なバイオリン主旋律＋金管ファンファーレ＋弦楽刻み＋ティンパニ＆スネア行進曲
   battle: {
-    tempoMs: 150,
-    leadWave: 'square',
-    bassWave: 'triangle',
-    leadVol: 0.03,
-    bassVol: 0.045,
-    lead: [64, 67, 69, 67, 71, 72, 71, 67, 69, 67, 64, 62, 64, 67, 69, 0],
-    bass: [45, 52, 45, 52, 48, 55, 48, 55, 50, 57, 50, 57, 45, 52, 43, 50],
+    title: '剣とルーンの交響曲・オーケストラ戦闘曲',
+    style: 'orchestra',
+    instruments: ['strings', 'violin', 'brass', 'contrabass', 'timpani', 'percussion'],
+    tempoMs: 165,
+    steps: 32,
+    leadKind: 'violin',
+    leadVol: 0.064,
+    lead: [
+      62, 65, 69, 0, 74, 72, 70, 69,
+      67, 69, 70, 0, 69, 67, 65, 64,
+      62, 65, 69, 72, 74, 0, 76, 77,
+      76, 74, 72, 69, 70, 69, 67, 69,
+    ],
+    counterKind: 'brass',
+    counterVol: 0.052,
+    counter: [
+      50, 0, 57, 0, 62, 0, 0, 0,
+      58, 0, 55, 0, 57, 0, 52, 0,
+      50, 0, 57, 0, 65, 0, 64, 0,
+      60, 0, 57, 0, 58, 0, 57, 0,
+    ],
+    chords: {
+      0: [50, 53, 57], // Dm
+      4: [50, 53, 57], // Dm
+      8: [46, 50, 53], // Bb
+      12: [45, 49, 52], // A
+      16: [50, 53, 57], // Dm
+      20: [53, 57, 60], // F
+      24: [48, 52, 55], // C
+      28: [45, 49, 52, 55], // A7
+    },
+    chordVol: 0.032,
+    chordSteps: 4,
+    bass: [
+      38, 0, 45, 38, 38, 0, 45, 38,
+      34, 0, 41, 34, 33, 0, 40, 33,
+      38, 0, 45, 38, 41, 0, 48, 41,
+      36, 0, 43, 36, 33, 40, 45, 40,
+    ],
+    bassVol: 0.08,
+    timpani: [
+      38, 0, 0, 0, 38, 0, 45, 0,
+      34, 0, 0, 0, 33, 0, 40, 33,
+      38, 0, 0, 0, 41, 0, 0, 0,
+      36, 0, 0, 0, 33, 0, 33, 45,
+    ],
+    timpaniVol: 0.078,
+    snare: [
+      0, 0, 0.6, 0, 0, 0.5, 0.9, 0.5,
+      0, 0, 0.6, 0, 0, 0.5, 0.9, 0.7,
+      0, 0, 0.6, 0, 0, 0.5, 0.9, 0.5,
+      0, 0.5, 0.7, 0.5, 1, 0, 0.8, 0.8,
+    ],
+    cymbal: [
+      1, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0,
+      1, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0,
+    ],
   },
+
+  // ボス戦：重厚な金管ファンファーレ＋疾走する弦楽＋雷鳴のティンパニ＆シンバル大交響曲
   boss: {
-    tempoMs: 132,
-    leadWave: 'sawtooth',
-    bassWave: 'square',
-    leadVol: 0.028,
-    bassVol: 0.032,
-    lead: [62, 65, 68, 69, 68, 65, 62, 61, 62, 69, 70, 69, 65, 64, 62, 0],
-    bass: [38, 38, 45, 38, 41, 41, 48, 41, 40, 40, 47, 40, 38, 45, 43, 41],
+    title: '覇王決戦・フルオーケストラ交響曲',
+    style: 'orchestra',
+    instruments: ['strings', 'violin', 'brass', 'contrabass', 'timpani', 'percussion'],
+    tempoMs: 145,
+    steps: 32,
+    leadKind: 'brass',
+    leadVol: 0.068,
+    lead: [
+      62, 0, 62, 65, 69, 0, 68, 65,
+      62, 65, 69, 70, 69, 0, 67, 64,
+      62, 0, 65, 69, 74, 0, 73, 70,
+      69, 67, 65, 64, 62, 0, 61, 0,
+    ],
+    counterKind: 'violin',
+    counterVol: 0.056,
+    counter: [
+      74, 72, 70, 69, 74, 76, 77, 76,
+      74, 70, 69, 67, 69, 73, 76, 73,
+      74, 72, 70, 69, 81, 79, 77, 76,
+      74, 70, 69, 67, 69, 73, 76, 79,
+    ],
+    chords: {
+      0: [50, 53, 57], // Dm
+      4: [46, 50, 53, 57], // Bbmaj7
+      8: [43, 46, 50, 53], // Gm7
+      12: [45, 49, 52, 58], // A7b9
+      16: [50, 53, 57], // Dm
+      20: [51, 55, 58], // Eb
+      24: [43, 46, 50], // Gm
+      28: [45, 49, 52, 55], // A7
+    },
+    chordVol: 0.036,
+    chordSteps: 4,
+    bass: [
+      38, 38, 45, 38, 34, 34, 41, 34,
+      43, 43, 38, 43, 33, 33, 40, 33,
+      38, 38, 45, 38, 39, 39, 46, 39,
+      43, 43, 38, 34, 33, 40, 45, 33,
+    ],
+    bassVol: 0.088,
+    timpani: [
+      38, 0, 38, 0, 34, 0, 34, 0,
+      43, 0, 0, 38, 33, 0, 33, 33,
+      38, 0, 38, 0, 39, 0, 39, 0,
+      43, 0, 38, 0, 33, 33, 45, 33,
+    ],
+    timpaniVol: 0.095,
+    snare: [
+      1, 0, 0.6, 0.5, 1, 0, 0.7, 0.6,
+      1, 0, 0.6, 0.5, 1, 0.6, 0.8, 0.9,
+      1, 0, 0.6, 0.5, 1, 0, 0.7, 0.6,
+      1, 0.6, 0.7, 0.8, 1, 0.8, 0.9, 1,
+    ],
+    cymbal: [
+      1, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 1, 0, 0, 0,
+      1, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 1, 0, 0, 0,
+    ],
   },
 };
 
@@ -76,8 +301,15 @@ function midiToHz(midi: number): number {
   return 440 * Math.pow(2, (midi - 69) / 12);
 }
 
-class ChiptuneSoundEngine {
+interface OrchestraBus {
+  dry: GainNode;
+  reverb: GainNode;
+  noiseBuffer: AudioBuffer;
+}
+
+class OrchestralSoundEngine {
   private ctx: AudioContext | null = null;
+  private bus: OrchestraBus | null = null;
   private muted = false;
   private currentTrack: BgmTrack = 'none';
   private stepIdx = 0;
@@ -93,6 +325,7 @@ class ChiptuneSoundEngine {
       if (!Ctor) return null;
       try {
         this.ctx = new Ctor();
+        this.bus = this.createOrchestraBus(this.ctx);
       } catch {
         return null;
       }
@@ -101,6 +334,69 @@ class ChiptuneSoundEngine {
       this.ctx.resume().catch(() => {});
     }
     return this.ctx;
+  }
+
+  private createOrchestraBus(ctx: AudioContext): OrchestraBus {
+    const masterGain = ctx.createGain();
+    masterGain.gain.value = 0.88;
+
+    const warmthFilter = ctx.createBiquadFilter();
+    warmthFilter.type = 'lowpass';
+    warmthFilter.frequency.value = 7200;
+    warmthFilter.Q.value = 0.5;
+
+    const compressor = ctx.createDynamicsCompressor();
+    compressor.threshold.value = -16;
+    compressor.knee.value = 18;
+    compressor.ratio.value = 4;
+    compressor.attack.value = 0.008;
+    compressor.release.value = 0.16;
+
+    masterGain.connect(warmthFilter);
+    warmthFilter.connect(compressor);
+    compressor.connect(ctx.destination);
+
+    // Lightweight stereo concert-hall ambience network (2 damped delay taps)
+    const reverbIn = ctx.createGain();
+    reverbIn.gain.value = 1;
+
+    const damp = ctx.createBiquadFilter();
+    damp.type = 'lowpass';
+    damp.frequency.value = 2400;
+
+    const delayA = ctx.createDelay(0.2);
+    delayA.delayTime.value = 0.043;
+    const delayB = ctx.createDelay(0.2);
+    delayB.delayTime.value = 0.067;
+
+    const fbA = ctx.createGain();
+    fbA.gain.value = 0.28;
+    const fbB = ctx.createGain();
+    fbB.gain.value = 0.26;
+
+    const wetOut = ctx.createGain();
+    wetOut.gain.value = 0.24;
+
+    reverbIn.connect(damp);
+    damp.connect(delayA);
+    damp.connect(delayB);
+    delayA.connect(fbA);
+    fbA.connect(delayB);
+    delayB.connect(fbB);
+    fbB.connect(delayA);
+    delayA.connect(wetOut);
+    delayB.connect(wetOut);
+    wetOut.connect(masterGain);
+
+    // Cached white-noise buffer for orchestral snare & cymbal percussion
+    const bufLen = Math.floor(ctx.sampleRate * 0.55);
+    const noiseBuffer = ctx.createBuffer(1, bufLen, ctx.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufLen; i += 1) {
+      data[i] = Math.random() * 2 - 1;
+    }
+
+    return { dry: masterGain, reverb: reverbIn, noiseBuffer };
   }
 
   unlock(): void {
@@ -147,24 +443,477 @@ class ChiptuneSoundEngine {
   private startLoop(): void {
     this.stopLoop();
     if (this.currentTrack === 'none' || this.muted || typeof window === 'undefined') return;
-    const def = TRACKS[this.currentTrack];
+    const def = ORCHESTRA_TRACKS[this.currentTrack];
     this.timer = window.setInterval(() => {
       if (this.muted || !this.unlocked || this.currentTrack === 'none') return;
       const ctx = this.ensureContext();
-      if (!ctx || ctx.state !== 'running') return;
-      const now = ctx.currentTime;
-      const idx = this.stepIdx % def.lead.length;
+      if (!ctx || !this.bus || ctx.state !== 'running') return;
+      const now = ctx.currentTime + 0.01;
+      const idx = this.stepIdx % def.steps;
+      const stepSec = def.tempoMs / 1000;
+
+      // 1. Lush Bowed Strings Ensemble Pad Chords
+      const chord = def.chords[idx];
+      if (chord && chord.length > 0) {
+        this.playStringsChord(ctx, chord, now, stepSec * def.chordSteps * 1.02, def.chordVol);
+      }
+
+      // 2. Main Orchestral Melody (Violin / Woodwind Flute / Brass Fanfare)
       const leadMidi = def.lead[idx] ?? 0;
-      const bassMidi = def.bass[idx] ?? 0;
-      const dur = (def.tempoMs / 1000) * 0.82;
       if (leadMidi > 0) {
-        this.tone(ctx, midiToHz(leadMidi), now, dur, def.leadWave, def.leadVol);
+        let holdSteps = 1;
+        while (holdSteps < 3 && (def.lead[(idx + holdSteps) % def.steps] ?? 0) === 0) {
+          holdSteps += 1;
+        }
+        const leadDur = stepSec * Math.min(holdSteps, 2.2) * 0.94;
+        if (def.leadKind === 'woodwind') {
+          this.playWoodwind(ctx, leadMidi, now, leadDur, def.leadVol);
+        } else if (def.leadKind === 'brass') {
+          this.playBrass(ctx, leadMidi, now, leadDur, def.leadVol);
+        } else {
+          this.playViolinLead(ctx, leadMidi, now, leadDur, def.leadVol);
+        }
       }
+
+      // 3. Counter-Melody (French Horn / Second Violin)
+      if (def.counter && def.counterKind) {
+        const cMidi = def.counter[idx] ?? 0;
+        if (cMidi > 0) {
+          const cVol = def.counterVol ?? 0.04;
+          const cDur = stepSec * 1.45;
+          if (def.counterKind === 'brass') {
+            this.playBrass(ctx, cMidi, now, cDur, cVol);
+          } else if (def.counterKind === 'woodwind') {
+            this.playWoodwind(ctx, cMidi, now, cDur, cVol);
+          } else {
+            this.playViolinLead(ctx, cMidi, now, cDur, cVol);
+          }
+        }
+      }
+
+      // 4. Concert Harp Arpeggios
+      if (def.harp) {
+        const hMidi = def.harp[idx] ?? 0;
+        if (hMidi > 0) {
+          this.playHarp(ctx, hMidi, now, Math.max(0.55, stepSec * 2.4), def.harpVol ?? 0.032);
+        }
+      }
+
+      // 5. Cello & Contrabass Foundation
+      const bassMidi = def.bass[idx] ?? 0;
       if (bassMidi > 0) {
-        this.tone(ctx, midiToHz(bassMidi), now, dur, def.bassWave, def.bassVol);
+        this.playContrabass(ctx, bassMidi, now, stepSec * 1.35, def.bassVol);
       }
+
+      // 6. Pitched Concert Timpani
+      if (def.timpani) {
+        const tMidi = def.timpani[idx] ?? 0;
+        if (tMidi > 0) {
+          this.playTimpani(ctx, tMidi, now, 0.36, def.timpaniVol ?? 0.07);
+        }
+      }
+
+      // 7. Orchestral Snare & Suspended Cymbal
+      if (def.snare) {
+        const sAmp = def.snare[idx] ?? 0;
+        if (sAmp > 0) {
+          this.playOrchestralPerc(ctx, 'snare', now, 0.036 * sAmp);
+        }
+      }
+      if (def.cymbal && (def.cymbal[idx] ?? 0) > 0) {
+        this.playOrchestralPerc(ctx, 'cymbal', now, 0.032);
+      }
+
       this.stepIdx += 1;
     }, def.tempoMs);
+  }
+
+  private routeToHall(node: AudioNode, sendAmount: number): void {
+    if (!this.bus || !this.ctx) return;
+    node.connect(this.bus.dry);
+    const send = this.ctx.createGain();
+    send.gain.value = sendAmount;
+    node.connect(send);
+    send.connect(this.bus.reverb);
+  }
+
+  /** Multi-voice bowed Strings Ensemble (detuned sawtooth pair per note + warm lowpass bow envelope) */
+  private playStringsChord(
+    ctx: AudioContext,
+    midis: number[],
+    start: number,
+    dur: number,
+    volume: number,
+  ): void {
+    try {
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(1450, start);
+      filter.frequency.linearRampToValueAtTime(2150, start + Math.min(0.22, dur * 0.4));
+      filter.frequency.linearRampToValueAtTime(1550, start + dur);
+      filter.Q.value = 0.8;
+
+      const env = ctx.createGain();
+      const perVoiceVol = volume / Math.max(1, Math.sqrt(midis.length));
+      const atk = Math.min(0.11, dur * 0.28);
+      const rel = 0.24;
+      env.gain.setValueAtTime(0.0001, start);
+      env.gain.linearRampToValueAtTime(perVoiceVol, start + atk);
+      env.gain.setValueAtTime(perVoiceVol * 0.9, start + Math.max(atk, dur - 0.06));
+      env.gain.exponentialRampToValueAtTime(0.0001, start + dur + rel);
+
+      filter.connect(env);
+      this.routeToHall(env, 0.72);
+
+      for (const midi of midis) {
+        const hz = midiToHz(midi);
+        for (const detune of [-5.5, 5.5]) {
+          const osc = ctx.createOscillator();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(hz, start);
+          osc.detune.setValueAtTime(detune, start);
+          osc.connect(filter);
+          osc.start(start);
+          osc.stop(start + dur + rel + 0.03);
+        }
+      }
+    } catch {
+      // Ignore scheduling errors in restricted environments
+    }
+  }
+
+  /** Singing First Violin Section with expressive vibrato LFO */
+  private playViolinLead(
+    ctx: AudioContext,
+    midi: number,
+    start: number,
+    dur: number,
+    volume: number,
+  ): void {
+    try {
+      const hz = midiToHz(midi);
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(2700, start);
+      filter.Q.value = 1.3;
+
+      const env = ctx.createGain();
+      const atk = Math.min(0.048, dur * 0.25);
+      const rel = 0.14;
+      env.gain.setValueAtTime(0.0001, start);
+      env.gain.linearRampToValueAtTime(volume, start + atk);
+      env.gain.setValueAtTime(volume * 0.85, start + Math.max(atk, dur * 0.78));
+      env.gain.exponentialRampToValueAtTime(0.0001, start + dur + rel);
+
+      // Expressive violin vibrato LFO
+      const vib = ctx.createOscillator();
+      const vibGain = ctx.createGain();
+      vib.type = 'sine';
+      vib.frequency.setValueAtTime(5.4, start);
+      vibGain.gain.setValueAtTime(0.5, start);
+      vibGain.gain.linearRampToValueAtTime(7.5, start + Math.min(0.14, dur * 0.5));
+      vib.connect(vibGain);
+
+      filter.connect(env);
+      this.routeToHall(env, 0.65);
+
+      for (const detune of [-4, 4]) {
+        const osc = ctx.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(hz, start);
+        osc.detune.setValueAtTime(detune, start);
+        vibGain.connect(osc.detune);
+        osc.connect(filter);
+        osc.start(start);
+        osc.stop(start + dur + rel + 0.03);
+      }
+
+      vib.start(start);
+      vib.stop(start + dur + rel + 0.03);
+    } catch {
+      // Ignore scheduling errors
+    }
+  }
+
+  /** French Horn / Orchestral Brass with resonant brass filter swell */
+  private playBrass(
+    ctx: AudioContext,
+    midi: number,
+    start: number,
+    dur: number,
+    volume: number,
+  ): void {
+    try {
+      const hz = midiToHz(midi);
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(380, start);
+      filter.frequency.exponentialRampToValueAtTime(2300, start + Math.min(0.065, dur * 0.35));
+      filter.frequency.exponentialRampToValueAtTime(1050, start + dur);
+      filter.Q.value = 1.75;
+
+      const env = ctx.createGain();
+      const atk = Math.min(0.032, dur * 0.22);
+      const rel = 0.14;
+      env.gain.setValueAtTime(0.0001, start);
+      env.gain.linearRampToValueAtTime(volume, start + atk);
+      env.gain.setValueAtTime(volume * 0.82, start + Math.max(atk, dur * 0.72));
+      env.gain.exponentialRampToValueAtTime(0.0001, start + dur + rel);
+
+      filter.connect(env);
+      this.routeToHall(env, 0.58);
+
+      const osc1 = ctx.createOscillator();
+      osc1.type = 'sawtooth';
+      osc1.frequency.setValueAtTime(hz, start);
+      osc1.detune.setValueAtTime(-3, start);
+
+      const osc2 = ctx.createOscillator();
+      osc2.type = 'sawtooth';
+      osc2.frequency.setValueAtTime(hz, start);
+      osc2.detune.setValueAtTime(3, start);
+
+      osc1.connect(filter);
+      osc2.connect(filter);
+      osc1.start(start);
+      osc2.start(start);
+      osc1.stop(start + dur + rel + 0.03);
+      osc2.stop(start + dur + rel + 0.03);
+    } catch {
+      // Ignore scheduling errors
+    }
+  }
+
+  /** Concert Flute / Woodwind pastoral lead */
+  private playWoodwind(
+    ctx: AudioContext,
+    midi: number,
+    start: number,
+    dur: number,
+    volume: number,
+  ): void {
+    try {
+      const hz = midiToHz(midi);
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(3200, start);
+
+      const env = ctx.createGain();
+      const atk = Math.min(0.04, dur * 0.25);
+      const rel = 0.15;
+      env.gain.setValueAtTime(0.0001, start);
+      env.gain.linearRampToValueAtTime(volume, start + atk);
+      env.gain.setValueAtTime(volume * 0.86, start + Math.max(atk, dur * 0.75));
+      env.gain.exponentialRampToValueAtTime(0.0001, start + dur + rel);
+
+      const vib = ctx.createOscillator();
+      const vibGain = ctx.createGain();
+      vib.type = 'sine';
+      vib.frequency.setValueAtTime(5.0, start);
+      vibGain.gain.setValueAtTime(4.5, start);
+      vib.connect(vibGain);
+
+      const fundamental = ctx.createOscillator();
+      fundamental.type = 'sine';
+      fundamental.frequency.setValueAtTime(hz, start);
+      vibGain.connect(fundamental.detune);
+
+      const overtone = ctx.createOscillator();
+      const overtoneGain = ctx.createGain();
+      overtone.type = 'triangle';
+      overtone.frequency.setValueAtTime(hz * 2, start);
+      overtoneGain.gain.setValueAtTime(0.18, start);
+
+      fundamental.connect(filter);
+      overtone.connect(overtoneGain);
+      overtoneGain.connect(filter);
+      filter.connect(env);
+      this.routeToHall(env, 0.72);
+
+      fundamental.start(start);
+      overtone.start(start);
+      vib.start(start);
+      fundamental.stop(start + dur + rel + 0.03);
+      overtone.stop(start + dur + rel + 0.03);
+      vib.stop(start + dur + rel + 0.03);
+    } catch {
+      // Ignore scheduling errors
+    }
+  }
+
+  /** Concert Harp sparkling pluck */
+  private playHarp(
+    ctx: AudioContext,
+    midi: number,
+    start: number,
+    dur: number,
+    volume: number,
+  ): void {
+    try {
+      const hz = midiToHz(midi);
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0.0001, start);
+      env.gain.linearRampToValueAtTime(volume, start + 0.006);
+      env.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+
+      const osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(hz, start);
+
+      const chime = ctx.createOscillator();
+      const chimeGain = ctx.createGain();
+      chime.type = 'sine';
+      chime.frequency.setValueAtTime(hz * 2, start);
+      chimeGain.gain.setValueAtTime(volume * 0.28, start);
+      chimeGain.gain.exponentialRampToValueAtTime(0.0001, start + Math.min(0.18, dur * 0.4));
+
+      osc.connect(env);
+      chime.connect(chimeGain);
+      chimeGain.connect(env);
+      this.routeToHall(env, 0.78);
+
+      osc.start(start);
+      chime.start(start);
+      osc.stop(start + dur + 0.03);
+      chime.stop(start + dur + 0.03);
+    } catch {
+      // Ignore scheduling errors
+    }
+  }
+
+  /** Deep Cello / Contrabass foundation */
+  private playContrabass(
+    ctx: AudioContext,
+    midi: number,
+    start: number,
+    dur: number,
+    volume: number,
+  ): void {
+    try {
+      const hz = midiToHz(midi);
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(480, start);
+      filter.Q.value = 0.7;
+
+      const env = ctx.createGain();
+      const atk = Math.min(0.035, dur * 0.2);
+      const rel = 0.14;
+      env.gain.setValueAtTime(0.0001, start);
+      env.gain.linearRampToValueAtTime(volume, start + atk);
+      env.gain.exponentialRampToValueAtTime(0.0001, start + dur + rel);
+
+      const sub = ctx.createOscillator();
+      sub.type = 'triangle';
+      sub.frequency.setValueAtTime(hz, start);
+
+      const bow = ctx.createOscillator();
+      const bowGain = ctx.createGain();
+      bow.type = 'sawtooth';
+      bow.frequency.setValueAtTime(hz, start);
+      bowGain.gain.value = 0.45;
+
+      sub.connect(filter);
+      bow.connect(bowGain);
+      bowGain.connect(filter);
+      filter.connect(env);
+      this.routeToHall(env, 0.32);
+
+      sub.start(start);
+      bow.start(start);
+      sub.stop(start + dur + rel + 0.03);
+      bow.stop(start + dur + rel + 0.03);
+    } catch {
+      // Ignore scheduling errors
+    }
+  }
+
+  /** Pitched Concert Timpani kettle-drum hit */
+  private playTimpani(
+    ctx: AudioContext,
+    midi: number,
+    start: number,
+    dur: number,
+    volume: number,
+  ): void {
+    try {
+      const hz = midiToHz(midi);
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(340, start);
+
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0.0001, start);
+      env.gain.linearRampToValueAtTime(volume, start + 0.008);
+      env.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(hz * 1.14, start);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(32, hz), start + 0.048);
+
+      const body = ctx.createOscillator();
+      const bodyGain = ctx.createGain();
+      body.type = 'triangle';
+      body.frequency.setValueAtTime(hz * 1.5, start);
+      bodyGain.gain.setValueAtTime(0.28, start);
+      bodyGain.gain.exponentialRampToValueAtTime(0.001, start + 0.14);
+
+      osc.connect(filter);
+      body.connect(bodyGain);
+      bodyGain.connect(filter);
+      filter.connect(env);
+      this.routeToHall(env, 0.42);
+
+      osc.start(start);
+      body.start(start);
+      osc.stop(start + dur + 0.03);
+      body.stop(start + dur + 0.03);
+    } catch {
+      // Ignore scheduling errors
+    }
+  }
+
+  /** Orchestral Snare hit & Suspended Cymbal shimmer */
+  private playOrchestralPerc(
+    ctx: AudioContext,
+    kind: 'snare' | 'cymbal',
+    start: number,
+    volume: number,
+  ): void {
+    if (!this.bus) return;
+    try {
+      const src = ctx.createBufferSource();
+      src.buffer = this.bus.noiseBuffer;
+
+      const filter = ctx.createBiquadFilter();
+      const env = ctx.createGain();
+      const dur = kind === 'cymbal' ? 0.52 : 0.095;
+
+      if (kind === 'cymbal') {
+        filter.type = 'highpass';
+        filter.frequency.setValueAtTime(4800, start);
+        env.gain.setValueAtTime(0.0001, start);
+        env.gain.linearRampToValueAtTime(volume, start + 0.025);
+        env.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+      } else {
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(1850, start);
+        filter.Q.value = 1.2;
+        env.gain.setValueAtTime(0.0001, start);
+        env.gain.linearRampToValueAtTime(volume, start + 0.004);
+        env.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+      }
+
+      src.connect(filter);
+      filter.connect(env);
+      this.routeToHall(env, kind === 'cymbal' ? 0.8 : 0.35);
+
+      src.start(start);
+      src.stop(start + dur + 0.02);
+    } catch {
+      // Ignore scheduling errors
+    }
   }
 
   private tone(
@@ -188,7 +937,11 @@ class ChiptuneSoundEngine {
       gain.gain.linearRampToValueAtTime(volume, startTime + 0.01);
       gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      if (this.bus) {
+        gain.connect(this.bus.dry);
+      } else {
+        gain.connect(ctx.destination);
+      }
       osc.start(startTime);
       osc.stop(startTime + duration + 0.02);
     } catch {
@@ -205,67 +958,72 @@ class ChiptuneSoundEngine {
 
     switch (kind) {
       case 'click':
-        this.tone(ctx, 680, t, 0.045, 'square', 0.04, 880);
+        this.tone(ctx, 680, t, 0.045, 'triangle', 0.045, 880);
         break;
       case 'attack':
-        this.tone(ctx, 320, t, 0.07, 'sawtooth', 0.06, 110);
+        this.tone(ctx, 320, t, 0.08, 'sawtooth', 0.06, 110);
         break;
       case 'crit':
-        this.tone(ctx, 520, t, 0.06, 'square', 0.075, 220);
-        this.tone(ctx, 880, t + 0.04, 0.11, 'square', 0.07, 1320);
+        this.tone(ctx, 520, t, 0.07, 'sawtooth', 0.07, 220);
+        this.playBrass(ctx, 76, t + 0.03, 0.14, 0.06);
         break;
       case 'weak':
-        this.tone(ctx, 660, t, 0.06, 'square', 0.065, 990);
-        this.tone(ctx, 990, t + 0.05, 0.09, 'triangle', 0.075, 1320);
+        this.tone(ctx, 660, t, 0.065, 'triangle', 0.065, 990);
+        this.playHarp(ctx, 84, t + 0.04, 0.18, 0.065);
         break;
       case 'heal':
-        this.tone(ctx, 523, t, 0.08, 'triangle', 0.065);
-        this.tone(ctx, 659, t + 0.06, 0.08, 'triangle', 0.065);
-        this.tone(ctx, 784, t + 0.12, 0.14, 'triangle', 0.07);
+        [72, 76, 79, 84].forEach((m, i) => {
+          this.playHarp(ctx, m, t + i * 0.055, 0.34, 0.055);
+        });
         break;
       case 'shield':
-        this.tone(ctx, 420, t, 0.09, 'triangle', 0.065, 640);
-        this.tone(ctx, 640, t + 0.07, 0.11, 'sine', 0.06, 840);
+        this.playBrass(ctx, 62, t, 0.14, 0.05);
+        this.playHarp(ctx, 74, t + 0.06, 0.24, 0.05);
         break;
       case 'buff':
-        this.tone(ctx, 440, t, 0.06, 'square', 0.05);
-        this.tone(ctx, 587, t + 0.05, 0.09, 'square', 0.055);
+        this.playBrass(ctx, 64, t, 0.11, 0.048);
+        this.playBrass(ctx, 69, t + 0.06, 0.16, 0.052);
         break;
       case 'boss_charge':
-        this.tone(ctx, 180, t, 0.24, 'sawtooth', 0.075, 420);
+        this.playTimpani(ctx, 38, t, 0.32, 0.09);
+        this.playBrass(ctx, 50, t + 0.04, 0.28, 0.065);
         break;
       case 'break':
-        this.tone(ctx, 220, t, 0.08, 'sawtooth', 0.085, 880);
-        this.tone(ctx, 880, t + 0.07, 0.14, 'square', 0.08, 1760);
+        this.playTimpani(ctx, 45, t, 0.28, 0.095);
+        this.playBrass(ctx, 74, t + 0.05, 0.22, 0.07);
+        this.playOrchestralPerc(ctx, 'cymbal', t + 0.04, 0.045);
         break;
       case 'forge':
-        this.tone(ctx, 920, t, 0.05, 'square', 0.07, 1480);
-        this.tone(ctx, 1180, t + 0.06, 0.12, 'triangle', 0.07, 880);
+        this.tone(ctx, 920, t, 0.05, 'triangle', 0.07, 1480);
+        this.playHarp(ctx, 81, t + 0.05, 0.26, 0.065);
         break;
       case 'levelup':
       case 'quest_claim':
-        [523, 659, 784, 1046].forEach((hz, i) => {
-          this.tone(ctx, hz, t + i * 0.065, 0.11, 'square', 0.055);
+        [72, 76, 79, 84].forEach((m, i) => {
+          this.playBrass(ctx, m, t + i * 0.07, i === 3 ? 0.28 : 0.11, 0.052);
+          this.playHarp(ctx, m + 12, t + i * 0.07, 0.3, 0.032);
         });
         break;
       case 'victory':
-        [523, 659, 784, 659, 1046].forEach((hz, i) => {
-          this.tone(ctx, hz, t + i * 0.08, i === 4 ? 0.26 : 0.09, 'square', 0.055);
+        [72, 76, 79, 76, 84].forEach((m, i) => {
+          this.playBrass(ctx, m, t + i * 0.085, i === 4 ? 0.42 : 0.11, 0.058);
         });
+        this.playStringsChord(ctx, [60, 64, 67, 72], t + 0.34, 0.48, 0.045);
         break;
       case 'mythic':
-        [587, 740, 880, 1174, 1480].forEach((hz, i) => {
-          this.tone(ctx, hz, t + i * 0.075, i === 4 ? 0.34 : 0.1, 'triangle', 0.08);
-          this.tone(ctx, hz * 0.5, t + i * 0.075, 0.1, 'square', 0.035);
+        [74, 78, 81, 86, 90].forEach((m, i) => {
+          this.playHarp(ctx, m, t + i * 0.07, 0.45, 0.06);
+          this.playBrass(ctx, m - 12, t + i * 0.07, i === 4 ? 0.45 : 0.12, 0.052);
         });
+        this.playOrchestralPerc(ctx, 'cymbal', t + 0.26, 0.04);
         break;
       case 'defeat':
-        [392, 349, 311, 261].forEach((hz, i) => {
-          this.tone(ctx, hz, t + i * 0.12, 0.16, 'sawtooth', 0.055);
+        [62, 60, 58, 57].forEach((m, i) => {
+          this.playStringsChord(ctx, [m - 12, m], t + i * 0.14, 0.26, 0.05);
         });
         break;
     }
   }
 }
 
-export const soundEngine = new ChiptuneSoundEngine();
+export const soundEngine = new OrchestralSoundEngine();

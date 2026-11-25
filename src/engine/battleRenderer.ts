@@ -358,11 +358,12 @@ export function renderBattleScene(
   width: number,
   height: number,
   state: BattleState,
-  timeMs: number,
+  rawTimeMs: number,
   selectedTargetUid: string | null,
 ): Map<string, UnitAnchor> {
   ctx.imageSmoothingEnabled = false;
   const now = Date.now();
+  const timeMs = rawTimeMs * 0.75; // 0.75x battle visual animation speed
 
   // Impact camera shake on crits / WEAK hits / Boss Ultimates!
   const shaking = now < state.shakeUntilMs;
@@ -653,17 +654,19 @@ export function renderBattleScene(
     }
   }
 
-  // Render Per-(Species x Skill) Trajectory VFX (with legacy elemental fallback)
+  // Render Per-(Species x Skill) Trajectory VFX (with legacy elemental fallback, 0.75x speed)
+  const vfxDurMs = 747;
+  const legacyVfxDurMs = 613;
   for (const fx of state.vfx) {
     const elapsed = now - fx.createdAt;
-    if (elapsed > 560) continue;
+    if (elapsed > vfxDurMs) continue;
     const anchor = anchors.get(fx.targetUid);
     if (!anchor) continue;
     const attackerAnchor = fx.attackerUid ? (anchors.get(fx.attackerUid) ?? null) : null;
-    const progress = elapsed / 560;
+    const progress = elapsed / vfxDurMs;
     const drawn = drawSkillTrajectoryVfx(ctx, fx, anchor, attackerAnchor, progress);
     if (!drawn) {
-      drawVfxEffect(ctx, anchor.x, anchor.y, fx.element, Math.min(1, elapsed / 460));
+      drawVfxEffect(ctx, anchor.x, anchor.y, fx.element, Math.min(1, elapsed / legacyVfxDurMs));
     }
   }
 
@@ -672,13 +675,14 @@ export function renderBattleScene(
     drawSignatureCinematic(ctx, width, height, state.activeCinematic, anchors, now);
   }
 
-  // Render Crisp Outlined Floating Numbers
+  // Render Crisp Outlined Floating Numbers (0.75x speed)
+  const floatDurMs = 1307;
   for (const ft of state.floatingTexts) {
     const elapsed = now - ft.createdAt;
-    if (elapsed > 980) continue;
+    if (elapsed > floatDurMs) continue;
     const anchor = anchors.get(ft.targetUid);
     if (!anchor) continue;
-    const progress = elapsed / 980;
+    const progress = elapsed / floatDurMs;
     const fx = anchor.x;
     const fy = anchor.y - 18 - progress * 28;
     ctx.save();

@@ -358,7 +358,7 @@ export function computeUnitMotionTransform(
   const motion = unit.activeMotion;
   if (!motion) {
     if (now < unit.lungeUntilMs) {
-      const p = 1 - (unit.lungeUntilMs - now) / 340;
+      const p = 1 - (unit.lungeUntilMs - now) / 453;
       const arc = Math.sin(Math.max(0, Math.min(1, p)) * Math.PI);
       const dx = Math.round((unit.isAlly ? -28 : 28) * arc);
       return {

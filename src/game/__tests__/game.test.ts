@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ACHIEVEMENTS, getClaimedAchievementBonuses, getUnclaimedAchievements } from '../achievements';
 import {
+  BATTLE_VISUAL_SPEED_MULT,
   createBattleState,
   executeTurnAction,
   isElementalWeakness,
@@ -27,6 +28,7 @@ import {
   resolveMotionRecipe,
 } from '../../engine/battleMotions';
 import { paintSprite } from '../../engine/hdSprites';
+import { ORCHESTRA_TRACKS } from '../../engine/sound';
 import {
   BOSS_MONSTERS,
   ELITE_MONSTERS,
@@ -883,5 +885,48 @@ describe('RuneTamer Labyrinth Core & v11 Systems', () => {
     expect(bossAfter.activeMotion?.skillId).toBe('enemy_ultimate');
     expect(afterBossUlt.activeCinematic?.speciesId).toBe('genesis_orrery');
     expect(afterBossUlt.activeCinematic?.skillId).toBe('enemy_ultimate');
+  });
+
+  it('runs battle visual motions at 0.75x speed (4/3x durations) and uses full orchestral arrangements for all 4 BGM tracks', () => {
+    expect(BATTLE_VISUAL_SPEED_MULT).toBe(0.75);
+
+    const save = createInitialSave();
+    const bossEnt = createBossRushEntity(1);
+    const b0 = createBattleState(save, bossEnt, 5);
+    const hero = b0.allies.find((a) => a.speciesId === 'hero')!;
+    const boss = b0.enemies[0]!;
+    const heroTurn = { ...b0, activeUid: hero.uid };
+
+    const afterAtk = executeTurnAction(heroTurn, { type: 'attack', targetUid: boss.uid });
+    expect(afterAtk.allies.find((a) => a.uid === hero.uid)?.activeMotion?.durationMs).toBe(
+      Math.round(400 / 0.75),
+    );
+
+    const afterSkill = executeTurnAction(heroTurn, {
+      type: 'skill',
+      skillIndex: 0,
+      targetUid: boss.uid,
+    });
+    expect(afterSkill.allies.find((a) => a.uid === hero.uid)?.activeMotion?.durationMs).toBe(
+      Math.round(620 / 0.75),
+    );
+    expect(afterSkill.activeCinematic?.durationMs).toBe(Math.round(640 / 0.75));
+
+    // All 4 BGM tracks are 32-step symphonic orchestra scores with strings ensemble + contrabass
+    const trackKeys = ['village', 'dungeon', 'battle', 'boss'] as const;
+    for (const key of trackKeys) {
+      const tr = ORCHESTRA_TRACKS[key];
+      expect(tr.style).toBe('orchestra');
+      expect(tr.steps).toBe(32);
+      expect(tr.lead.length).toBe(32);
+      expect(tr.bass.length).toBe(32);
+      expect(Object.keys(tr.chords).length).toBeGreaterThanOrEqual(8);
+      expect(tr.instruments).toContain('strings');
+      expect(tr.instruments).toContain('contrabass');
+    }
+    expect(ORCHESTRA_TRACKS.battle.instruments).toContain('brass');
+    expect(ORCHESTRA_TRACKS.battle.instruments).toContain('timpani');
+    expect(ORCHESTRA_TRACKS.boss.instruments).toContain('brass');
+    expect(ORCHESTRA_TRACKS.boss.instruments).toContain('percussion');
   });
 });

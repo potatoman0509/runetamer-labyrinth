@@ -687,10 +687,10 @@ export function App() {
 
     const delayMs =
       save.settings.battleSpeed === 4
-        ? 140
+        ? 190
         : save.settings.battleSpeed === 2
-          ? 300
-          : 580;
+          ? 400
+          : 770;
 
     const timer = window.setTimeout(() => {
       const next = stepEnemyOrAutoTurn(
@@ -768,7 +768,7 @@ export function App() {
     if (!autoAdvance || !battle || battle.bossRushWave || battle.phase !== 'victory' || !battle.reward) {
       return;
     }
-    const delay = save.settings.battleSpeed === 4 ? 700 : 1200;
+    const delay = save.settings.battleSpeed === 4 ? 930 : 1600;
     const timer = window.setTimeout(() => {
       handleFinishBattle();
     }, delay);

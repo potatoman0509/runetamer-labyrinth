@@ -30,6 +30,14 @@ import { getActiveTierModifiers, toRoman } from './worldTier';
 let battleIdSeq = 1;
 let effectSeq = 1;
 
+// 0.75x battle visual speed => 4/3x (~1.333x) animation durations
+export const BATTLE_VISUAL_SPEED_MULT = 0.75;
+const BATTLE_VISUAL_DURATION_SCALE = 1 / BATTLE_VISUAL_SPEED_MULT;
+
+function scaleVisualMs(baseMs: number): number {
+  return Math.round(baseMs * BATTLE_VISUAL_DURATION_SCALE);
+}
+
 function nextEffectId(): string {
   effectSeq += 1;
   return `fx_${effectSeq}_${Date.now().toString(36)}`;
@@ -540,7 +548,7 @@ function applyDamage(
 
   const wasAlive = defender.hp > 0;
   defender.hp = Math.max(0, defender.hp - dmg);
-  defender.hurtUntilMs = now + 320;
+  defender.hurtUntilMs = now + scaleVisualMs(320);
 
   if (defender.isAlly && dmg + absorbed > 0) {
     addLimitGauge(state, 11);
@@ -549,7 +557,7 @@ function applyDamage(
   if (isCrit || isWeak || element === 'ultimate' || element === 'limit_break') {
     state.shakeUntilMs = Math.max(
       state.shakeUntilMs,
-      now + (element === 'ultimate' || element === 'limit_break' ? 420 : 240),
+      now + scaleVisualMs(element === 'ultimate' || element === 'limit_break' ? 420 : 240),
     );
   }
 
@@ -1159,8 +1167,8 @@ export function executeTurnAction(
     enemies: prev.enemies.map((u) => ({ ...u })),
     turnQueue: [...prev.turnQueue],
     logs: [...prev.logs].slice(-12),
-    floatingTexts: prev.floatingTexts.filter((f) => now - f.createdAt < 1100),
-    vfx: prev.vfx.filter((v) => now - v.createdAt < 700),
+    floatingTexts: prev.floatingTexts.filter((f) => now - f.createdAt < scaleVisualMs(1100)),
+    vfx: prev.vfx.filter((v) => now - v.createdAt < scaleVisualMs(700)),
     activeCinematic:
       prev.activeCinematic && now - prev.activeCinematic.startedAt < prev.activeCinematic.durationMs
         ? prev.activeCinematic
@@ -1209,14 +1217,14 @@ export function executeTurnAction(
   if (action.type === 'limit_break') {
     if (state.limitGauge < 100) return prev;
     state.limitGauge = 0;
-    state.shakeUntilMs = now + 460;
+    state.shakeUntilMs = now + scaleVisualMs(460);
     const livingAllies = state.allies.filter((a) => a.hp > 0);
     const livingEnemies = state.enemies.filter((e) => e.hp > 0);
     const enemyUids = livingEnemies.map((e) => e.uid);
     const totalPower = livingAllies.reduce((sum, a) => sum + Math.max(a.atk, a.mag), 0);
 
     for (const a of livingAllies) {
-      a.lungeUntilMs = now + 420;
+      a.lungeUntilMs = now + scaleVisualMs(420);
       a.activeMotion = {
         speciesId: a.speciesId,
         skillId: 'limit_break',
@@ -1225,7 +1233,7 @@ export function executeTurnAction(
         isAoE: true,
         targetUids: enemyUids,
         startedAt: now,
-        durationMs: 680,
+        durationMs: scaleVisualMs(680),
       };
       applyHealing(state, a, Math.round(a.maxHp * 0.18), false, true);
       a.shield = Math.min(Math.round(a.maxHp * 0.55), a.shield + Math.round(a.maxHp * 0.12));
@@ -1248,7 +1256,7 @@ export function executeTurnAction(
       targetUids: enemyUids,
       element: 'holy',
       startedAt: now,
-      durationMs: 680,
+      durationMs: scaleVisualMs(680),
     };
     for (const e of livingEnemies) {
       if (e.charging) {
@@ -1316,7 +1324,7 @@ export function executeTurnAction(
       element: actorElem,
       targetUids: [actor.uid],
       startedAt: now,
-      durationMs: 360,
+      durationMs: scaleVisualMs(360),
     };
     if (actor.isAlly) addLimitGauge(state, 14);
     state.logs.push(`${actor.name}は身を固めた`);
@@ -1343,7 +1351,7 @@ export function executeTurnAction(
       element: actorElem,
       targetUids: [actor.uid],
       startedAt: now,
-      durationMs: 440,
+      durationMs: scaleVisualMs(440),
     };
     state.logs.push(`⚠ ${actor.name}が凄まじい魔力を溜めている`);
     state.floatingTexts.push({
@@ -1369,7 +1377,7 @@ export function executeTurnAction(
 
   if (action.type === 'enemy_ultimate' && !actor.isAlly) {
     actor.charging = false;
-    actor.lungeUntilMs = now + 420;
+    actor.lungeUntilMs = now + scaleVisualMs(420);
     let totalDmg = 0;
     const elem = actor.shiftElement ?? getSpecies(actor.speciesId).element;
     const targetUids = livingFoes.map((t) => t.uid);
@@ -1386,7 +1394,7 @@ export function executeTurnAction(
       isAoE: true,
       targetUids,
       startedAt: now,
-      durationMs: 640,
+      durationMs: scaleVisualMs(640),
     };
     if (getSignatureStyle(actor.speciesId, 'enemy_ultimate')) {
       state.activeCinematic = {
@@ -1398,7 +1406,7 @@ export function executeTurnAction(
         targetUids,
         element: elem,
         startedAt: now,
-        durationMs: 680,
+        durationMs: scaleVisualMs(680),
       };
     }
     for (const t of livingFoes) {
@@ -1441,7 +1449,7 @@ export function executeTurnAction(
     return state;
   }
 
-  actor.lungeUntilMs = now + 340;
+  actor.lungeUntilMs = now + scaleVisualMs(340);
   if (actor.isAlly) {
     addLimitGauge(state, 10);
   }
@@ -1462,7 +1470,7 @@ export function executeTurnAction(
         element: elem,
         targetUids: [target.uid],
         startedAt: now,
-        durationMs: 400,
+        durationMs: scaleVisualMs(400),
       };
       const { amount, isCrit, isWeak } = calcDamageNumber(
         actor,
@@ -1532,7 +1540,7 @@ export function executeTurnAction(
     }
 
     const isSignature = Boolean(getSignatureStyle(actor.speciesId, skill.id));
-    const motionDuration = isSignature ? 620 : 460;
+    const motionDuration = scaleVisualMs(isSignature ? 620 : 460);
     const skillVfxMeta: VfxMeta = {
       attackerUid: actor.uid,
       speciesId: actor.speciesId,
@@ -1561,7 +1569,7 @@ export function executeTurnAction(
           targetUids,
           element: skill.element,
           startedAt: now,
-          durationMs: 640,
+          durationMs: scaleVisualMs(640),
         };
       }
     };
