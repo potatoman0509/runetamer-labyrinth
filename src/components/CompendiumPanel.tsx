@@ -16,7 +16,7 @@ import {
   TIER_LABELS,
 } from '../game/data/monsters';
 import { getCompendiumBonusPct } from '../game/stats';
-import type { GameSave, MonsterSpecies, MonsterTier } from '../game/types';
+import type { DungeonBiomeId, GameSave, MonsterSpecies, MonsterTier } from '../game/types';
 import { PixelIcon } from './PixelIcon';
 
 interface CompendiumPanelProps {
@@ -24,9 +24,14 @@ interface CompendiumPanelProps {
   onClaimAchievement: (achievementId: string) => void;
 }
 
+const COMP_BIOMES: DungeonBiomeId[] = ['forest', 'ruins', 'volcano', 'abyss', 'glacier', 'sanctum'];
+
 export function CompendiumPanel({ save, onClaimAchievement }: CompendiumPanelProps) {
   const [subTab, setSubTab] = useState<'monsters' | 'uniques' | 'achievements'>('monsters');
   const [tierFilter, setTierFilter] = useState<'all' | MonsterTier>('all');
+  const [biomeFilter, setBiomeFilter] = useState<'all' | DungeonBiomeId>('all');
+  const [uncapturedOnly, setUncapturedOnly] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [inspectMonster, setInspectMonster] = useState<MonsterSpecies | null>(null);
 
   const encounteredSet = useMemo(
@@ -44,9 +49,19 @@ export function CompendiumPanel({ save, onClaimAchievement }: CompendiumPanelPro
   const claimedSet = useMemo(() => new Set(save.claimedAchievements ?? []), [save.claimedAchievements]);
 
   const filteredMonsters = useMemo(() => {
-    if (tierFilter === 'all') return MONSTER_LIST;
-    return MONSTER_LIST.filter((m) => m.tier === tierFilter);
-  }, [tierFilter]);
+    const q = searchQuery.trim().toLowerCase();
+    return MONSTER_LIST.filter((m) => {
+      if (tierFilter !== 'all' && m.tier !== tierFilter) return false;
+      if (biomeFilter !== 'all' && m.biome !== biomeFilter) return false;
+      if (uncapturedOnly && capturedSet.has(m.id)) return false;
+      if (q) {
+        const seen = encounteredSet.has(m.id);
+        const hay = `${seen ? m.name : ''} ${m.biome !== 'hero' && m.biome !== 'special' ? BIOMES[m.biome].shortName : ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [tierFilter, biomeFilter, uncapturedOnly, searchQuery, capturedSet, encounteredSet]);
 
   const sortedAchievements = useMemo(() => {
     return [...ACHIEVEMENTS].sort((a, b) => {
@@ -106,6 +121,40 @@ export function CompendiumPanel({ save, onClaimAchievement }: CompendiumPanelPro
 
       {subTab === 'monsters' ? (
         <>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <input
+              id="input-comp-search"
+              type="text"
+              className="skill-search-input"
+              placeholder="魔物名・エリア検索..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <select
+              id="select-comp-biome"
+              aria-label="エリア絞り込み"
+              className="rpg-select"
+              style={{ maxWidth: 96, flex: '0 0 auto' }}
+              value={biomeFilter}
+              onChange={(e) => setBiomeFilter(e.target.value as 'all' | DungeonBiomeId)}
+            >
+              <option value="all">全エリア</option>
+              {COMP_BIOMES.map((b) => (
+                <option key={b} value={b}>
+                  {BIOMES[b].shortName}
+                </option>
+              ))}
+            </select>
+            <button
+              id="btn-comp-uncaptured"
+              type="button"
+              className={`pill-chip ${uncapturedOnly ? 'active' : ''}`}
+              style={{ flexShrink: 0, fontSize: 9, padding: '2px 5px' }}
+              onClick={() => setUncapturedOnly((v) => !v)}
+            >
+              未捕獲
+            </button>
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 3 }}>
             <button
               id="btn-comp-tier-all"

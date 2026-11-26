@@ -1855,16 +1855,6 @@ export function App() {
                   : `${biomeDef.shortName} ${expedition.floor}F`}
             </h1>
             <span className="tier-badge">T{toRoman(save.worldTier)}</span>
-            <span
-              className="tier-badge"
-              style={{
-                background: 'linear-gradient(180deg, #8c202e 0%, #57111b 100%)',
-                borderColor: '#ff7084',
-                color: '#ffd6dd',
-              }}
-            >
-              v15
-            </span>
           </div>
           <div className="hud-right">
             <span className="gold-pill" style={{ color: '#8ae8ff', borderColor: 'rgba(138, 232, 255, 0.45)' }}>
@@ -1874,13 +1864,10 @@ export function App() {
             <button
               id="btn-hud-sound"
               type="button"
-              className="gold-pill"
+              className="gold-pill hud-icon-btn"
               style={{
                 color: save.settings.soundMuted ? '#ff9cab' : '#ffe570',
                 borderColor: save.settings.soundMuted ? 'rgba(255, 130, 150, 0.45)' : 'rgba(255, 229, 112, 0.45)',
-                cursor: 'pointer',
-                background: 'rgba(24, 20, 36, 0.85)',
-                padding: '1px 4px',
               }}
               onClick={handleToggleSoundMute}
               aria-label="音量切替"
@@ -1890,13 +1877,10 @@ export function App() {
             <button
               id="btn-hud-settings"
               type="button"
-              className="gold-pill"
+              className="gold-pill hud-icon-btn"
               style={{
                 color: '#e8e4f5',
                 borderColor: 'rgba(200, 190, 230, 0.45)',
-                cursor: 'pointer',
-                background: 'rgba(34, 28, 52, 0.85)',
-                padding: '1px 4px',
               }}
               onClick={() => setSettingsOpen(true)}
               aria-label="設定"
@@ -1907,13 +1891,7 @@ export function App() {
               <button
                 id="btn-hud-save"
                 type="button"
-                className="gold-pill"
-                style={{
-                  color: '#a3ffbe',
-                  borderColor: 'rgba(130, 255, 158, 0.45)',
-                  cursor: 'pointer',
-                  background: 'rgba(20, 44, 30, 0.85)',
-                }}
+                className="gold-pill hud-save-btn"
                 onClick={() => {
                   setActiveTab('world');
                   setWorldSection('save');
@@ -2009,7 +1987,12 @@ export function App() {
               {activeTab === 'explore' && (
                 <div className="panel-body" style={{ gap: 6 }}>
                   {/* Compact Party HP/MP Strip */}
-                  <div className="party-mini-strip">
+                  <div
+                    className="party-mini-strip"
+                    style={{
+                      gridTemplateColumns: `repeat(${Math.max(2, save.partyIds.length)}, minmax(0, 1fr))`,
+                    }}
+                  >
                     {save.partyIds.map((pid) => {
                       const u = save.roster[pid];
                       if (!u) return null;
@@ -2221,6 +2204,34 @@ export function App() {
                         >
                           🏠帰還
                         </button>
+                      </div>
+
+                      <div id="explore-status-strip" className="explore-status-strip">
+                        <span>
+                          {(save.activeTrials ?? []).includes('no_potions')
+                            ? '🚫禁薬中'
+                            : `🧪HP×${runPotions.hp} 💧MP×${runPotions.mp}`}
+                        </span>
+                        {shrineBuffs.powerBonus > 0 && (
+                          <span style={{ color: '#ff9c8a' }}>
+                            ⚔火力+{Math.round(shrineBuffs.powerBonus * 100)}%
+                          </span>
+                        )}
+                        {shrineBuffs.fortuneBonus > 0 && (
+                          <span style={{ color: '#8ae8ff' }}>
+                            🍀MF+{Math.round(shrineBuffs.fortuneBonus)}%
+                          </span>
+                        )}
+                        {shrineBuffs.curseEnemyBonus > 0 && (
+                          <span style={{ color: '#ff8aa8' }}>
+                            ☠呪い+{Math.round(shrineBuffs.curseEnemyBonus * 100)}%
+                          </span>
+                        )}
+                        {(save.activeTrials?.length ?? 0) > 0 && (
+                          <span style={{ color: '#ffd86b' }}>
+                            ⛓試練{save.activeTrials.length}
+                          </span>
+                        )}
                       </div>
 
                       <div className="choice-list">

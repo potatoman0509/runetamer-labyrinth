@@ -78,6 +78,7 @@ export function EquipmentPanel({
   const [sortDir, setSortDir] = useState<SortDirection>('desc');
   const [selectedItemId, setSelectedItemId] = useState<string | null>(initialItemId ?? null);
   const [selectedAffixIdx, setSelectedAffixIdx] = useState<number | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   const activeUnitId = save.roster[selectedUnitId] ? selectedUnitId : 'hero';
   const unit = save.roster[activeUnitId]!;
@@ -97,6 +98,23 @@ export function EquipmentPanel({
     }
     return map;
   }, [save.roster]);
+
+  const slotHasUpgrade = useMemo(() => {
+    const bestScore: Record<EquipSlot, number> = { weapon: -1, armor: -1, relic: -1, rune: -1 };
+    for (const it of save.inventory) {
+      if (equippedOwnerMap.has(it.id)) continue;
+      const sc = calculateItemScore(it);
+      if (sc > bestScore[it.slot]) bestScore[it.slot] = sc;
+    }
+    const res: Record<EquipSlot, boolean> = { weapon: false, armor: false, relic: false, rune: false };
+    for (const s of SLOTS) {
+      const curId = unit.equipped[s];
+      const curItem = curId ? invMap.get(curId) : undefined;
+      const curScore = curItem ? calculateItemScore(curItem) : 0;
+      res[s] = bestScore[s] > curScore;
+    }
+    return res;
+  }, [save.inventory, equippedOwnerMap, unit.equipped, invMap]);
 
   const unitStats = useMemo(
     () => computeUnitStats(unit, save, shrineBuffs, invMap),
@@ -179,19 +197,16 @@ export function EquipmentPanel({
 
   return (
     <div className="panel-body" style={{ gap: 5 }}>
-      {/* Current Gold, Diamond (Forge Stones), & Bag Capacity Bar */}
+      {/* Compact Bag Capacity + Auto-Loot + Collapsible Bulk Process Bar */}
       <div
-        id="gear-currency-bar"
-        className="rpg-card-gold"
+        id="gear-utility-bar"
+        className="rpg-card"
         style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 4,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: 6,
-          padding: '4px 7px',
+          gap: 4,
+          padding: '4px 6px',
         }}
       >
         <span
@@ -204,19 +219,60 @@ export function EquipmentPanel({
         >
           🎒{save.inventory.length}/140{bagNearFull ? '!' : ''}
         </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
-          <span
-            id="gear-diamond-count"
-            className="gold-pill"
-            style={{ color: '#8ae8ff', borderColor: 'rgba(138, 232, 255, 0.45)', fontSize: 10.5 }}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 3, minWidth: 0 }}>
+          <button
+            type="button"
+            className="pill-chip"
+            style={{ color: '#8ae8ff', fontSize: 9, padding: '2px 5px' }}
+            onClick={onToggleAutoLootMode}
           >
-            💎{save.forgeStones.toLocaleString()}
-          </span>
-          <span id="gear-gold-count" className="gold-pill" style={{ fontSize: 10.5 }}>
-            {save.gold.toLocaleString()}G
-          </span>
+            {autoModeLabel}
+          </button>
+          <button
+            type="button"
+            className="pill-chip"
+            style={{ color: '#ffd86b', fontSize: 9, padding: '2px 5px' }}
+            onClick={cycleAutoSell}
+          >
+            {autoThresholdLabel}
+          </button>
+          <button
+            id="btn-toggle-bulk-gear"
+            type="button"
+            className={`pill-chip ${bulkOpen ? 'active' : ''}`}
+            style={{ fontSize: 9, padding: '2px 5px' }}
+            onClick={() => setBulkOpen((v) => !v)}
+          >
+            一括{bulkOpen ? '▲' : '▼'}
+          </button>
         </div>
       </div>
+
+      {bulkOpen && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 4 }}>
+          <button
+            type="button"
+            className="rpg-btn sm"
+            onClick={() => onBulkProcess('uncommon', 'salvage')}
+          >
+            UC以下分解
+          </button>
+          <button
+            type="button"
+            className="rpg-btn sm"
+            onClick={() => onBulkProcess('rare', 'salvage')}
+          >
+            R以下分解
+          </button>
+          <button
+            type="button"
+            className="rpg-btn sm"
+            onClick={() => onBulkProcess('rare', 'sell')}
+          >
+            R以下売却
+          </button>
+        </div>
+      )}
 
       {/* Party Member Selector */}
       <div className="unit-pill-row">
@@ -339,9 +395,14 @@ export function EquipmentPanel({
                   </span>
                 )}
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: 8.5, color: 'var(--text-dim)' }}>
-                    {SLOT_LABELS[slot]}
-                    {eqItem && eqItem.enhanceLevel > 0 ? ` +${eqItem.enhanceLevel}` : ''}
+                  <div style={{ fontSize: 8.5, color: 'var(--text-dim)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>
+                      {SLOT_LABELS[slot]}
+                      {eqItem && eqItem.enhanceLevel > 0 ? ` +${eqItem.enhanceLevel}` : ''}
+                    </span>
+                    {slotHasUpgrade[slot] && (
+                      <span style={{ color: '#82ff9e', fontWeight: 800, fontSize: 9 }}>▲</span>
+                    )}
                   </div>
                   <div
                     style={{
@@ -611,7 +672,7 @@ export function EquipmentPanel({
         </div>
       )}
 
-      {/* Filter + Auto-Sell / Auto-Salvage Controls */}
+      {/* Slot Filter Row */}
       <div className="filter-row">
         <button
           type="button"
@@ -630,47 +691,6 @@ export function EquipmentPanel({
             {SLOT_LABELS[s]}
           </button>
         ))}
-        <button
-          type="button"
-          className="pill-chip"
-          style={{ marginLeft: 'auto', color: '#8ae8ff' }}
-          onClick={onToggleAutoLootMode}
-        >
-          {autoModeLabel}
-        </button>
-        <button
-          type="button"
-          className="pill-chip"
-          style={{ color: '#ffd86b' }}
-          onClick={cycleAutoSell}
-        >
-          {autoThresholdLabel}
-        </button>
-      </div>
-
-      {/* 1-Tap Bulk Salvage / Bulk Sell */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 4 }}>
-        <button
-          type="button"
-          className="rpg-btn sm"
-          onClick={() => onBulkProcess('uncommon', 'salvage')}
-        >
-          UC以下分解
-        </button>
-        <button
-          type="button"
-          className="rpg-btn sm"
-          onClick={() => onBulkProcess('rare', 'salvage')}
-        >
-          R以下分解
-        </button>
-        <button
-          type="button"
-          className="rpg-btn sm"
-          onClick={() => onBulkProcess('rare', 'sell')}
-        >
-          R以下売却
-        </button>
       </div>
 
       {/* Equipment Sort Bar */}

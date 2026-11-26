@@ -41,6 +41,7 @@ export function SettingsModal({
   onDeleteAllData,
 }: SettingsModalProps) {
   const [confirmMode, setConfirmMode] = useState<'none' | 'slot' | 'all'>('none');
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const bgmPct = Math.round((settings.bgmVolume ?? 0.75) * 100);
   const sePct = Math.round((settings.seVolume ?? 0.85) * 100);
@@ -58,7 +59,20 @@ export function SettingsModal({
     >
       <div className="settings-modal-card">
         <div className="section-heading" style={{ marginBottom: 2 }}>
-          <span>⚙ ゲーム設定・データ管理</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <span>⚙ ゲーム設定・データ管理</span>
+            <span
+              className="tier-badge"
+              style={{
+                background: 'linear-gradient(180deg, #8c202e 0%, #57111b 100%)',
+                borderColor: '#ff7084',
+                color: '#ffd6dd',
+                fontSize: 9,
+              }}
+            >
+              v16
+            </span>
+          </span>
           <button
             id="btn-close-settings"
             type="button"
@@ -205,6 +219,47 @@ export function SettingsModal({
               ))}
             </div>
           </div>
+        </div>
+
+        {/* Collapsible In-Game Help & Element Chart */}
+        <div className="rpg-card" style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <button
+            id="btn-toggle-help-guide"
+            type="button"
+            className="rpg-btn sm"
+            style={{ justifyContent: 'space-between', display: 'flex', alignItems: 'center' }}
+            onClick={() => setHelpOpen((v) => !v)}
+          >
+            <span>📖 遊び方・属性相性・進化条件</span>
+            <span>{helpOpen ? '▲' : '▼'}</span>
+          </button>
+          {helpOpen && (
+            <div
+              id="settings-help-guide"
+              style={{ fontSize: 9.5, color: '#d8d2e8', display: 'flex', flexDirection: 'column', gap: 4, lineHeight: 1.45 }}
+            >
+              <div>
+                <strong style={{ color: '#ffe570' }}>属性弱点：</strong>
+                🔥炎→🌿森→🪨地→🔥炎 ／ ✨光↔⭐星。弱点攻撃はダメージ大幅UP！
+              </div>
+              <div>
+                <strong style={{ color: '#ffe570' }}>ボス大技対策：</strong>
+                敵がチャージしたら🛡防御で軽減、または⚡連携奥義100%でブレイク可能。
+              </div>
+              <div>
+                <strong style={{ color: '#ffe570' }}>星座盤スキルツリー：</strong>
+                全103ノード＋10キーストーン。いつでも1pt返却・全リセット可能。
+              </div>
+              <div>
+                <strong style={{ color: '#ffe570' }}>モンスター進化：</strong>
+                Lv10＋鍛冶石で【極】進化、Lv25＋鍛冶石で【真】進化を解放。
+              </div>
+              <div>
+                <strong style={{ color: '#ffe570' }}>戦闘中の詳細：</strong>
+                味方カードをタップで全ステータス・バフを確認、ログ欄タップで履歴表示。
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Danger Zone: Data Deletion */}

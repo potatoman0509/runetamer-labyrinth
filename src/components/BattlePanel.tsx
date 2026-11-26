@@ -63,6 +63,7 @@ export function BattlePanel({
   onOpenGearFromLoot,
 }: BattlePanelProps) {
   const [inspectAllyUid, setInspectAllyUid] = useState<string | null>(null);
+  const [showLogHistory, setShowLogHistory] = useState(false);
   const activeUnit = findBattleUnit(battle, battle.activeUid);
   const canPlayerAct =
     battle.phase === 'player_input' &&
@@ -73,6 +74,31 @@ export function BattlePanel({
   const potionsBlocked = battle.activeTrials.includes('no_potions');
 
   const lastLogs = battle.logs.slice(-2);
+  const recentLogs = battle.logs.slice(-20);
+
+  // Build upcoming 4-unit turn order preview (active unit + queued/SPD-sorted alive units)
+  const turnOrderPreview = (() => {
+    const alive = [...battle.allies, ...battle.enemies].filter((u) => u.hp > 0);
+    const ordered: typeof alive = [];
+    const seen = new Set<string>();
+    const pushUid = (uid: string | null | undefined) => {
+      if (!uid || seen.has(uid)) return;
+      const u = findBattleUnit(battle, uid);
+      if (u && u.hp > 0) {
+        seen.add(u.uid);
+        ordered.push(u);
+      }
+    };
+    pushUid(battle.activeUid);
+    for (const qUid of battle.turnQueue) {
+      pushUid(qUid);
+    }
+    const remaining = alive
+      .filter((u) => !seen.has(u.uid))
+      .sort((a, b) => b.spd - a.spd);
+    for (const u of remaining) ordered.push(u);
+    return ordered.slice(0, 4);
+  })();
 
   if (battle.phase === 'victory' && battle.reward) {
     const r = battle.reward;
@@ -414,8 +440,13 @@ export function BattlePanel({
         );
       })()}
 
-      {/* 4 Ally Status Strip (Tap any ally to inspect full battle stats) */}
-      <div className="battle-ally-strip">
+      {/* Dynamic Ally Status Strip (Tap any ally to inspect full battle stats) */}
+      <div
+        className="battle-ally-strip"
+        style={{
+          gridTemplateColumns: `repeat(${Math.max(2, battle.allies.length)}, minmax(0, 1fr))`,
+        }}
+      >
         {battle.allies.map((ally) => {
           const isTurn = battle.activeUid === ally.uid;
           const hpPct = Math.max(0, Math.min(100, (ally.hp / ally.maxHp) * 100));
@@ -432,7 +463,7 @@ export function BattlePanel({
               id={`battle-ally-card-${ally.speciesId}`}
               type="button"
               className={`battle-ally-card ${isTurn ? 'active' : ''} ${ally.hp <= 0 ? 'dead' : ''}`}
-              style={{ textAlign: 'left', cursor: 'pointer' }}
+              style={{ textAlign: 'left', cursor: 'pointer', color: 'var(--text-main)' }}
               onClick={() => setInspectAllyUid(ally.uid)}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 3, minWidth: 0 }}>
@@ -440,11 +471,12 @@ export function BattlePanel({
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div
                     style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 2,
                       fontSize: 9,
                       fontWeight: 700,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
                       color:
                         ally.freezeTurns > 0
                           ? '#7ce8ff'
@@ -457,8 +489,18 @@ export function BattlePanel({
                                 : undefined,
                     }}
                   >
-                    {allyStatus}
-                    {ally.name}
+                    <span
+                      style={{
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        minWidth: 0,
+                      }}
+                    >
+                      {allyStatus}
+                      {ally.name}
+                    </span>
+                    <span style={{ fontSize: 8, opacity: 0.65, flexShrink: 0 }}>ⓘ</span>
                   </div>
                   <div
                     style={{
@@ -623,12 +665,76 @@ export function BattlePanel({
         </span>
       </div>
 
-      {/* Live 2-Line Log */}
-      <div className="battle-log-box">
+      {/* Turn Order Preview Strip */}
+      {turnOrderPreview.length > 0 && (
+        <div id="battle-turn-order" className="turn-order-strip">
+          <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-pixel)', flexShrink: 0 }}>
+            行動順
+          </span>
+          {turnOrderPreview.map((u, i) => (
+            <span
+              key={u.uid}
+              className={`turn-order-chip ${i === 0 ? 'active' : ''} ${!u.isAlly ? 'enemy' : ''}`}
+            >
+              <span>{i === 0 ? '▶' : `${i + 1}.`}</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.name}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Live 2-Line Log (Tap to expand 20-line log history) */}
+      <button
+        id="btn-battle-log-history"
+        type="button"
+        className="battle-log-box"
+        style={{
+          width: '100%',
+          textAlign: 'left',
+          cursor: 'pointer',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1,
+          position: 'relative',
+        }}
+        onClick={() => setShowLogHistory((v) => !v)}
+      >
         {lastLogs.map((line, i) => (
           <div key={`${i}_${line}`}>{line}</div>
         ))}
-      </div>
+        <span
+          style={{
+            position: 'absolute',
+            right: 6,
+            top: 3,
+            fontSize: 8,
+            color: 'var(--text-dim)',
+            fontFamily: 'var(--font-pixel)',
+          }}
+        >
+          {showLogHistory ? '▲履歴閉' : '▼履歴'}
+        </span>
+      </button>
+
+      {showLogHistory && (
+        <div
+          id="battle-log-drawer"
+          className="rpg-card"
+          style={{
+            maxHeight: 115,
+            overflowY: 'auto',
+            fontSize: 9.5,
+            color: '#d8d2e8',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+          }}
+        >
+          {recentLogs.map((line, idx) => (
+            <div key={`hist_${idx}_${line}`}>{line}</div>
+          ))}
+        </div>
+      )}
 
       {/* Manual Command Grid */}
       {activeUnit && activeUnit.isAlly ? (
@@ -722,7 +828,7 @@ export function BattlePanel({
           </div>
         </div>
       ) : (
-        <div className="rpg-card" style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-muted)' }}>
+        <div className="rpg-card battle-cmd-placeholder">
           {settings.autoBattle ? 'オート戦闘中' : '敵の行動中'}
         </div>
       )}
