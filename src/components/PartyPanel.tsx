@@ -3,15 +3,9 @@ import { ELEMENT_META } from '../game/bossGimmicks';
 import { getSpecies, ROLE_LABELS } from '../game/data/monsters';
 import {
   ALL_HERO_SKILLS,
-  BRANCH_META,
-  canUpgradeSkillNode,
   getAvailableSp,
   getHeroEquippedSkills,
-  getSpentSp,
-  getTotalEarnedSp,
   getUnlockedHeroSkillIds,
-  SKILL_TREE_NODES,
-  type SkillBranch,
 } from '../game/skillTree';
 import {
   RANCH_SORT_OPTIONS,
@@ -37,6 +31,7 @@ import type {
 } from '../game/types';
 import { getUnitEquipVisualKey } from '../engine/equipVisuals';
 import { PixelIcon } from './PixelIcon';
+import { SkillTreeCanvas } from './SkillTreeCanvas';
 
 interface PartyPanelProps {
   save: GameSave;
@@ -46,6 +41,7 @@ interface PartyPanelProps {
   onEvolveMonster: (unitId: string) => void;
   onTrueEvolveMonster: (unitId: string) => void;
   onUpgradeSkillNode: (nodeId: string) => void;
+  onRefundSkillNode: (nodeId: string) => void;
   onResetSkillTree: () => void;
   onEquipHeroSkill: (slotIndex: 0 | 1, skillId: string) => void;
   onHealPartyInVillage?: () => void;
@@ -60,13 +56,13 @@ export function PartyPanel({
   onEvolveMonster,
   onTrueEvolveMonster,
   onUpgradeSkillNode,
+  onRefundSkillNode,
   onResetSkillTree,
   onEquipHeroSkill,
   onHealPartyInVillage,
   inVillage,
 }: PartyPanelProps) {
   const [subTab, setSubTab] = useState<'party' | 'tree'>('party');
-  const [branch, setBranch] = useState<SkillBranch>('sword');
   const [roleFilter, setRoleFilter] = useState<'all' | MonsterRole>('all');
   const [tierFilter, setTierFilter] = useState<'all' | MonsterTier>('all');
   const [elemFilter, setElemFilter] = useState<'all' | ElementType>('all');
@@ -82,8 +78,6 @@ export function PartyPanel({
   );
   const synergies = useMemo(() => computePartySynergies(save), [save]);
   const availableSp = getAvailableSp(save);
-  const totalSp = getTotalEarnedSp(save);
-  const spentSp = getSpentSp(save);
   const unlockedSkillIds = useMemo(() => getUnlockedHeroSkillIds(save), [save]);
   const equippedHeroSkills = useMemo(() => getHeroEquippedSkills(save), [save]);
 
@@ -111,11 +105,6 @@ export function PartyPanel({
     sortKey,
     sortDir,
   ]);
-
-  const branchNodes = useMemo(
-    () => SKILL_TREE_NODES.filter((n) => n.branch === branch).sort((a, b) => a.tier - b.tier),
-    [branch],
-  );
 
   return (
     <div className="panel-body">
@@ -564,27 +553,14 @@ export function PartyPanel({
           </div>
         </>
       ) : (
-        /* ===== HERO SKILL TREE TAB (4 BRANCHES) ===== */
+        /* ===== HERO CONSTELLATION SKILL TREE TAB (PoE-GRADE 103 NODES) ===== */
         <>
-          <div className="rpg-card-gold" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-            <div>
-              <div style={{ fontFamily: 'var(--font-pixel)', fontSize: 12, color: '#ffe570' }}>
-                スキルツリー
-              </div>
-              <div style={{ fontSize: 10, color: '#fff2bd' }}>
-                SP <strong style={{ color: '#82ff9e', fontSize: 12 }}>{availableSp}</strong> / {totalSp}
-              </div>
-            </div>
-            <button
-              id="btn-reset-skilltree"
-              type="button"
-              className="rpg-btn sm"
-              disabled={!inVillage || spentSp === 0}
-              onClick={onResetSkillTree}
-            >
-              SPリセット
-            </button>
-          </div>
+          <SkillTreeCanvas
+            save={save}
+            onUpgradeSkillNode={onUpgradeSkillNode}
+            onRefundSkillNode={onRefundSkillNode}
+            onResetSkillTree={onResetSkillTree}
+          />
 
           {/* Equipped Hero Skill Slots (2 active slots) */}
           <div className="rpg-card" style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -687,96 +663,6 @@ export function PartyPanel({
                 );
               })}
             </div>
-          </div>
-
-          {/* 4 Branch Selector */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 3 }}>
-            {(['sword', 'magic', 'command', 'void'] as const).map((b) => {
-              const meta = BRANCH_META[b];
-              const pts = SKILL_TREE_NODES.filter((n) => n.branch === b).reduce(
-                (s, n) => s + (save.heroSkillTree[n.id] ?? 0),
-                0,
-              );
-              return (
-                <button
-                  key={b}
-                  id={`btn-branch-${b}`}
-                  type="button"
-                  className={`rpg-btn sm ${branch === b ? 'primary' : ''}`}
-                  onClick={() => setBranch(b)}
-                  style={{ fontSize: 9.5, padding: '4px 2px' }}
-                >
-                  {meta.label}{pts > 0 ? ` ${pts}` : ''}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Branch Nodes (Tier 1 -> Tier 5) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {branchNodes.map((node) => {
-              const cur = save.heroSkillTree[node.id] ?? 0;
-              const maxed = cur >= node.maxLevel;
-              const reqMet = !node.requires || (save.heroSkillTree[node.requires] ?? 0) > 0;
-              const upgradeable = canUpgradeSkillNode(save, node.id);
-              const meta = BRANCH_META[node.branch];
-
-              return (
-                <div
-                  key={node.id}
-                  className={cur > 0 ? 'rpg-card-gold' : 'rpg-card'}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    opacity: reqMet ? 1 : 0.62,
-                    minWidth: 0,
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 24,
-                      height: 24,
-                      borderRadius: 4,
-                      background: cur > 0 ? meta.color : 'rgba(255,255,255,0.08)',
-                      color: '#fff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontFamily: 'var(--font-pixel)',
-                      fontSize: 10,
-                      fontWeight: 700,
-                      flexShrink: 0,
-                    }}
-                  >
-                    T{node.tier}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-                      <strong style={{ fontSize: 11, color: node.unlocksSkillId ? '#ffe570' : undefined }}>
-                        {node.name}
-                      </strong>
-                      <span style={{ fontSize: 9.5, fontFamily: 'var(--font-pixel)', color: maxed ? '#82ff9e' : '#cbd4e8' }}>
-                        Lv.{cur}/{node.maxLevel}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: 9.5, color: 'var(--text-muted)', lineHeight: 1.25 }}>
-                      {node.desc}
-                    </div>
-                  </div>
-                  <button
-                    id={`btn-skill-node-${node.id}`}
-                    type="button"
-                    className={`rpg-btn sm ${upgradeable ? 'primary' : ''}`}
-                    style={{ flexShrink: 0, fontSize: 10, padding: '4px 7px' }}
-                    disabled={!upgradeable}
-                    onClick={() => onUpgradeSkillNode(node.id)}
-                  >
-                    {maxed ? 'MAX' : !reqMet ? '🔒' : '+1 SP'}
-                  </button>
-                </div>
-              );
-            })}
           </div>
         </>
       )}

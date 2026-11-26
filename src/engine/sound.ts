@@ -6,7 +6,33 @@
  * plus crisp RPG sound effects with safe browser autoplay handling and instant mute toggle.
  */
 
-export type BgmTrack = 'none' | 'village' | 'dungeon' | 'battle' | 'boss';
+export type BgmTrack =
+  | 'none'
+  | 'village'
+  | 'forest'
+  | 'ruins'
+  | 'volcano'
+  | 'abyss'
+  | 'glacier'
+  | 'sanctum'
+  | 'dungeon'
+  | 'battle'
+  | 'boss';
+
+export type SynthFallbackTrack = 'village' | 'dungeon' | 'battle' | 'boss';
+
+export const PREGENERATED_BGM_FILES: Record<Exclude<BgmTrack, 'none'>, string> = {
+  village: './audio/village.mp3',
+  forest: './audio/forest.mp3',
+  ruins: './audio/ruins.mp3',
+  volcano: './audio/volcano.mp3',
+  abyss: './audio/abyss.mp3',
+  glacier: './audio/glacier.mp3',
+  sanctum: './audio/sanctum.mp3',
+  dungeon: './audio/forest.mp3',
+  battle: './audio/battle.mp3',
+  boss: './audio/boss.mp3',
+};
 
 export type SfxKind =
   | 'click'
@@ -60,7 +86,7 @@ export interface OrchestraTrackDef {
   cymbal?: number[]; // 1 = suspended cymbal crash
 }
 
-export const ORCHESTRA_TRACKS: Record<Exclude<BgmTrack, 'none'>, OrchestraTrackDef> = {
+export const ORCHESTRA_TRACKS: Record<SynthFallbackTrack, OrchestraTrackDef> = {
   // 始まりの村：牧歌的な弦楽合奏＋フルート＋コンサートハープのワルツ風オーケストラ
   village: {
     title: '始まりの村・弦楽とフルートの調べ',
@@ -307,14 +333,27 @@ interface OrchestraBus {
   noiseBuffer: AudioBuffer;
 }
 
+declare const __STANDALONE_ARTIFACT__: boolean | undefined;
+
+function toSynthFallbackTrack(track: Exclude<BgmTrack, 'none'>): SynthFallbackTrack {
+  if (track === 'village' || track === 'battle' || track === 'boss') return track;
+  return 'dungeon';
+}
+
 class OrchestralSoundEngine {
   private ctx: AudioContext | null = null;
   private bus: OrchestraBus | null = null;
   private muted = false;
+  private bgmVolume = 0.75;
+  private seVolume = 0.85;
   private currentTrack: BgmTrack = 'none';
   private stepIdx = 0;
   private timer: number | null = null;
   private unlocked = false;
+  private audioEl: HTMLAudioElement | null = null;
+  private audioTrack: BgmTrack = 'none';
+  private useSynthFallback =
+    typeof __STANDALONE_ARTIFACT__ !== 'undefined' && Boolean(__STANDALONE_ARTIFACT__);
 
   private ensureContext(): AudioContext | null {
     if (typeof window === 'undefined') return null;
@@ -334,9 +373,9 @@ class OrchestralSoundEngine {
       this.ctx
         .resume()
         .then(() => {
-          if (!this.muted && this.unlocked && this.currentTrack !== 'none') {
+          if (this.useSynthFallback && !this.muted && this.unlocked && this.currentTrack !== 'none') {
             if (this.timer === null) {
-              this.startLoop();
+              this.startSynthLoop();
             } else if (this.stepIdx === 0) {
               this.tickBgm();
             }
@@ -364,7 +403,7 @@ class OrchestralSoundEngine {
 
   private createOrchestraBus(ctx: AudioContext): OrchestraBus {
     const masterGain = ctx.createGain();
-    masterGain.gain.value = 0.88;
+    masterGain.gain.value = 0.88 * this.seVolume;
 
     const warmthFilter = ctx.createBiquadFilter();
     warmthFilter.type = 'lowpass';
@@ -425,6 +464,62 @@ class OrchestralSoundEngine {
     return { dry: masterGain, reverb: reverbIn, noiseBuffer };
   }
 
+  private startPreGeneratedBgm(): void {
+    if (
+      this.muted ||
+      !this.unlocked ||
+      this.currentTrack === 'none' ||
+      typeof window === 'undefined' ||
+      typeof Audio === 'undefined'
+    ) {
+      return;
+    }
+
+    if (this.useSynthFallback) {
+      this.startSynthLoop();
+      return;
+    }
+
+    const srcUrl = PREGENERATED_BGM_FILES[this.currentTrack];
+    if (!this.audioEl) {
+      this.audioEl = new Audio();
+      this.audioEl.loop = true;
+      this.audioEl.preload = 'auto';
+      this.audioEl.addEventListener('error', () => {
+        // Fallback cleanly to built-in orchestral synth if MP3 fails to load
+        this.useSynthFallback = true;
+        if (!this.muted && this.unlocked && this.currentTrack !== 'none') {
+          this.startSynthLoop();
+        }
+      });
+    }
+
+    if (this.audioTrack !== this.currentTrack) {
+      this.audioTrack = this.currentTrack;
+      this.audioEl.src = srcUrl;
+      this.audioEl.currentTime = 0;
+    }
+
+    this.audioEl.volume = Math.max(0, Math.min(1, this.bgmVolume));
+    this.audioEl.muted = this.muted;
+    const playPromise = this.audioEl.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch(() => {
+        // Autoplay may still be pending until next user gesture
+      });
+    }
+  }
+
+  private stopPreGeneratedBgm(): void {
+    if (this.audioEl) {
+      try {
+        this.audioEl.pause();
+      } catch {
+        // Ignore pause errors in headless/test DOM
+      }
+    }
+  }
+
   tryAutoStart(): void {
     if (this.muted || typeof navigator === 'undefined') return;
     const ua = (navigator as { userActivation?: { hasBeenActive?: boolean } }).userActivation;
@@ -436,19 +531,17 @@ class OrchestralSoundEngine {
   unlock(): void {
     this.unlocked = true;
     if (this.muted) return;
-    if (
-      this.ctx?.state === 'running' &&
-      (this.currentTrack === 'none' || this.timer !== null)
-    ) {
-      return;
-    }
     const ctx = this.ensureContext();
     if (ctx && ctx.state !== 'running') {
       this.primeIosAudio(ctx);
       ctx.resume().catch(() => {});
     }
-    if (this.currentTrack !== 'none' && this.timer === null) {
-      this.startLoop();
+    if (this.currentTrack !== 'none') {
+      if (this.useSynthFallback) {
+        if (this.timer === null) this.startSynthLoop();
+      } else if (!this.audioEl || this.audioEl.paused || this.audioTrack !== this.currentTrack) {
+        this.startPreGeneratedBgm();
+      }
     }
   }
 
@@ -458,18 +551,45 @@ class OrchestralSoundEngine {
     if (ctx && ctx.state !== 'running') {
       ctx.resume().catch(() => {});
     }
-    if (this.currentTrack !== 'none' && this.timer === null) {
-      this.startLoop();
+    if (this.currentTrack !== 'none') {
+      if (this.useSynthFallback) {
+        if (this.timer === null) this.startSynthLoop();
+      } else if (!this.audioEl || this.audioEl.paused) {
+        this.startPreGeneratedBgm();
+      }
     }
+  }
+
+  setBgmVolume(vol: number): void {
+    this.bgmVolume = Math.max(0, Math.min(1, Number.isFinite(vol) ? vol : 0.75));
+    if (this.audioEl) {
+      this.audioEl.volume = this.bgmVolume;
+    }
+  }
+
+  getBgmVolume(): number {
+    return this.bgmVolume;
+  }
+
+  setSeVolume(vol: number): void {
+    this.seVolume = Math.max(0, Math.min(1, Number.isFinite(vol) ? vol : 0.85));
+    if (this.bus) {
+      this.bus.dry.gain.value = 0.88 * this.seVolume;
+    }
+  }
+
+  getSeVolume(): number {
+    return this.seVolume;
   }
 
   setMuted(muted: boolean): void {
     this.muted = muted;
     if (muted) {
       this.stopLoop();
+      this.stopPreGeneratedBgm();
     } else if (this.unlocked && this.currentTrack !== 'none') {
       this.ensureContext();
-      this.startLoop();
+      this.startPreGeneratedBgm();
     }
   }
 
@@ -477,13 +597,22 @@ class OrchestralSoundEngine {
     return this.muted;
   }
 
+  getCurrentTrack(): BgmTrack {
+    return this.currentTrack;
+  }
+
   setBgm(track: BgmTrack): void {
     if (this.currentTrack === track) return;
     this.currentTrack = track;
     this.stepIdx = 0;
     this.stopLoop();
-    if (track !== 'none' && !this.muted && this.unlocked) {
-      this.startLoop();
+    if (track === 'none') {
+      this.stopPreGeneratedBgm();
+      this.audioTrack = 'none';
+      return;
+    }
+    if (!this.muted && this.unlocked) {
+      this.startPreGeneratedBgm();
     }
   }
 
@@ -498,15 +627,16 @@ class OrchestralSoundEngine {
     if (this.muted || !this.unlocked || this.currentTrack === 'none') return;
     const ctx = this.ensureContext();
     if (!ctx || !this.bus || ctx.state !== 'running') return;
-    const def = ORCHESTRA_TRACKS[this.currentTrack];
+    const def = ORCHESTRA_TRACKS[toSynthFallbackTrack(this.currentTrack)];
     const now = ctx.currentTime + 0.01;
     const idx = this.stepIdx % def.steps;
     const stepSec = def.tempoMs / 1000;
+    const bgmGainScale = Math.max(0.05, this.bgmVolume);
 
     // 1. Lush Bowed Strings Ensemble Pad Chords
     const chord = def.chords[idx];
     if (chord && chord.length > 0) {
-      this.playStringsChord(ctx, chord, now, stepSec * def.chordSteps * 1.02, def.chordVol);
+      this.playStringsChord(ctx, chord, now, stepSec * def.chordSteps * 1.02, def.chordVol * bgmGainScale);
     }
 
     // 2. Main Orchestral Melody (Violin / Woodwind Flute / Brass Fanfare)
@@ -518,11 +648,11 @@ class OrchestralSoundEngine {
       }
       const leadDur = stepSec * Math.min(holdSteps, 2.2) * 0.94;
       if (def.leadKind === 'woodwind') {
-        this.playWoodwind(ctx, leadMidi, now, leadDur, def.leadVol);
+        this.playWoodwind(ctx, leadMidi, now, leadDur, def.leadVol * bgmGainScale);
       } else if (def.leadKind === 'brass') {
-        this.playBrass(ctx, leadMidi, now, leadDur, def.leadVol);
+        this.playBrass(ctx, leadMidi, now, leadDur, def.leadVol * bgmGainScale);
       } else {
-        this.playViolinLead(ctx, leadMidi, now, leadDur, def.leadVol);
+        this.playViolinLead(ctx, leadMidi, now, leadDur, def.leadVol * bgmGainScale);
       }
     }
 
@@ -530,7 +660,7 @@ class OrchestralSoundEngine {
     if (def.counter && def.counterKind) {
       const cMidi = def.counter[idx] ?? 0;
       if (cMidi > 0) {
-        const cVol = def.counterVol ?? 0.04;
+        const cVol = (def.counterVol ?? 0.04) * bgmGainScale;
         const cDur = stepSec * 1.45;
         if (def.counterKind === 'brass') {
           this.playBrass(ctx, cMidi, now, cDur, cVol);
@@ -546,21 +676,21 @@ class OrchestralSoundEngine {
     if (def.harp) {
       const hMidi = def.harp[idx] ?? 0;
       if (hMidi > 0) {
-        this.playHarp(ctx, hMidi, now, Math.max(0.55, stepSec * 2.4), def.harpVol ?? 0.032);
+        this.playHarp(ctx, hMidi, now, Math.max(0.55, stepSec * 2.4), (def.harpVol ?? 0.032) * bgmGainScale);
       }
     }
 
     // 5. Cello & Contrabass Foundation
     const bassMidi = def.bass[idx] ?? 0;
     if (bassMidi > 0) {
-      this.playContrabass(ctx, bassMidi, now, stepSec * 1.35, def.bassVol);
+      this.playContrabass(ctx, bassMidi, now, stepSec * 1.35, def.bassVol * bgmGainScale);
     }
 
     // 6. Pitched Concert Timpani
     if (def.timpani) {
       const tMidi = def.timpani[idx] ?? 0;
       if (tMidi > 0) {
-        this.playTimpani(ctx, tMidi, now, 0.36, def.timpaniVol ?? 0.07);
+        this.playTimpani(ctx, tMidi, now, 0.36, (def.timpaniVol ?? 0.07) * bgmGainScale);
       }
     }
 
@@ -568,21 +698,20 @@ class OrchestralSoundEngine {
     if (def.snare) {
       const sAmp = def.snare[idx] ?? 0;
       if (sAmp > 0) {
-        this.playOrchestralPerc(ctx, 'snare', now, 0.036 * sAmp);
+        this.playOrchestralPerc(ctx, 'snare', now, 0.036 * sAmp * bgmGainScale);
       }
     }
     if (def.cymbal && (def.cymbal[idx] ?? 0) > 0) {
-      this.playOrchestralPerc(ctx, 'cymbal', now, 0.032);
+      this.playOrchestralPerc(ctx, 'cymbal', now, 0.032 * bgmGainScale);
     }
 
     this.stepIdx += 1;
   }
 
-  private startLoop(): void {
+  private startSynthLoop(): void {
     this.stopLoop();
     if (this.currentTrack === 'none' || this.muted || typeof window === 'undefined') return;
-    const def = ORCHESTRA_TRACKS[this.currentTrack];
-    // Play beat 0 immediately if AudioContext is already running
+    const def = ORCHESTRA_TRACKS[toSynthFallbackTrack(this.currentTrack)];
     this.tickBgm();
     this.timer = window.setInterval(() => {
       this.tickBgm();

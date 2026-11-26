@@ -1,13 +1,14 @@
 import { calculateItemScore, createStarterWeapon } from './data/equipment';
 import { HERO_SPECIES, SPECIES_MAP, resolveSpeciesId } from './data/monsters';
 import { createInitialGuildQuests, refreshDailyQuestsIfNeeded } from './guildQuests';
+import { sanitizeSkillTree } from './skillTree';
 import { computeUnitStats } from './stats';
 import type { EquipmentItem, GameSave, UnitInstance } from './types';
 import { generateShopInventory } from './worldTier';
 
 export const SAVE_STORAGE_KEY = 'runetamer_labyrinth_save_v1';
 export const ACTIVE_SLOT_STORAGE_KEY = 'runetamer_labyrinth_active_slot_v1';
-export const CURRENT_SAVE_VERSION = 12;
+export const CURRENT_SAVE_VERSION = 15;
 export const MAX_INVENTORY_SIZE = 140;
 
 export function trimInventorySafely(
@@ -146,6 +147,8 @@ export function createInitialSave(): GameSave {
       autoSell: 'none',
       autoLootMode: 'sell',
       soundMuted: false,
+      bgmVolume: 0.75,
+      seVolume: 0.85,
     },
     stats: {
       totalKills: 0,
@@ -203,6 +206,17 @@ export function deleteSaveSlot(slot: SaveSlotId): void {
     localStorage.removeItem(getSlotStorageKey(slot));
   } catch {
     // Ignore
+  }
+}
+
+export function deleteAllSaveData(): void {
+  try {
+    for (const slot of SAVE_SLOT_IDS) {
+      localStorage.removeItem(getSlotStorageKey(slot));
+    }
+    localStorage.removeItem(ACTIVE_SLOT_STORAGE_KEY);
+  } catch {
+    // Ignore storage access errors
   }
 }
 
@@ -499,8 +513,7 @@ export function validateSave(data: unknown): GameSave | null {
     partyIds: safeParty.slice(0, 4),
     roster: safeRoster,
     inventory: s.inventory.filter((it) => Boolean(it && it.id && it.slot)).map(normalizeItem),
-    heroSkillTree:
-      s.heroSkillTree && typeof s.heroSkillTree === 'object' ? s.heroSkillTree : {},
+    heroSkillTree: sanitizeSkillTree(s.heroSkillTree),
     heroEquippedSkillIds: safeEquippedSkills,
     claimedAchievements: Array.isArray(s.claimedAchievements) ? s.claimedAchievements : [],
     bossRushBestWave:
@@ -514,6 +527,14 @@ export function validateSave(data: unknown): GameSave | null {
       ...(s.settings ?? {}),
       autoLootMode: s.settings?.autoLootMode === 'salvage' ? 'salvage' : 'sell',
       soundMuted: Boolean(s.settings?.soundMuted),
+      bgmVolume:
+        typeof s.settings?.bgmVolume === 'number' && Number.isFinite(s.settings.bgmVolume)
+          ? Math.max(0, Math.min(1, s.settings.bgmVolume))
+          : fallback.settings.bgmVolume,
+      seVolume:
+        typeof s.settings?.seVolume === 'number' && Number.isFinite(s.settings.seVolume)
+          ? Math.max(0, Math.min(1, s.settings.seVolume))
+          : fallback.settings.seVolume,
     },
     stats: {
       ...fallback.stats,

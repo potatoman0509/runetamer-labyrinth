@@ -33,7 +33,7 @@ import {
   resolveSpeciesEquipRig,
 } from '../../engine/equipVisuals';
 import { paintSprite } from '../../engine/hdSprites';
-import { ORCHESTRA_TRACKS } from '../../engine/sound';
+import { ORCHESTRA_TRACKS, PREGENERATED_BGM_FILES, soundEngine } from '../../engine/sound';
 import {
   BOSS_MONSTERS,
   ELITE_MONSTERS,
@@ -58,6 +58,7 @@ import {
 import {
   createInitialSave,
   createUnitInstance,
+  deleteAllSaveData,
   deleteSaveSlot,
   exportSaveCode,
   exportSaveJson,
@@ -68,15 +69,19 @@ import {
   loadGameFromSlot,
   SAVE_STORAGE_KEY,
   saveGameToSlot,
+  setActiveSaveSlot,
   trimInventorySafely,
   validateSave,
 } from '../save';
 import {
   ALL_HERO_SKILLS,
+  canRefundSkillNode,
   canUpgradeSkillNode,
   getAvailableSp,
   getHeroEquippedSkills,
   getUnlockedHeroSkillIds,
+  ORIGIN_NODE_ID,
+  SKILL_NODE_MAP,
   SKILL_TREE_NODES,
 } from '../skillTree';
 import { sortEquipmentItems, sortRanchMonsters } from '../sortUtils';
@@ -392,30 +397,61 @@ describe('RuneTamer Labyrinth Core & v11 Systems', () => {
     expect(nuked.shakeUntilMs).toBeGreaterThan(0);
   });
 
-  it('supports 4-branch Hero Skill Tree (20 nodes, Void branch), SP, prerequisites, and Tamer Bond', () => {
-    expect(SKILL_TREE_NODES.length).toBe(20);
+  it('supports PoE-grade 103-node radial constellation Skill Tree, 10 Keystones, BFS refund, and legacy save migration', () => {
+    expect(SKILL_TREE_NODES.length).toBe(103);
+    const keystones = SKILL_TREE_NODES.filter((n) => n.kind === 'keystone');
+    expect(keystones.length).toBe(10);
+
+    // Every single one of the 103 nodes must be reachable from ORIGIN_NODE_ID via undirected edges
+    const visited = new Set<string>([ORIGIN_NODE_ID]);
+    const queue = [ORIGIN_NODE_ID];
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      for (const nb of SKILL_NODE_MAP[id]!.neighbors) {
+        if (!visited.has(nb)) {
+          visited.add(nb);
+          queue.push(nb);
+        }
+      }
+    }
+    expect(visited.size).toBe(SKILL_TREE_NODES.length);
+
     const save = createInitialSave();
     save.roster.hero!.level = 10;
-    expect(getAvailableSp(save)).toBe(10);
+    expect(getAvailableSp(save)).toBe(20); // Lv10 * 2 SP
 
-    expect(canUpgradeSkillNode(save, 'sw_atk')).toBe(true);
-    expect(canUpgradeSkillNode(save, 'sw_crit')).toBe(false);
-    expect(canUpgradeSkillNode(save, 'vd_pen')).toBe(true);
+    // Adjacency check: entry nodes adjacent to origin are upgradeable, deeper nodes are not
+    expect(canUpgradeSkillNode(save, 'sw_entry')).toBe(true);
+    expect(canUpgradeSkillNode(save, 'sw_inL')).toBe(false);
+    expect(canUpgradeSkillNode(save, 'vd_entry')).toBe(true);
 
+    // Refund connectivity check: leaf node can be refunded, bridge node keeping child attached cannot
+    const chainSave = {
+      ...save,
+      heroSkillTree: { sw_entry: 1, sw_inL: 1 },
+    };
+    expect(canRefundSkillNode(chainSave, 'sw_inL')).toBe(true);
+    expect(canRefundSkillNode(chainSave, 'sw_entry')).toBe(false);
+
+    // Keystones & active skill unlocks
     const baseHeroAtk = computeUnitStats(save.roster.hero!, save).atk;
     const baseSlimeAtk = computeUnitStats(save.roster.leaf_slime!, save).atk;
 
     const treeSave = {
       ...save,
       heroSkillTree: {
-        sw_atk: 2,
-        sw_crit: 1,
-        sw_flurry: 1,
-        cm_def: 1,
-        cm_bond: 2,
-        vd_pen: 2,
-        vd_status: 1,
-        vd_flame: 1,
+        sw_entry: 2,
+        sw_inL: 1,
+        sw_hub: 1,
+        sw_mid1: 1, // meteor_flurry
+        vd_entry: 2,
+        vd_inL: 1,
+        vd_hub: 1,
+        vd_mid1: 1, // abyss_flame
+        cm_entry: 1,
+        cm_inL: 2,
+        ks_resolute_edge: 1,
+        ks_eldritch_ward: 1,
       },
       heroEquippedSkillIds: ['abyss_flame', 'meteor_flurry'] as [string, string],
     };
@@ -426,9 +462,18 @@ describe('RuneTamer Labyrinth Core & v11 Systems', () => {
     expect(sk0.id).toBe('abyss_flame');
     const heroStats = computeUnitStats(treeSave.roster.hero!, treeSave);
     expect(heroStats.atk).toBeGreaterThan(baseHeroAtk);
-    expect(heroStats.armorPenPct).toBeGreaterThan(0);
-    expect(heroStats.statusDmgBonusPct).toBeGreaterThan(0);
+    expect(heroStats.armorPenPct).toBeGreaterThanOrEqual(35);
+    expect(heroStats.critRate).toBe(0); // Resolute Edge keystone
+    expect(heroStats.lifesteal).toBe(0); // Eldritch Ward keystone
+    expect(heroStats.startShieldPct).toBeGreaterThanOrEqual(35);
     expect(computeUnitStats(treeSave.roster.leaf_slime!, treeSave).atk).toBeGreaterThan(baseSlimeAtk);
+
+    // Legacy 20-node keys are stripped cleanly on validateSave so SP is refunded
+    const legacySave = { ...save, heroSkillTree: { sw_atk: 3, sw_crit: 2, sw_entry: 1 } };
+    const migrated = validateSave(legacySave);
+    expect(migrated).not.toBeNull();
+    expect(migrated!.heroSkillTree.sw_atk).toBeUndefined();
+    expect(migrated!.heroSkillTree.sw_entry).toBe(1);
   });
 
   it('supports swift free-action HP/MP potions and 100% Limit Break breaking enemy Charge', () => {
@@ -1067,5 +1112,69 @@ describe('RuneTamer Labyrinth Core & v11 Systems', () => {
     const b = createBattleState(save, createBossRushEntity(1), 5);
     const battleHero = b.allies.find((a) => a.speciesId === 'hero')!;
     expect(battleHero.equipKey).toBe(expectedHeroEq);
+  });
+
+  it('persists BGM/SE volume settings, deletes all save data cleanly, and bundles all 9 pre-generated orchestral MP3 BGM tracks', () => {
+    const base = createInitialSave();
+    expect(base.settings.bgmVolume).toBe(0.75);
+    expect(base.settings.seVolume).toBe(0.85);
+    const validated = validateSave({
+      ...base,
+      settings: { ...base.settings, bgmVolume: 0.42, seVolume: 1.5 },
+    });
+    expect(validated!.settings.bgmVolume).toBeCloseTo(0.42);
+    expect(validated!.settings.seVolume).toBe(1);
+
+    const mem = new Map<string, string>();
+    const origLS = globalThis.localStorage;
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: (k: string) => mem.get(k) ?? null,
+        setItem: (k: string, v: string) => {
+          mem.set(k, v);
+        },
+        removeItem: (k: string) => {
+          mem.delete(k);
+        },
+      },
+    });
+    try {
+      saveGameToSlot(1, base);
+      saveGameToSlot(2, base);
+      saveGameToSlot(3, base);
+      setActiveSaveSlot(3);
+      expect(listSaveSlotSummaries().every((s) => s.exists)).toBe(true);
+
+      deleteAllSaveData();
+      expect(listSaveSlotSummaries().every((s) => !s.exists)).toBe(true);
+      expect(loadGameFromSlot(1)).toBeNull();
+      expect(loadGameFromSlot(2)).toBeNull();
+      expect(loadGameFromSlot(3)).toBeNull();
+    } finally {
+      Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: origLS });
+    }
+
+    const requiredTracks = [
+      'village',
+      'forest',
+      'ruins',
+      'volcano',
+      'abyss',
+      'glacier',
+      'sanctum',
+      'battle',
+      'boss',
+    ] as const;
+    for (const track of requiredTracks) {
+      expect(PREGENERATED_BGM_FILES[track]).toBe(`./audio/${track}.mp3`);
+    }
+
+    soundEngine.setBgmVolume(0.5);
+    soundEngine.setSeVolume(0.6);
+    soundEngine.setBgm('volcano');
+    expect(soundEngine.getBgmVolume()).toBe(0.5);
+    expect(soundEngine.getSeVolume()).toBe(0.6);
+    expect(soundEngine.getCurrentTrack()).toBe('volcano');
   });
 });

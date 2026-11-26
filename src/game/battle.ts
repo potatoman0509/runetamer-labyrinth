@@ -113,7 +113,7 @@ export function createBattleState(
       const hp = Math.min(st.maxHp, Math.max(1, u.hp));
       const mp = Math.min(st.maxMp, Math.max(0, u.mp));
 
-      let startShieldPct = syn.startShieldPct;
+      let startShieldPct = syn.startShieldPct + st.startShieldPct;
       if (st.uniqueEffects.includes('golden_aegis')) startShieldPct += 12;
       if (activeSetIds4pc.includes('ancient_rune')) startShieldPct += 12;
 
@@ -140,7 +140,7 @@ export function createBattleState(
         mp,
         maxMp: st.maxMp,
         shield: Math.min(
-          Math.round(st.maxHp * 0.55),
+          Math.round(st.maxHp * 0.65),
           Math.round((st.maxHp * startShieldPct) / 100),
         ),
         atk: st.atk,
@@ -193,9 +193,9 @@ export function createBattleState(
     entity.speciesIds && entity.speciesIds.length > 0 ? entity.speciesIds : ['leaf_slime'];
 
   const floorLevel = Math.max(1, Math.round(floor * 1.35 + (save.worldTier - 1) * 20));
-  const floorHpMult = Math.pow(1.148, Math.max(0, floor - 1));
-  const floorAtkMult = Math.pow(1.118, Math.max(0, floor - 1));
-  const floorDefMult = Math.pow(1.092, Math.max(0, floor - 1));
+  const floorHpMult = Math.pow(1.162, Math.max(0, floor - 1));
+  const floorAtkMult = Math.pow(1.13, Math.max(0, floor - 1));
+  const floorDefMult = Math.pow(1.102, Math.max(0, floor - 1));
   const curseMult = 1 + (shrineBuffs?.curseEnemyBonus ?? 0);
 
   const enemies: BattleUnitState[] = speciesIds.map((spId, idx) => {
@@ -204,62 +204,62 @@ export function createBattleState(
     const isEliteUnit =
       !isBossUnit && (sp.tier === 'elite' || ((isEliteBattle || isRareBattle) && idx === 0));
 
-    const hpRoleMult = isBossUnit ? 3.85 : isRareBattle ? 2.3 : isEliteUnit ? 2.15 : 1.28;
-    const atkRoleMult = isBossUnit ? 1.65 : isRareBattle ? 1.48 : isEliteUnit ? 1.45 : 1.22;
-    const defRoleMult = isBossUnit ? 1.55 : isEliteUnit ? 1.38 : 1.15;
+    const hpRoleMult = isBossUnit ? 4.05 : isRareBattle ? 2.4 : isEliteUnit ? 2.25 : 1.32;
+    const atkRoleMult = isBossUnit ? 1.72 : isRareBattle ? 1.52 : isEliteUnit ? 1.5 : 1.26;
+    const defRoleMult = isBossUnit ? 1.62 : isEliteUnit ? 1.42 : 1.18;
 
-    // v10 slight enemy buff (+12% HP, +10% ATK/MAG, +8% DEF, +2 SPD) + Trial modifiers
+    // v15 Hardcore balance tuned for 103-node PoE constellation skill tree & Keystones
     const maxHp = Math.max(
-      64,
+      76,
       Math.round(
-        (sp.baseStats.hp * 0.95 + sp.growth.hp * (floor - 1) * 0.85) *
+        (sp.baseStats.hp * 0.95 + sp.growth.hp * (floor - 1) * 0.88) *
           floorHpMult *
           hpRoleMult *
           tierMods.enemyHpMult *
           curseMult *
-          1.12 *
+          1.28 *
           trials.enemyHpMult,
       ),
     );
     const atk = Math.max(
-      18,
+      21,
       Math.round(
-        (sp.baseStats.atk * 0.96 + sp.growth.atk * (floor - 1) * 0.72) *
+        (sp.baseStats.atk * 0.96 + sp.growth.atk * (floor - 1) * 0.76) *
           floorAtkMult *
           atkRoleMult *
           tierMods.enemyAtkMult *
           curseMult *
-          1.1 *
+          1.24 *
           trials.enemyAtkMult,
       ),
     );
     const mag = Math.max(
-      18,
+      21,
       Math.round(
-        (sp.baseStats.mag * 0.96 + sp.growth.mag * (floor - 1) * 0.72) *
+        (sp.baseStats.mag * 0.96 + sp.growth.mag * (floor - 1) * 0.76) *
           floorAtkMult *
           atkRoleMult *
           tierMods.enemyAtkMult *
           curseMult *
-          1.1 *
+          1.24 *
           trials.enemyAtkMult,
       ),
     );
     const def = Math.max(
-      9,
+      11,
       Math.round(
-        (sp.baseStats.def * 0.92 + sp.growth.def * (floor - 1) * 0.62) *
+        (sp.baseStats.def * 0.92 + sp.growth.def * (floor - 1) * 0.65) *
           floorDefMult *
           defRoleMult *
           tierMods.enemyDefMult *
-          1.08 *
+          1.18 *
           trials.enemyDefMult,
       ),
     );
     const spd = Math.max(
-      12,
+      13,
       Math.round(
-        (sp.baseStats.spd * 1.05 + floor * 0.85 + (save.worldTier - 1) * 4 + 2) *
+        (sp.baseStats.spd * 1.07 + floor * 0.9 + (save.worldTier - 1) * 5 + 3) *
           trials.enemySpdMult,
       ),
     );

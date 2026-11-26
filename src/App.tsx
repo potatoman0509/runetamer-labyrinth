@@ -5,6 +5,7 @@ import { EquipmentPanel } from './components/EquipmentPanel';
 import { GameCanvas } from './components/GameCanvas';
 import { PartyPanel } from './components/PartyPanel';
 import { PixelIcon } from './components/PixelIcon';
+import { SettingsModal } from './components/SettingsModal';
 import { WorldPanel, type WorldSection } from './components/WorldPanel';
 import { getUnitEquipVisualKey } from './engine/equipVisuals';
 import { soundEngine } from './engine/sound';
@@ -48,6 +49,7 @@ import {
 import {
   buildSaveFileName,
   createInitialSave,
+  deleteAllSaveData,
   deleteSaveSlot,
   exportSaveJson,
   getActiveSaveSlot,
@@ -62,6 +64,7 @@ import {
 } from './game/save';
 import {
   ALL_HERO_SKILLS,
+  canRefundSkillNode,
   canUpgradeSkillNode,
   getAvailableSp,
   getUnlockedHeroSkillIds,
@@ -86,6 +89,7 @@ import type {
   EquipmentItem,
   EquipSlot,
   GameSave,
+  GameSettings,
   MapEntity,
   TrialModId,
 } from './game/types';
@@ -120,6 +124,7 @@ export function App() {
   const [runPotions, setRunPotions] = useState(INITIAL_RUN_POTIONS);
 
   const [autoAdvance, setAutoAdvance] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const toastTimerRef = useRef<number | null>(null);
@@ -139,6 +144,14 @@ export function App() {
   useEffect(() => {
     soundEngine.setMuted(Boolean(save.settings.soundMuted));
   }, [save.settings.soundMuted]);
+
+  useEffect(() => {
+    soundEngine.setBgmVolume(save.settings.bgmVolume ?? 0.75);
+  }, [save.settings.bgmVolume]);
+
+  useEffect(() => {
+    soundEngine.setSeVolume(save.settings.seVolume ?? 0.85);
+  }, [save.settings.seVolume]);
 
   useEffect(() => {
     soundEngine.tryAutoStart();
@@ -170,9 +183,9 @@ export function App() {
     } else if (expedition.inVillage) {
       soundEngine.setBgm('village');
     } else {
-      soundEngine.setBgm('dungeon');
+      soundEngine.setBgm(expedition.biome);
     }
-  }, [battle, expedition.inVillage]);
+  }, [battle, expedition.biome, expedition.inVillage]);
 
   const invMap = useMemo(
     () => new Map(save.inventory.map((it) => [it.id, it])),
@@ -1279,6 +1292,59 @@ export function App() {
     });
   }, []);
 
+  const handleUpdateSettings = useCallback((patch: Partial<GameSettings>) => {
+    setSave((prev) => {
+      const nextSettings: GameSettings = { ...prev.settings, ...patch };
+      if (typeof patch.soundMuted === 'boolean') {
+        soundEngine.setMuted(patch.soundMuted);
+        if (!patch.soundMuted) soundEngine.unlock();
+      }
+      if (typeof patch.bgmVolume === 'number') {
+        soundEngine.setBgmVolume(patch.bgmVolume);
+      }
+      if (typeof patch.seVolume === 'number') {
+        soundEngine.setSeVolume(patch.seVolume);
+      }
+      return { ...prev, settings: nextSettings };
+    });
+  }, []);
+
+  const handleResetCurrentSlot = useCallback(() => {
+    deleteSaveSlot(activeSlot);
+    const fresh = createInitialSave();
+    const ts = saveGameToSlot(activeSlot, fresh);
+    setAutoAdvance(false);
+    setBattle(null);
+    setPendingAdvanceOnWin(false);
+    setShrineBuffs(EMPTY_SHRINE_BUFFS);
+    setRunPotions(INITIAL_RUN_POTIONS);
+    setExpedition(createVillageExpedition());
+    setActiveTab('explore');
+    setSave(fresh);
+    setLastSavedAt(ts);
+    setSlotRevision((r) => r + 1);
+    showToast(`🗑 冒険の書${activeSlot}を初期化した`);
+  }, [activeSlot, showToast]);
+
+  const handleDeleteAllData = useCallback(() => {
+    deleteAllSaveData();
+    const fresh = createInitialSave();
+    setActiveSaveSlot(1);
+    setActiveSlot(1);
+    const ts = saveGameToSlot(1, fresh);
+    setAutoAdvance(false);
+    setBattle(null);
+    setPendingAdvanceOnWin(false);
+    setShrineBuffs(EMPTY_SHRINE_BUFFS);
+    setRunPotions(INITIAL_RUN_POTIONS);
+    setExpedition(createVillageExpedition());
+    setActiveTab('explore');
+    setSave(fresh);
+    setLastSavedAt(ts);
+    setSlotRevision((r) => r + 1);
+    showToast('🗑 全てのセーブデータと設定を削除した');
+  }, [showToast]);
+
   const handleUpgradeSkillNode = useCallback(
     (nodeId: string) => {
       if (!canUpgradeSkillNode(save, nodeId)) return;
@@ -1295,6 +1361,8 @@ export function App() {
       if (def.unlocksSkillId) {
         const sk = ALL_HERO_SKILLS[def.unlocksSkillId];
         showToast(`🌳 スキル「${sk?.name ?? def.name}」解放`);
+      } else if (def.kind === 'keystone') {
+        showToast(`◆ キーストーン「${def.name}」覚醒`);
       } else {
         showToast(`🌳 「${def.name}」Lv.${nextLv} 習得`);
       }
@@ -1302,15 +1370,48 @@ export function App() {
     [save, showToast],
   );
 
+  const handleRefundSkillNode = useCallback(
+    (nodeId: string) => {
+      if (!canRefundSkillNode(save, nodeId)) return;
+      const def = SKILL_NODE_MAP[nodeId];
+      if (!def) return;
+      setSave((prev) => {
+        const cur = prev.heroSkillTree[nodeId] ?? 0;
+        if (cur <= 0) return prev;
+        const nextTree = { ...prev.heroSkillTree };
+        if (cur <= 1) {
+          delete nextTree[nodeId];
+        } else {
+          nextTree[nodeId] = cur - 1;
+        }
+        const unlockedSet = new Set(getUnlockedHeroSkillIds({ heroSkillTree: nextTree }));
+        const nextEquipped: [string, string] = [
+          unlockedSet.has(prev.heroEquippedSkillIds[0])
+            ? prev.heroEquippedSkillIds[0]
+            : HERO_SPECIES.skills[0].id,
+          unlockedSet.has(prev.heroEquippedSkillIds[1])
+            ? prev.heroEquippedSkillIds[1]
+            : HERO_SPECIES.skills[1].id,
+        ];
+        return {
+          ...prev,
+          heroSkillTree: nextTree,
+          heroEquippedSkillIds: nextEquipped,
+        };
+      });
+      showToast(`🌳 「${def.name}」のSPを1pt返却した`);
+    },
+    [save, showToast],
+  );
+
   const handleResetSkillTree = useCallback(() => {
-    if (!expedition.inVillage) return;
     setSave((prev) => ({
       ...prev,
       heroSkillTree: {},
       heroEquippedSkillIds: [HERO_SPECIES.skills[0].id, HERO_SPECIES.skills[1].id],
     }));
-    showToast('🌳 スキルツリーをリセットした');
-  }, [expedition.inVillage, showToast]);
+    showToast('🌳 スキルツリーを全リセットした');
+  }, [showToast]);
 
   const handleEquipHeroSkill = useCallback(
     (slotIndex: 0 | 1, skillId: string) => {
@@ -1762,7 +1863,7 @@ export function App() {
                 color: '#ffd6dd',
               }}
             >
-              v14
+              v15
             </span>
           </div>
           <div className="hud-right">
@@ -1785,6 +1886,22 @@ export function App() {
               aria-label="音量切替"
             >
               {save.settings.soundMuted ? '🔇' : '🔊'}
+            </button>
+            <button
+              id="btn-hud-settings"
+              type="button"
+              className="gold-pill"
+              style={{
+                color: '#e8e4f5',
+                borderColor: 'rgba(200, 190, 230, 0.45)',
+                cursor: 'pointer',
+                background: 'rgba(34, 28, 52, 0.85)',
+                padding: '1px 4px',
+              }}
+              onClick={() => setSettingsOpen(true)}
+              aria-label="設定"
+            >
+              ⚙
             </button>
             {!battle && (
               <button
@@ -2182,6 +2299,7 @@ export function App() {
                   onEvolveMonster={handleEvolveMonster}
                   onTrueEvolveMonster={handleTrueEvolveMonster}
                   onUpgradeSkillNode={handleUpgradeSkillNode}
+                  onRefundSkillNode={handleRefundSkillNode}
                   onResetSkillTree={handleResetSkillTree}
                   onEquipHeroSkill={handleEquipHeroSkill}
                   onHealPartyInVillage={() => healAllParty(1, false)}
@@ -2312,6 +2430,16 @@ export function App() {
             </>
           )}
         </section>
+        {settingsOpen && (
+          <SettingsModal
+            settings={save.settings}
+            activeSlot={activeSlot}
+            onClose={() => setSettingsOpen(false)}
+            onUpdateSettings={handleUpdateSettings}
+            onResetCurrentSlot={handleResetCurrentSlot}
+            onDeleteAllData={handleDeleteAllData}
+          />
+        )}
       </main>
     </div>
   );

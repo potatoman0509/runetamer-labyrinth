@@ -245,6 +245,7 @@ export interface ComputedUnitStats {
   mpRegenBonus: number;
   armorPenPct: number;
   statusDmgBonusPct: number;
+  startShieldPct: number;
   uniqueEffects: UniqueEffectId[];
   activeSets: ActiveSetCount[];
   powerScore: number;
@@ -452,6 +453,8 @@ export interface GameSettings {
   autoSell: AutoSellThreshold;
   autoLootMode: AutoLootMode;
   soundMuted: boolean;
+  bgmVolume: number;
+  seVolume: number;
 }
 
 export interface GameStats {

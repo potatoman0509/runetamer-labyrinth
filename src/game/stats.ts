@@ -165,7 +165,7 @@ export function computeUnitStats(
   let critDmg = 150 + (isHero ? tree.heroCritDmg : 0);
   let lifesteal = (sp.passiveBonus.lifesteal ?? 0) + (isHero ? tree.heroLifesteal : 0);
   let doubleHit = (sp.passiveBonus.doubleHit ?? 0) + (isHero ? tree.heroDoubleHit : 0);
-  let regenPct = (sp.passiveBonus.regenPct ?? 0) + syn.regenPct;
+  let regenPct = (sp.passiveBonus.regenPct ?? 0) + syn.regenPct + (isHero ? tree.heroRegenPct : 0);
   let magicFind =
     (sp.passiveBonus.magicFind ?? 0) +
     blessing.magicFindBonus +
@@ -174,10 +174,13 @@ export function computeUnitStats(
     syn.magicFind +
     (isHero ? tree.heroMagicFind : 0);
   let goldFind =
-    (sp.passiveBonus.goldFind ?? 0) + blessing.goldBonusPct + syn.goldFind;
-  let expFind = blessing.expBonusPct;
+    (sp.passiveBonus.goldFind ?? 0) +
+    blessing.goldBonusPct +
+    syn.goldFind +
+    (isHero ? tree.heroGoldFind : 0);
+  let expFind = blessing.expBonusPct + (isHero ? tree.heroExpFind : 0);
   let stoneFind = isHero ? tree.heroStoneFind : 0;
-  let damageTakenMult = 1.0;
+  let damageTakenMult = isHero ? Math.max(0.45, 1 + tree.heroDamageTakenPct / 100) : 1.0;
 
   let skillPowerBonusPct =
     (isHero ? tree.heroSkillPowerBonusPct : 0) +
@@ -187,6 +190,7 @@ export function computeUnitStats(
   let mpRegenBonus = isHero ? tree.heroMpRegenBonus : 0;
   let armorPenPct = isHero ? tree.heroArmorPenPct : 0;
   let statusDmgBonusPct = isHero ? tree.heroStatusDmgBonusPct : 0;
+  const startShieldPct = isHero ? Math.min(60, tree.heroStartShieldPct) : 0;
 
   const uniqueEffects: UniqueEffectId[] = [];
   const setCounts = new Map<SetId, number>();
@@ -370,10 +374,13 @@ export function computeUnitStats(
     mag += Math.round(def * 0.16);
   }
 
-  const clampedCritRate = Math.min(92, critRate);
-  const clampedDoubleHit = Math.min(80, doubleHit);
-  const clampedLifesteal = Math.min(55, lifesteal);
-  const clampedArmorPen = Math.min(65, armorPenPct);
+  const hasResolute = isHero && tree.activeKeystones.includes('resolute_edge');
+  const hasEldritch = isHero && tree.activeKeystones.includes('eldritch_ward');
+
+  const clampedCritRate = hasResolute ? 0 : Math.max(0, Math.min(95, critRate));
+  const clampedDoubleHit = Math.max(0, Math.min(85, doubleHit));
+  const clampedLifesteal = hasEldritch ? 0 : Math.max(0, Math.min(55, lifesteal));
+  const clampedArmorPen = Math.max(0, Math.min(80, armorPenPct));
 
   const powerScore = Math.round(
     maxHp * 0.35 +
@@ -408,6 +415,7 @@ export function computeUnitStats(
     mpRegenBonus,
     armorPenPct: clampedArmorPen,
     statusDmgBonusPct,
+    startShieldPct,
     uniqueEffects,
     activeSets,
     powerScore,
