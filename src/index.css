@@ -992,3 +992,59 @@ body {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.65);
 }
 
+/* ===== FULL-SCREEN SKILL TREE MODAL ===== */
+.skilltree-fullscreen-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: #100e19;
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  overflow: hidden;
+}
+
+.skilltree-fs-header {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 7px 8px;
+  background: #221e2b;
+  border-bottom: 1.5px solid var(--border-gold);
+  flex-shrink: 0;
+}
+
+.skilltree-fs-canvas-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  background: radial-gradient(circle at 50% 50%, #241f3a 0%, #110f1d 70%, #090812 100%);
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+}
+
+.skilltree-fs-inspector {
+  flex-shrink: 0;
+  padding: 8px 10px;
+  background: #1d1928;
+  border-top: 1.5px solid var(--border-gold);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.skilltree-fs-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+
