@@ -2254,7 +2254,7 @@ export function App() {
                                 <div
                                   style={{
                                     fontFamily: 'var(--font-pixel)',
-                                    fontSize: 11.5,
+                                    fontSize: 12,
                                     color: '#fff7e0',
                                     whiteSpace: 'nowrap',
                                     overflow: 'hidden',
@@ -2262,19 +2262,6 @@ export function App() {
                                   }}
                                 >
                                   {ch.title}
-                                </div>
-                                <div
-                                  style={{
-                                    fontSize: 9.5,
-                                    color: 'var(--text-muted)',
-                                    marginTop: 1,
-                                    lineHeight: 1.25,
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap',
-                                  }}
-                                >
-                                  {ch.subtitle}
                                 </div>
                               </div>
                               <span className="choice-tag" style={{ background: ch.tagColor }}>
