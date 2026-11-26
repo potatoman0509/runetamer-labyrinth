@@ -770,12 +770,20 @@ describe('RuneTamer Labyrinth Core & v11 Systems', () => {
     expect(save.guildQuests.cycle.length).toBe(3);
     expect(save.guildQuests.cycleNumber).toBe(1);
 
-    // Advance progress via battles and enhancements
+    // Advance progress via battles and enhancements (cover both daily and cycle biomes)
     let gq = applyBattleProgressToQuests(
       save.guildQuests,
       { kills: 20, elites: 5, bosses: 5, biome: save.guildQuests.daily[0]!.biome ?? 'forest', hasTrials: true, bossRushWave: 10 },
       1,
     );
+    const cycleBiome = save.guildQuests.cycle.find((q) => q.biome)?.biome;
+    if (cycleBiome) {
+      gq = applyBattleProgressToQuests(
+        gq,
+        { kills: 20, elites: 0, bosses: 0, biome: cycleBiome, hasTrials: false },
+        1,
+      );
+    }
     gq = applyEnhanceProgressToQuests(gq, 1, 10);
     let curSave = { ...save, guildQuests: gq };
 

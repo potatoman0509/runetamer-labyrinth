@@ -330,10 +330,36 @@ class OrchestralSoundEngine {
         return null;
       }
     }
-    if (this.ctx.state === 'suspended') {
-      this.ctx.resume().catch(() => {});
+    if (this.ctx.state !== 'running') {
+      this.ctx
+        .resume()
+        .then(() => {
+          if (!this.muted && this.unlocked && this.currentTrack !== 'none') {
+            if (this.timer === null) {
+              this.startLoop();
+            } else if (this.stepIdx === 0) {
+              this.tickBgm();
+            }
+          }
+        })
+        .catch(() => {});
     }
     return this.ctx;
+  }
+
+  private primeIosAudio(ctx: AudioContext): void {
+    try {
+      const buf = ctx.createBuffer(1, 1, ctx.sampleRate);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const zeroGain = ctx.createGain();
+      zeroGain.gain.value = 0;
+      src.connect(zeroGain);
+      zeroGain.connect(ctx.destination);
+      src.start(0);
+    } catch {
+      // Ignore in restricted environments
+    }
   }
 
   private createOrchestraBus(ctx: AudioContext): OrchestraBus {
@@ -399,13 +425,41 @@ class OrchestralSoundEngine {
     return { dry: masterGain, reverb: reverbIn, noiseBuffer };
   }
 
+  tryAutoStart(): void {
+    if (this.muted || typeof navigator === 'undefined') return;
+    const ua = (navigator as { userActivation?: { hasBeenActive?: boolean } }).userActivation;
+    if (ua?.hasBeenActive) {
+      this.unlock();
+    }
+  }
+
   unlock(): void {
     this.unlocked = true;
-    if (!this.muted) {
-      this.ensureContext();
-      if (this.currentTrack !== 'none' && this.timer === null) {
-        this.startLoop();
-      }
+    if (this.muted) return;
+    if (
+      this.ctx?.state === 'running' &&
+      (this.currentTrack === 'none' || this.timer !== null)
+    ) {
+      return;
+    }
+    const ctx = this.ensureContext();
+    if (ctx && ctx.state !== 'running') {
+      this.primeIosAudio(ctx);
+      ctx.resume().catch(() => {});
+    }
+    if (this.currentTrack !== 'none' && this.timer === null) {
+      this.startLoop();
+    }
+  }
+
+  resumeIfNeeded(): void {
+    if (!this.unlocked || this.muted) return;
+    const ctx = this.ensureContext();
+    if (ctx && ctx.state !== 'running') {
+      ctx.resume().catch(() => {});
+    }
+    if (this.currentTrack !== 'none' && this.timer === null) {
+      this.startLoop();
     }
   }
 
@@ -440,91 +494,98 @@ class OrchestralSoundEngine {
     }
   }
 
+  private tickBgm(): void {
+    if (this.muted || !this.unlocked || this.currentTrack === 'none') return;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.bus || ctx.state !== 'running') return;
+    const def = ORCHESTRA_TRACKS[this.currentTrack];
+    const now = ctx.currentTime + 0.01;
+    const idx = this.stepIdx % def.steps;
+    const stepSec = def.tempoMs / 1000;
+
+    // 1. Lush Bowed Strings Ensemble Pad Chords
+    const chord = def.chords[idx];
+    if (chord && chord.length > 0) {
+      this.playStringsChord(ctx, chord, now, stepSec * def.chordSteps * 1.02, def.chordVol);
+    }
+
+    // 2. Main Orchestral Melody (Violin / Woodwind Flute / Brass Fanfare)
+    const leadMidi = def.lead[idx] ?? 0;
+    if (leadMidi > 0) {
+      let holdSteps = 1;
+      while (holdSteps < 3 && (def.lead[(idx + holdSteps) % def.steps] ?? 0) === 0) {
+        holdSteps += 1;
+      }
+      const leadDur = stepSec * Math.min(holdSteps, 2.2) * 0.94;
+      if (def.leadKind === 'woodwind') {
+        this.playWoodwind(ctx, leadMidi, now, leadDur, def.leadVol);
+      } else if (def.leadKind === 'brass') {
+        this.playBrass(ctx, leadMidi, now, leadDur, def.leadVol);
+      } else {
+        this.playViolinLead(ctx, leadMidi, now, leadDur, def.leadVol);
+      }
+    }
+
+    // 3. Counter-Melody (French Horn / Second Violin)
+    if (def.counter && def.counterKind) {
+      const cMidi = def.counter[idx] ?? 0;
+      if (cMidi > 0) {
+        const cVol = def.counterVol ?? 0.04;
+        const cDur = stepSec * 1.45;
+        if (def.counterKind === 'brass') {
+          this.playBrass(ctx, cMidi, now, cDur, cVol);
+        } else if (def.counterKind === 'woodwind') {
+          this.playWoodwind(ctx, cMidi, now, cDur, cVol);
+        } else {
+          this.playViolinLead(ctx, cMidi, now, cDur, cVol);
+        }
+      }
+    }
+
+    // 4. Concert Harp Arpeggios
+    if (def.harp) {
+      const hMidi = def.harp[idx] ?? 0;
+      if (hMidi > 0) {
+        this.playHarp(ctx, hMidi, now, Math.max(0.55, stepSec * 2.4), def.harpVol ?? 0.032);
+      }
+    }
+
+    // 5. Cello & Contrabass Foundation
+    const bassMidi = def.bass[idx] ?? 0;
+    if (bassMidi > 0) {
+      this.playContrabass(ctx, bassMidi, now, stepSec * 1.35, def.bassVol);
+    }
+
+    // 6. Pitched Concert Timpani
+    if (def.timpani) {
+      const tMidi = def.timpani[idx] ?? 0;
+      if (tMidi > 0) {
+        this.playTimpani(ctx, tMidi, now, 0.36, def.timpaniVol ?? 0.07);
+      }
+    }
+
+    // 7. Orchestral Snare & Suspended Cymbal
+    if (def.snare) {
+      const sAmp = def.snare[idx] ?? 0;
+      if (sAmp > 0) {
+        this.playOrchestralPerc(ctx, 'snare', now, 0.036 * sAmp);
+      }
+    }
+    if (def.cymbal && (def.cymbal[idx] ?? 0) > 0) {
+      this.playOrchestralPerc(ctx, 'cymbal', now, 0.032);
+    }
+
+    this.stepIdx += 1;
+  }
+
   private startLoop(): void {
     this.stopLoop();
     if (this.currentTrack === 'none' || this.muted || typeof window === 'undefined') return;
     const def = ORCHESTRA_TRACKS[this.currentTrack];
+    // Play beat 0 immediately if AudioContext is already running
+    this.tickBgm();
     this.timer = window.setInterval(() => {
-      if (this.muted || !this.unlocked || this.currentTrack === 'none') return;
-      const ctx = this.ensureContext();
-      if (!ctx || !this.bus || ctx.state !== 'running') return;
-      const now = ctx.currentTime + 0.01;
-      const idx = this.stepIdx % def.steps;
-      const stepSec = def.tempoMs / 1000;
-
-      // 1. Lush Bowed Strings Ensemble Pad Chords
-      const chord = def.chords[idx];
-      if (chord && chord.length > 0) {
-        this.playStringsChord(ctx, chord, now, stepSec * def.chordSteps * 1.02, def.chordVol);
-      }
-
-      // 2. Main Orchestral Melody (Violin / Woodwind Flute / Brass Fanfare)
-      const leadMidi = def.lead[idx] ?? 0;
-      if (leadMidi > 0) {
-        let holdSteps = 1;
-        while (holdSteps < 3 && (def.lead[(idx + holdSteps) % def.steps] ?? 0) === 0) {
-          holdSteps += 1;
-        }
-        const leadDur = stepSec * Math.min(holdSteps, 2.2) * 0.94;
-        if (def.leadKind === 'woodwind') {
-          this.playWoodwind(ctx, leadMidi, now, leadDur, def.leadVol);
-        } else if (def.leadKind === 'brass') {
-          this.playBrass(ctx, leadMidi, now, leadDur, def.leadVol);
-        } else {
-          this.playViolinLead(ctx, leadMidi, now, leadDur, def.leadVol);
-        }
-      }
-
-      // 3. Counter-Melody (French Horn / Second Violin)
-      if (def.counter && def.counterKind) {
-        const cMidi = def.counter[idx] ?? 0;
-        if (cMidi > 0) {
-          const cVol = def.counterVol ?? 0.04;
-          const cDur = stepSec * 1.45;
-          if (def.counterKind === 'brass') {
-            this.playBrass(ctx, cMidi, now, cDur, cVol);
-          } else if (def.counterKind === 'woodwind') {
-            this.playWoodwind(ctx, cMidi, now, cDur, cVol);
-          } else {
-            this.playViolinLead(ctx, cMidi, now, cDur, cVol);
-          }
-        }
-      }
-
-      // 4. Concert Harp Arpeggios
-      if (def.harp) {
-        const hMidi = def.harp[idx] ?? 0;
-        if (hMidi > 0) {
-          this.playHarp(ctx, hMidi, now, Math.max(0.55, stepSec * 2.4), def.harpVol ?? 0.032);
-        }
-      }
-
-      // 5. Cello & Contrabass Foundation
-      const bassMidi = def.bass[idx] ?? 0;
-      if (bassMidi > 0) {
-        this.playContrabass(ctx, bassMidi, now, stepSec * 1.35, def.bassVol);
-      }
-
-      // 6. Pitched Concert Timpani
-      if (def.timpani) {
-        const tMidi = def.timpani[idx] ?? 0;
-        if (tMidi > 0) {
-          this.playTimpani(ctx, tMidi, now, 0.36, def.timpaniVol ?? 0.07);
-        }
-      }
-
-      // 7. Orchestral Snare & Suspended Cymbal
-      if (def.snare) {
-        const sAmp = def.snare[idx] ?? 0;
-        if (sAmp > 0) {
-          this.playOrchestralPerc(ctx, 'snare', now, 0.036 * sAmp);
-        }
-      }
-      if (def.cymbal && (def.cymbal[idx] ?? 0) > 0) {
-        this.playOrchestralPerc(ctx, 'cymbal', now, 0.032);
-      }
-
-      this.stepIdx += 1;
+      this.tickBgm();
     }, def.tempoMs);
   }
 

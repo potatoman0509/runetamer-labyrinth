@@ -141,12 +141,26 @@ export function App() {
   }, [save.settings.soundMuted]);
 
   useEffect(() => {
+    soundEngine.tryAutoStart();
     const unlock = () => soundEngine.unlock();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        soundEngine.resumeIfNeeded();
+      }
+    };
+    window.addEventListener('touchstart', unlock, { passive: true });
+    window.addEventListener('touchend', unlock, { passive: true });
+    window.addEventListener('click', unlock, { passive: true });
     window.addEventListener('pointerdown', unlock, { passive: true });
     window.addEventListener('keydown', unlock, { passive: true });
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
+      window.removeEventListener('touchstart', unlock);
+      window.removeEventListener('touchend', unlock);
+      window.removeEventListener('click', unlock);
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('keydown', unlock);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, []);
 
